@@ -1,0 +1,19 @@
+/* Make error boundaries transparent */
+.error-boundary,
+[data-reactroot] > div,
+div[class*="error"],
+div[class*="boundary"] {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Hide gray error boundary backgrounds */
+div:has([class*="ErrorBoundary"]) {
+  background: transparent !important;
+}
+
+/* General error boundary styling */
+.react-error-boundary {
+  background: transparent !important;
+}

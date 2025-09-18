@@ -3,4 +3,12 @@
     "id": "dashboard.js -> firebase/auth",
     "files": []
   }
+}"signin.js -> firebase/auth": {
+    "id": "signin.js -> firebase/auth",
+    "files": []
+  },
+  "signin.js -> firebase/firestore": {
+    "id": "signin.js -> firebase/firestore",
+    "files": []
+  }
 }

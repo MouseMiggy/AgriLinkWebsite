@@ -14,7 +14,7 @@ export default function AuthGuard({ children }) {
       setLoading(false)
       
       // Redirect to signin if not authenticated and not on public pages
-      if (!user && !['/signin', '/signup', '/verify-code'].includes(router.pathname)) {
+      if (!user && !['/signin', '/signup', '/verify-code', '/onboarding', '/'].includes(router.pathname)) {
         router.push('/signin')
       }
     })

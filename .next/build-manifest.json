@@ -27,10 +27,25 @@
       "static/chunks/main.js",
       "static/chunks/pages/dashboard.js"
     ],
-    "/onboarding": [
+    "/listings": [
       "static/chunks/webpack.js",
       "static/chunks/main.js",
-      "static/chunks/pages/onboarding.js"
+      "static/chunks/pages/listings.js"
+    ],
+    "/signin": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/signin.js"
+    ],
+    "/signup": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/signup.js"
+    ],
+    "/verify-code": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/verify-code.js"
     ]
   },
   "ampFirstPages": []

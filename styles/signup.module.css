@@ -1,168 +1,806 @@
-.container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-
-.card {
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-  padding: 40px;
+/* Navigation */
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
   width: 100%;
-  max-width: 450px;
+  height: 80px;
+  background: white;
+  color: black;
+  z-index: 1000;
+  padding: 1rem 0;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  backdrop-filter: blur(10px);
 }
 
-.header {
-  text-align: center;
-  margin-bottom: 30px;
+.navContainer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 0.5rem 0 2rem;
+  font-family: 'Poppins', sans-serif;
 }
 
 .logo {
-  font-size: 2.5rem;
-  font-weight: bold;
-  color: #2d5a27;
-  margin-bottom: 8px;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
 }
 
-.subtitle {
-  color: #666;
-  font-size: 0.95rem;
+.logo img {
+  height: 2.2rem;
+  width: auto;
+  object-fit: contain;
 }
 
-.form {
+.navLinks {
+  display: flex;
+  list-style: none;
+  margin-left: 90px;
+}
+ 
+.navLinks li {
+  margin-left: 2.5rem;
+  margin-right: 2.5rem;
+}
+
+.navLinks a {
+  text-decoration: none;
+  color: black;
+  font-weight: 500;
+  transition: color 0.3s ease;
+  font-family: 'Poppins', sans-serif;
+}
+
+.navLinks a:hover {
+  color: #FFA000;
+}
+
+.navLinks a.active {
+  color: #ff9100;
+  font-weight: 600;
+}
+
+.navButtons {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.signinBtn {
+  background-color: transparent;
+  color: black;
+  text-decoration: none;
+  padding: 8px 16px;
+  transition: color 0.3s ease;
+  border-radius: 4px;
+  font-weight: 500;
+  border: none;
+  min-width: 70px;
+  text-align: center;
+  display: inline-block;
+  font-family: 'Poppins', sans-serif;
+  font-size: 1rem;
+}
+
+.signinBtn:hover {
+  color: #ff9100;
+}
+
+.signupBtn {
+  margin-left: 1rem;
+  margin-right: 2rem;
+  padding: 0.6rem 1.8rem;
+  border: 2px solid #ff9100;
+  border-radius: 5px;
+  color: white;
+  background: #ff9100;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  min-width: 80px;
+  text-align: center;
+  display: inline-block;
+  font-family: 'Poppins', sans-serif;
+  font-size: 1rem;
+}
+
+.signupBtn:hover {
+  background: #ff9100;
+  color: white;
+  border-color: #ff9100;
+}
+
+/* Main Container */
+.container {
+  height: 100vh;
+  display: flex;
+  position: relative;
+  background: linear-gradient(135deg, #f9f9f7 0%, #e8f5e8 100%);
+  padding-top: 80px; /* Account for fixed header */
+  overflow: hidden; /* Prevent scrolling */
+}
+
+/* Background Pattern */
+.backgroundPattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 20% 80%, rgba(45, 90, 39, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(45, 90, 39, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 40% 40%, rgba(45, 90, 39, 0.03) 0%, transparent 50%);
+  z-index: 0;
+}
+
+/* Left Side - Photo Carousel */
+.leftSide {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+}
+
+/* Photo Carousel Styles */
+.carouselContainer {
+  width: 100%;
+  height: 100%;
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 20px;
 }
 
-.title {
-  font-size: 1.5rem;
-  color: #333;
-  text-align: center;
-  margin-bottom: 10px;
+.carousel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
-.error {
-  background: #fee;
-  color: #c33;
-  padding: 12px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  text-align: center;
-}
-
-.nameRow {
+.carouselSlide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 0.8s ease-in-out;
   display: flex;
-  gap: 15px;
+  align-items: center;
+  justify-content: center;
 }
 
-.nameRow .formGroup {
+.carouselSlide.active {
+  opacity: 1;
+}
+
+.carouselImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.carouselOverlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(0, 0, 0, 0.6) 50%,
+    rgba(0, 0, 0, 0.3) 70%,
+    transparent 100%
+  );
+  color: white;
+  padding: 3rem 2rem 2rem;
+  z-index: 2;
+}
+
+.carouselContent {
+  max-width: 500px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.carouselTitle {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: white;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9), 0 4px 24px rgba(0, 0, 0, 0.8), 0 8px 32px rgba(0, 0, 0, 0.6);
+  font-family: 'Raleway', sans-serif;
+}
+
+.carouselDescription {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9), 0 2px 20px rgba(0, 0, 0, 0.8), 0 4px 28px rgba(0, 0, 0, 0.6);
+  margin: 0;
+}
+
+/* Carousel Navigation Arrows */
+.carouselArrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 3;
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.carouselArrow:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.carouselArrow:first-of-type {
+  left: 1rem;
+}
+
+.carouselArrow.next {
+  right: 1rem;
+}
+
+/* Carousel Dots */
+.carouselDots {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.5rem;
+  z-index: 3;
+}
+
+.carouselDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.carouselDot.active {
+  background: white;
+  border-color: white;
+  transform: scale(1.2);
+}
+
+.carouselDot:hover {
+  border-color: rgba(255, 255, 255, 0.8);
+  transform: scale(1.1);
+}
+
+/* Right Side - Form */
+.rightSide {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  position: relative;
+  z-index: 1;
+  background: #f0ece2;
+}
+
+.formContent {
+  width: 85%;
+  max-width: 550px;
+  padding: 2.5rem;
+}
+
+/* Toast Notification */
+.toast {
+  position: fixed;
+  top: 6rem;
+  right: 1rem;
+  background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 8px 32px rgba(255, 68, 68, 0.3);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 300px;
+  max-width: 400px;
+  transform: translateX(100%);
+  opacity: 0;
+  transition: all 0.3s ease;
+  font-family: 'Poppins', sans-serif;
+}
+
+.toast.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toastIcon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.toastMessage {
   flex: 1;
 }
 
-.formGroup {
+.toastClose {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.5rem;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+  flex-shrink: 0;
+}
+
+.toastClose:hover {
+  opacity: 1;
+}
+
+.toastButton {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 0.5rem;
+  font-family: 'Poppins', sans-serif;
+}
+
+.toastButton:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Modal Popup */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.modalOverlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal {
+  background: white;
+  border-radius: 16px;
+  padding: 2rem;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  transform: scale(0.9) translateY(20px);
+  transition: all 0.3s ease;
+  font-family: 'Poppins', sans-serif;
+}
+
+.modalOverlay.show .modal {
+  transform: scale(1) translateY(0);
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.modalIcon {
+  width: 3rem;
+  height: 3rem;
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.modalTitle {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.modalMessage {
+  color: #666;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.modalActions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.modalButton {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Poppins', sans-serif;
+  border: none;
+  flex: 1;
+  max-width: 140px;
+}
+
+.modalButtonSecondary {
+  background: #fee;
+  color: #c33;
+  border: 1px solid #fcc;
+}
+
+.modalButtonSecondary:hover {
+  background: #fdd;
+  color: #a22;
+  border-color: #faa;
+}
+
+.modalButtonPrimary {
+  background: #ff9100;
+  color: white;
+}
+
+.modalButtonPrimary:hover {
+  background: #e8820e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 145, 0, 0.3);
+}
+
+/* Form Styles */
+.form {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0.8rem;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.5rem;
 }
 
 .label {
-  font-weight: 500;
-  color: #333;
-  font-size: 0.9rem;
+  display: block;
+  font-weight: 600;
+  color: black;
+  font-size: 0.95rem;
+  margin-bottom: 0.1rem;
 }
 
 .input {
-  padding: 12px 16px;
+  padding: 0.8rem 1rem;
   border: 2px solid #e1e5e9;
   border-radius: 8px;
-  font-size: 1rem;
-  transition: border-color 0.2s ease;
+  font-size: 0.95rem;
+  font-family: 'Poppins', sans-serif;
+  transition: all 0.3s ease;
+  background: #fafafa;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .input:focus {
   outline: none;
-  border-color: #2d5a27;
+  border-color: #ff9100;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(255, 145, 0, 0.1);
 }
 
-.termsCheckbox {
+.input::placeholder {
+  color: #999;
+}
+
+/* Password Input Container */
+.passwordContainer {
+  position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  cursor: pointer;
-  color: #666;
-  font-size: 0.9rem;
-  line-height: 1.4;
+  align-items: center;
 }
 
-.termsCheckbox input {
-  margin: 0;
-  margin-top: 2px;
+.passwordInput {
+  padding: 0.8rem 3rem 0.8rem 1rem;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: 'Poppins', sans-serif;
+  transition: all 0.3s ease;
+  background: #fafafa;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 100%;
+}
+
+.passwordInput:focus {
+  outline: none;
+  border-color: #ff9100;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(255, 145, 0, 0.1);
+}
+
+.passwordInput::placeholder {
+  color: #999;
+}
+
+.eyeIcon {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #333;
+  font-size: 1.4rem;
+  transition: color 0.2s ease;
+  z-index: 10;
+  user-select: none;
+}
+
+.eyeIcon:hover {
+  color: #ff9100;
+}
+
+/* Form Options */
+.formOptions {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+}
+
+.checkboxWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  color: black;
+  font-weight: 500;
+  margin-top: -0.7rem;
+}
+
+.checkbox {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #2d5a27;
+}
+
+.checkboxLabel {
+  user-select: none;
 }
 
 .termsLink {
-  color: #2d5a27;
+  color: black;
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
+  transition: color 0.2s ease;
 }
 
 .termsLink:hover {
+  color: black;
   text-decoration: underline;
 }
 
-.submitButton {
-  background: #2d5a27;
+/* Buttons */
+.primaryButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: #ff9100;
   color: white;
   border: none;
-  padding: 14px;
-  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
   font-size: 1rem;
   font-weight: 600;
-  transition: background-color 0.2s ease;
+  font-family: 'Poppins', sans-serif;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(255, 145, 0, 0.3);
 }
 
-.submitButton:hover:not(:disabled) {
-  background: #1e3d1a;
+.primaryButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(255, 145, 0, 0.4);
 }
 
-.submitButton:disabled {
+.primaryButton:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+  transform: none;
 }
 
-.divider {
+.buttonIcon {
+  font-size: 1.2rem;
+  transition: transform 0.2s ease;
+}
+
+.primaryButton:hover .buttonIcon {
+  transform: translateX(3px);
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Signup Prompt */
+.signupPrompt {
   text-align: center;
-  color: #666;
-  font-size: 0.9rem;
-  margin: 10px 0;
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+  color: black;
+  font-weight: 500;
 }
 
-.secondaryButton {
-  background: transparent;
-  color: #2d5a27;
-  border: 2px solid #2d5a27;
-  padding: 12px;
-  border-radius: 8px;
-  font-size: 1rem;
+.signupLink {
+  background: none;
+  border: none;
+  color: black;
   font-weight: 600;
-  transition: all 0.2s ease;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: inherit;
+  font-family: inherit;
+  transition: color 0.2s ease;
 }
 
-.secondaryButton:hover {
-  background: #2d5a27;
-  color: white;
+.signupLink:hover {
+  color: black;
 }
 
-@media (max-width: 480px) {
-  .nameRow {
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .container {
     flex-direction: column;
-    gap: 20px;
+    height: auto;
+    min-height: 100vh;
   }
   
-  .card {
-    padding: 30px 20px;
+  .leftSide {
+    flex: none;
+    min-height: 40vh;
+    padding: 1.5rem;
+  }
+  
+  .rightSide {
+    flex: none;
+    padding: 1.5rem;
+  }
+  
+  .welcomeTitle {
+    font-size: 1.5rem;
+  }
+  
+  .features {
+    flex-direction: row;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  
+  .feature {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.5rem;
+    max-width: 120px;
+  }
+}
+
+@media (max-width: 768px) {
+  .navContainer {
+    flex-direction: column;
+    padding: 0 1rem;
+  }
+  
+  .logo {
+    margin-bottom: 1rem;
+  }
+  
+  .logo img {
+    height: 1.8rem;
+  }
+  
+  .navLinks {
+    margin-top: 1rem;
+    margin-left: 0;
+  }
+  
+  .navLinks li {
+    margin: 0 0.5rem;
+  }
+  
+  .leftSide {
+    min-height: 35vh;
+    padding: 1.5rem;
+  }
+  
+  .rightSide {
+    padding: 1.5rem;
+  }
+  
+  .formContent {
+    padding: 1.5rem;
+  }
+  
+  .welcomeTitle {
+    font-size: 1.3rem;
+  }
+  
+  .welcomeSubtitle {
+    font-size: 0.9rem;
+  }
+  
+  .formOptions {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
   }
 }

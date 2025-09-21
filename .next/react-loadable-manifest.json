@@ -2,8 +2,12 @@
   "dashboard.js -> firebase/auth": {
     "id": "dashboard.js -> firebase/auth",
     "files": []
-  }
-}"signin.js -> firebase/auth": {
+  },
+  "signin.js -> ../lib/firebase": {
+    "id": "signin.js -> ../lib/firebase",
+    "files": []
+  },
+  "signin.js -> firebase/auth": {
     "id": "signin.js -> firebase/auth",
     "files": []
   },

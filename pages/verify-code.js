@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
+import Head from 'next/head'
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
@@ -10,6 +11,9 @@ export default function VerifyCode() {
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [showToast, setShowToast] = useState(false)
+  const [showSuccessToast, setShowSuccessToast] = useState(false)
   const [cooldown, setCooldown] = useState(0)
   const router = useRouter()
   const { email } = router.query
@@ -22,10 +26,40 @@ export default function VerifyCode() {
     return () => clearTimeout(timer)
   }, [cooldown])
 
-  const handleVerify = async (e) => {
+  const showErrorToast = (message) => {
+    setError(message)
+    setShowToast(true)
+    setTimeout(() => {
+      setShowToast(false)
+    }, 5000)
+  }
+
+  const showSuccessMessage = (message) => {
+    setSuccess(message)
+    setShowSuccessToast(true)
+    setTimeout(() => {
+      setShowSuccessToast(false)
+      router.push('/signin')
+    }, 3000)
+  }
+
+  const showResendSuccess = (message) => {
+    setSuccess(message)
+    setShowSuccessToast(true)
+    setTimeout(() => {
+      setShowSuccessToast(false)
+    }, 3000)
+  }
+
+  const dismissToast = () => {
+    setShowToast(false)
+    setShowSuccessToast(false)
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!code.trim()) {
-      setError('Please enter the 6-digit code')
+      showErrorToast('Please enter the 6-digit code')
       return
     }
 
@@ -33,7 +67,7 @@ export default function VerifyCode() {
     setError('')
 
     try {
-      const response = await fetch('http://192.168.1.19:3000/verify-code', {
+      const response = await fetch('http://192.168.0.109:3000/verify-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code }),
@@ -67,22 +101,22 @@ export default function VerifyCode() {
               photoURL: null
             })
 
-            // Success - redirect to dashboard
-            router.push('/dashboard')
+            // Success - show toast and redirect to signin
+            showSuccessMessage('Account verified successfully! Redirecting to sign in...')
           } catch (firebaseError) {
             console.error('Firebase user creation error:', firebaseError)
-            setError('Failed to create account. Please try again.')
+            showErrorToast('Failed to create account. Please try again.')
           }
         } else {
           // Backend verification successful but no user data
-          setError('Verification successful! Please sign in to continue.')
-          setTimeout(() => router.push('/signin'), 2000)
+          showSuccessMessage('Verification successful! Redirecting to sign in...')
         }
       } else {
-        setError(data.error || 'Invalid verification code')
+        showErrorToast(data.error || 'Invalid verification code')
       }
     } catch (err) {
-      setError('Verification failed. Please try again.')
+      console.error('Verification error:', err)
+      showErrorToast('Network error. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -95,7 +129,7 @@ export default function VerifyCode() {
     setError('')
 
     try {
-      const response = await fetch('http://192.168.1.19:3000/resend-code', {
+      const response = await fetch('http://192.168.0.109:3000/resend-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -106,11 +140,12 @@ export default function VerifyCode() {
       if (data.success) {
         setCooldown(59)
         setError('')
+        showResendSuccess('Verification code resent successfully!')
       } else {
-        setError(data.error || 'Failed to resend code')
+        showErrorToast(data.error || 'Failed to resend code')
       }
     } catch (err) {
-      setError('Failed to resend code. Please try again.')
+      showErrorToast('Failed to resend code. Please try again.')
     } finally {
       setResending(false)
     }
@@ -131,7 +166,15 @@ export default function VerifyCode() {
   }
 
   return (
-    <div className={styles.container}>
+    <>
+      <Head>
+        <title>Verify Email | AgriLink PH</title>
+        <meta name="description" content="Verify your email address to complete registration" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+      </Head>
+
+      <div className={styles.container}>
       <div className={styles.card}>
         <div className={styles.header}>
           <button className={styles.backButton} onClick={handleBack}>
@@ -149,7 +192,7 @@ export default function VerifyCode() {
 
           {error && <div className={styles.error}>{error}</div>}
 
-          <form onSubmit={handleVerify} className={styles.form}>
+          <form onSubmit={handleSubmit} className={styles.form}>
             <div className={styles.formGroup}>
               <label htmlFor="code" className={styles.label}>Verification Code</label>
               <input
@@ -186,6 +229,29 @@ export default function VerifyCode() {
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Error Toast */}
+      {error && (
+        <div className={`${styles.toast} ${showToast ? styles.show : ''}`}>
+          <i className={`fas fa-exclamation-circle ${styles.toastIcon}`}></i>
+          <span className={styles.toastMessage}>{error}</span>
+          <button className={styles.toastClose} onClick={dismissToast}>
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      )}
+
+      {/* Success Toast */}
+      {success && (
+        <div className={`${styles.successToast} ${showSuccessToast ? styles.show : ''}`}>
+          <i className={`fas fa-check-circle ${styles.toastIcon}`}></i>
+          <span className={styles.toastMessage}>{success}</span>
+          <button className={styles.toastClose} onClick={dismissToast}>
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      )}
+      </div>
+    </>
   )
 }

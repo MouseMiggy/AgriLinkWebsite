@@ -7,15 +7,11 @@ export default function Onboarding() {
   const router = useRouter()
   const [activeSection, setActiveSection] = useState('home')
 
-  const skipOnboarding = () => {
-    // Mark onboarding as completed
-    localStorage.setItem('agrilink_onboarding_completed', 'true')
+  const goToSignIn = () => {
     router.push('/signin')
   }
 
-  const getStarted = () => {
-    // Mark onboarding as completed
-    localStorage.setItem('agrilink_onboarding_completed', 'true')
+  const goToSignUp = () => {
     router.push('/signup')
   }
 
@@ -28,18 +24,54 @@ export default function Onboarding() {
   const scrollToSection = (sectionId) => {
     const element = document.getElementById(sectionId)
     if (element) {
-      const navHeight = 30 // Navigation bar height
+      const navHeight = 30 // Fixed navigation bar height
       const elementPosition = element.offsetTop
-      const offsetPosition = elementPosition - navHeight - (window.innerHeight / 2) + (element.offsetHeight / 2)
+      const offsetPosition = elementPosition - navHeight - 20 // Add 20px padding for better visibility
       
       window.scrollTo({
         top: offsetPosition,
         behavior: 'smooth'
       })
+      
+      // Update active section after scroll
+      setTimeout(() => {
+        setActiveSection(sectionId)
+      }, 500)
     }
   }
 
   useEffect(() => {
+    // Hide scrollbar globally while keeping scroll functionality
+    const originalStyle = window.getComputedStyle(document.body).overflow
+    const originalHtmlStyle = window.getComputedStyle(document.documentElement).overflow
+    
+    // Create and inject global styles to hide scrollbar
+    const style = document.createElement('style')
+    style.id = 'hide-scrollbar-style'
+    style.textContent = `
+      html, body {
+        -ms-overflow-style: none !important;  /* IE and Edge */
+        scrollbar-width: none !important;  /* Firefox */
+        overflow-x: hidden !important;
+      }
+      
+      html::-webkit-scrollbar, 
+      body::-webkit-scrollbar {
+        display: none !important;
+      }
+    `
+    document.head.appendChild(style)
+
+    // Handle hash navigation from external pages
+    const handleHashNavigation = () => {
+      const hash = window.location.hash.replace('#', '')
+      if (hash) {
+        setTimeout(() => {
+          scrollToSection(hash)
+        }, 100) // Small delay to ensure page is loaded
+      }
+    }
+
     const updateActiveNav = () => {
       const sections = document.querySelectorAll('section, header')
       let current = ''
@@ -55,12 +87,23 @@ export default function Onboarding() {
       setActiveSection(current)
     }
 
+    // Handle hash navigation on page load
+    handleHashNavigation()
+
     window.addEventListener('scroll', updateActiveNav)
     window.addEventListener('load', updateActiveNav)
+    window.addEventListener('hashchange', handleHashNavigation)
     
     return () => {
+      // Cleanup: remove injected styles and restore original overflow
+      const injectedStyle = document.getElementById('hide-scrollbar-style')
+      if (injectedStyle) {
+        document.head.removeChild(injectedStyle)
+      }
+      
       window.removeEventListener('scroll', updateActiveNav)
       window.removeEventListener('load', updateActiveNav)
+      window.removeEventListener('hashchange', handleHashNavigation)
     }
   }, [])
 
@@ -78,7 +121,7 @@ export default function Onboarding() {
 
       <nav className={styles.nav}>
         <div className={styles.navContainer}>
-          <a href="#home" className={styles.logo} onClick={(e) => { e.preventDefault(); scrollToSection('home') }}>
+          <a href="/signin" className={styles.logo} onClick={(e) => { e.preventDefault(); router.push('/signin') }}>
             <img src="/assets/images/AgrilinkLogo.png" alt="AgriLink Logo" />
           </a>
           <ul className={styles.navLinks}>
@@ -88,8 +131,8 @@ export default function Onboarding() {
             <li><a href="#suggestion-list" className={activeSection === 'suggestion-list' ? styles.active : ''} onClick={(e) => { e.preventDefault(); scrollToSection('suggestion-list') }}>Listings</a></li>
           </ul>
           <div className={styles.navButtons}>
-            <button className={styles.signinBtn} onClick={skipOnboarding}>Sign In</button>
-            <button className={styles.signupBtn} onClick={getStarted}>Sign Up</button>
+            <button className={styles.signinBtn} onClick={goToSignIn}>Sign In</button>
+            <button className={styles.signupBtn} onClick={goToSignUp}>Sign Up</button>
           </div>
         </div>
       </nav>

@@ -1,184 +1,1003 @@
-.container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
+/* Component Styles */
+.onboardingWrapper {
+    background-color: #f9f9f7;
+    min-height: 100vh;
+    font-family: 'Poppins', sans-serif;
+    color: #333;
+    line-height: 1.6;
+    /* Hide scrollbar for all browsers while keeping scroll functionality */
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+    overflow-x: hidden;
+  }
+  
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .onboardingWrapper::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Navigation */
+  .nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 80px;
+    background: white;
+    color: black;
+    z-index: 1000;
+    padding: 1rem 0;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    backdrop-filter: blur(10px);
+  }
+  
+  .navContainer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 0 0.5rem 0 2rem;
+    font-family: 'Poppins', sans-serif;
+  }
+  
+  .logo {
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+  }
+  
+  .logo img {
+    height: 2.2rem;
+    width: auto;
+    object-fit: contain;
+  }
+  
+  .navLinks {
+    display: flex;
+    list-style: none;
+    margin-left: 90px;
+  }
+   
+  .navLinks li {
+    margin-left: 2.5rem;
+    margin-right: 2.5rem;
+  }
+  
+  .navLinks a {
+    text-decoration: none;
+    color: black;
+    font-weight: 500;
+    transition: color 0.3s ease;
+    font-family: 'Poppins', sans-serif;
+  }
+  
+  .navLinks a:hover {
+    color: #FFA000;
+  }
+  
+  .navLinks a.active {
+    color: #ff9100;
+  }
+  
+  .navButtons {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  
+  .signinBtn {
+    background-color: transparent;
+    color: #ff9100;
+    text-decoration: none;
+    padding: 8px 16px;
+    transition: color 0.3s ease;
+    border-radius: 4px;
+    font-weight: 500;
+    border: none;
+    min-width: 70px;
+    text-align: center;
+    display: inline-block;
+    font-family: 'Poppins', sans-serif;
+    font-size: 1rem;
+  }
+  
+  .signinBtn:hover {
+    color: #ff9100;
+  }
+  
+  .signupBtn {
+    margin-left: 1rem;
+    margin-right: 2rem;
+    padding: 0.6rem 1.8rem;
+    border: 2px solid #ff9100;
+    border-radius: 5px;
+    color: black;
+    background: transparent;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    min-width: 80px;
+    text-align: center;
+    display: inline-block;
+    font-family: 'Poppins', sans-serif;
+    font-size: 1rem;
+  }
+  
+  .signupBtn:hover {
+    background: #ff9100;
+    color: white;
+    border-color: #ff9100;
+  }
 
-.card {
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-  padding: 40px;
-  width: 100%;
-  max-width: 400px;
-}
+  /* Main Container - Updated for signin layout */
+  .container {
+    height: 100vh;
+    display: flex;
+    position: relative;
+    background: linear-gradient(135deg, #f9f9f7 0%, #e8f5e8 100%);
+    padding-top: 80px; /* Account for fixed header */
+    overflow: hidden; /* Prevent scrolling */
+  }
 
-.header {
-  text-align: center;
-  margin-bottom: 30px;
-}
+  /* Background Pattern */
+  .backgroundPattern {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+      radial-gradient(circle at 20% 80%, rgba(45, 90, 39, 0.05) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(45, 90, 39, 0.05) 0%, transparent 50%),
+      radial-gradient(circle at 40% 40%, rgba(45, 90, 39, 0.03) 0%, transparent 50%);
+    z-index: 0;
+  }
 
-.logo {
-  font-size: 2.5rem;
-  font-weight: bold;
-  color: #2d5a27;
-  margin-bottom: 8px;
-}
+  /* Left Side - Photo Carousel */
+  .leftSide {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+  }
 
-.subtitle {
-  color: #666;
-  font-size: 0.95rem;
-}
+  .infoContent {
+    max-width: 450px;
+    text-align: center;
+  }
 
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
+  .welcomeTitle {
+    font-size: 1.8rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    line-height: 1.3;
+    color: white;
+  }
 
-.title {
-  font-size: 1.5rem;
-  color: #333;
-  text-align: center;
-  margin-bottom: 10px;
-}
+  .welcomeSubtitle {
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+    color: rgba(255, 255, 255, 0.9);
+  }
 
-.error {
-  background: #fee;
-  color: #c33;
-  padding: 12px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  text-align: center;
-}
+  .features {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+  }
 
-.formGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+  .feature {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    text-align: left;
+    color: rgba(255, 255, 255, 0.95);
+  }
 
-.label {
-  font-weight: 500;
-  color: #333;
-  font-size: 0.9rem;
-}
+  .featureIcon {
+    font-size: 1.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    backdrop-filter: blur(10px);
+    flex-shrink: 0;
+  }
 
-.input {
-  padding: 12px 16px;
-  border: 2px solid #e1e5e9;
-  border-radius: 8px;
-  font-size: 1rem;
-  transition: border-color 0.2s ease;
-}
+  .featureText h4 {
+    margin: 0 0 0.2rem 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: white;
+  }
 
-.input:focus {
-  outline: none;
-  border-color: #2d5a27;
-}
+  .featureText p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.8);
+  }
 
-.options {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.9rem;
-}
+  /* Photo Carousel Styles */
+  .carouselContainer {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
 
-.checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  color: #666;
-}
+  .carousel {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
 
-.checkbox input {
-  margin: 0;
-}
+  .carouselSlide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.8s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
-.forgotPassword {
-  color: #2d5a27;
-  text-decoration: none;
-  font-weight: 500;
-}
+  .carouselSlide.active {
+    opacity: 1;
+  }
 
-.forgotPassword:hover {
-  text-decoration: underline;
-}
+  .carouselImage {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+  }
 
-.submitButton {
-  background: #2d5a27;
-  color: white;
-  border: none;
-  padding: 14px;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  transition: background-color 0.2s ease;
-}
+  .carouselOverlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(
+      to top,
+      rgba(0, 0, 0, 0.8) 0%,
+      rgba(0, 0, 0, 0.6) 50%,
+      rgba(0, 0, 0, 0.3) 70%,
+      transparent 100%
+    );
+    color: white;
+    padding: 3rem 2rem 2rem;
+    z-index: 2;
+  }
 
-.submitButton:hover:not(:disabled) {
-  background: #1e3d1a;
-}
+  .carouselContent {
+    max-width: 500px;
+    margin: 0 auto;
+    text-align: center;
+  }
 
-.submitButton:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
+  .carouselTitle {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: white;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9), 0 4px 24px rgba(0, 0, 0, 0.8), 0 8px 32px rgba(0, 0, 0, 0.6);
+    font-family: 'Raleway', sans-serif;
+  }
 
-.divider {
-  text-align: center;
-  color: #666;
-  font-size: 0.9rem;
-  margin: 10px 0;
-}
+  .carouselDescription {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.95);
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9), 0 2px 20px rgba(0, 0, 0, 0.8), 0 4px 28px rgba(0, 0, 0, 0.6);
+    margin: 0;
+  }
 
-.secondaryButton {
-  background: transparent;
-  color: #2d5a27;
-  border: 2px solid #2d5a27;
-  padding: 12px;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
+  /* Carousel Navigation Arrows */
+  .carouselArrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 3;
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
-.secondaryButton:hover {
-  background: #2d5a27;
-  color: white;
-}
+  .carouselArrow:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-50%) scale(1.1);
+  }
 
-.googleButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  background: white;
-  color: #333;
-  border: 2px solid #dadce0;
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
+  .carouselArrow:first-of-type {
+    left: 1rem;
+  }
 
-.googleButton:hover:not(:disabled) {
-  background: #f8f9fa;
-  border-color: #c1c7cd;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
+  .carouselArrow.next {
+    right: 1rem;
+  }
 
-.googleButton:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
+  /* Carousel Dots */
+  .carouselDots {
+    position: absolute;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 0.5rem;
+    z-index: 3;
+  }
 
-.googleIcon {
-  width: 20px;
-  height: 20px;
-}
+  .carouselDot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .carouselDot.active {
+    background: white;
+    border-color: white;
+    transform: scale(1.2);
+  }
+
+  .carouselDot:hover {
+    border-color: rgba(255, 255, 255, 0.8);
+    transform: scale(1.1);
+  }
+
+  /* Right Side - Form */
+  .rightSide {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    position: relative;
+    z-index: 1;
+    background: #f0ece2;
+  }
+
+  .formContent {
+    width: 85%;
+    max-width: 550px;
+    padding: 2.5rem;
+  }
+
+  /* Toast Notification */
+  .toast {
+    position: fixed;
+    top: 6rem;
+    right: 1rem;
+    background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    box-shadow: 0 8px 32px rgba(255, 68, 68, 0.3);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 300px;
+    max-width: 400px;
+    transform: translateX(100%);
+    opacity: 0;
+    transition: all 0.3s ease;
+    font-family: 'Poppins', sans-serif;
+  }
+
+  .toast.show {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  .toastIcon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+
+  .toastMessage {
+    flex: 1;
+  }
+
+  .toastClose {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 0.5rem;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .toastClose:hover {
+    opacity: 1;
+  }
+
+  /* Form Styles */
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .label {
+    display: block;
+    font-weight: 600;
+    color: black;
+    font-size: 0.95rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .input {
+    padding: 0.8rem 1rem;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-family: 'Poppins', sans-serif;
+    transition: all 0.3s ease;
+    background: #fafafa;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .input:focus {
+    outline: none;
+    border-color: #ff9100;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(255, 145, 0, 0.1);
+  }
+
+  .input::placeholder {
+    color: #999;
+  }
+
+  /* Password Input Container */
+  .passwordContainer {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .passwordInput {
+    padding: 0.8rem 3rem 0.8rem 1rem;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-family: 'Poppins', sans-serif;
+    transition: all 0.3s ease;
+    background: #fafafa;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    width: 100%;
+  }
+
+  .passwordInput:focus {
+    outline: none;
+    border-color: #ff9100;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(255, 145, 0, 0.1);
+  }
+
+  .passwordInput::placeholder {
+    color: #999;
+  }
+
+  .eyeIcon {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #333;
+    font-size: 1.4rem;
+    transition: color 0.2s ease;
+    z-index: 10;
+    user-select: none;
+  }
+
+  .eyeIcon:hover {
+    color: #ff9100;
+  }
+
+  /* Form Options */
+  .formOptions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+
+  .checkboxWrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    color: black;
+    font-weight: 500;
+  }
+
+  .checkbox {
+    width: 1.1rem;
+    height: 1.1rem;
+    accent-color: #2d5a27;
+  }
+
+  .checkboxLabel {
+    user-select: none;
+  }
+
+  .forgotLink {
+    color: black;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s ease;
+  }
+
+  .forgotLink:hover {
+    color: black;
+    text-decoration: underline;
+  }
+
+  /* Buttons */
+  .primaryButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: #ff9100;
+    color: white;
+    border: none;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: 'Poppins', sans-serif;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    margin-top: 1rem;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .primaryButton:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(45, 90, 39, 0.3);
+  }
+
+  .primaryButton:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .spinner {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  /* Divider */
+  .divider {
+    position: relative;
+    text-align: center;
+    margin: 0.8rem 0;
+  }
+
+  .divider::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: #e1e5e9;
+  }
+
+  .dividerText {
+    padding: 0 1rem;
+    color: #000;
+    font-size: 0.9rem;
+    font-weight: 500;
+    position: relative;
+    z-index: 1;
+    border-radius: 20px;
+  }
+
+  /* Google Button */
+  .googleButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    background: white;
+    color: #333;
+    border: 2px solid #fff;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 500;
+    font-family: 'Poppins', sans-serif;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .googleButton:hover:not(:disabled) {
+    background: #f8f9fa;
+    border-color: #c1c7cd;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+  }
+
+  .googleButton:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .googleIcon {
+    width: 5rem;
+    height: 3.4rem;
+    object-fit: cover;
+    object-position: center;
+  }
+
+  /* Signup Prompt */
+  .signupPrompt {
+    text-align: center;
+    margin-top: 1.5rem;
+    font-size: 0.95rem;
+    color: black;
+    font-weight: 500;
+  }
+
+  .signupLink {
+    background: none;
+    border: none;
+    color: black;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: inherit;
+    font-family: inherit;
+    transition: color 0.2s ease;
+  }
+
+  .signupLink:hover {
+    color: black;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 1024px) {
+    .container {
+      flex-direction: column;
+      height: auto;
+      min-height: 100vh;
+    }
+    
+    .leftSide {
+      flex: none;
+      min-height: 50vh;
+      padding: 0;
+    }
+    
+    .rightSide {
+      flex: none;
+      padding: 1.5rem;
+    }
+    
+    .carouselTitle {
+      font-size: 1.5rem;
+    }
+    
+    .carouselDescription {
+      font-size: 0.9rem;
+    }
+    
+    .carouselOverlay {
+      padding: 2rem 1.5rem 1.5rem;
+    }
+    
+    .carouselArrow {
+      width: 40px;
+      height: 40px;
+      font-size: 1.2rem;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .navContainer {
+      flex-direction: column;
+      padding: 0 1rem;
+    }
+    
+    .logo {
+      margin-bottom: 1rem;
+    }
+    
+    .logo img {
+      height: 1.8rem;
+    }
+    
+    .navLinks {
+      margin-top: 1rem;
+      margin-left: 0;
+    }
+    
+    .navLinks li {
+      margin: 0 0.5rem;
+    }
+    
+    .leftSide {
+      min-height: 40vh;
+      padding: 0;
+    }
+    
+    .rightSide {
+      padding: 1.5rem;
+    }
+    
+    .formContent {
+      padding: 1.5rem;
+    }
+    
+    .carouselTitle {
+      font-size: 1.3rem;
+    }
+    
+    .carouselDescription {
+      font-size: 0.85rem;
+    }
+    
+    .carouselOverlay {
+      padding: 1.5rem 1rem 1rem;
+    }
+    
+    .carouselArrow {
+      width: 35px;
+      height: 35px;
+      font-size: 1rem;
+    }
+    
+    .carouselArrow:first-of-type {
+      left: 0.5rem;
+    }
+    
+    .carouselArrow.next {
+      right: 0.5rem;
+    }
+    
+    .formOptions {
+      flex-direction: column;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+  }
+
+  /* Modal Styles */
+  .modalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(5px);
+  }
+
+  .modalOverlay.show {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .modal {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+  }
+
+  .modalOverlay.show .modal {
+    transform: scale(1);
+  }
+
+  .modalHeader {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .modalIcon {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, #ff9100 0%, #ff7043 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    color: white;
+    font-size: 1.5rem;
+  }
+
+  .modalTitle {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+    font-family: 'Poppins', sans-serif;
+  }
+
+  .modalMessage {
+    text-align: center;
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+    font-size: 0.95rem;
+  }
+
+  .modalActions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+  }
+
+  .modalButton {
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: 'Poppins', sans-serif;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+    min-width: 100px;
+  }
+
+  .modalButtonPrimary {
+    background: #ff9100;
+    color: white;
+  }
+
+  .modalButtonPrimary:hover {
+    background: #e68200;
+    transform: translateY(-1px);
+  }
+
+  .modalButtonSecondary {
+    background: #f5f5f5;
+    color: #666;
+    border: 1px solid #ddd;
+  }
+
+  .modalButtonSecondary:hover {
+    background: #e9e9e9;
+    color: #333;
+  }
+
+  .modalButtonPrimary:disabled {
+    background: #ccc;
+    color: #666;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* Role Selection Styles */
+  .roleSelection {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .roleOption {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border: 2px solid #e1e5e9;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: #f9f9f9;
+  }
+
+  .roleOption:hover {
+    border-color: #ff9100;
+    background: #fff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 145, 0, 0.15);
+  }
+
+  .roleOption.selected {
+    border-color: #ff9100;
+    background: #fff5e6;
+    box-shadow: 0 4px 12px rgba(255, 145, 0, 0.2);
+  }
+
+  .roleIcon {
+    font-size: 2rem;
+    width: 3rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 145, 0, 0.1);
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .roleOption.selected .roleIcon {
+    background: rgba(255, 145, 0, 0.2);
+  }
+
+  .roleInfo h4 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #333;
+    font-family: 'Poppins', sans-serif;
+  }
+
+  .roleInfo p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #666;
+    line-height: 1.4;
+  }

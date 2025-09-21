@@ -2,9 +2,7 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/signup": "pages/signup.js",
-  "/verify-code": "pages/verify-code.js",
   "/signin": "pages/signin.js",
-  "/dashboard": "pages/dashboard.js",
-  "/listings": "pages/listings.js"
+  "/onboarding": "pages/onboarding.js",
+  "/dashboard": "pages/dashboard.js"
 }

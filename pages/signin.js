@@ -17,9 +17,6 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [showSignupModal, setShowSignupModal] = useState(false)
-  const [showRoleModal, setShowRoleModal] = useState(false)
-  const [selectedRole, setSelectedRole] = useState('')
-  const [pendingGoogleUser, setPendingGoogleUser] = useState(null)
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const [touchStart, setTouchStart] = useState(null)
   const [touchEnd, setTouchEnd] = useState(null)
@@ -148,19 +145,23 @@ export default function SignIn() {
       const result = await signInWithPopup(auth, provider)
       const user = result.user
 
-      // Check if user exists in Firestore
+      // Check if user exists in Firestore, if not create profile
       const userDocRef = doc(db, 'Users', user.uid)
       const userDoc = await getDoc(userDocRef)
       
       if (!userDoc.exists()) {
-        // New user - show role selection modal
-        setPendingGoogleUser(user)
-        setShowRoleModal(true)
-        setLoading(false)
-        return
+        // Create user profile in Firestore
+        await setDoc(userDocRef, {
+          firstName: user.displayName?.split(' ')[0] || 'User',
+          lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
+          email: user.email,
+          role: 'crop_farmer', // Default role
+          createdAt: new Date(),
+          photoURL: user.photoURL || null
+        })
       }
 
-      // Existing user - redirect to dashboard
+      // Redirect to dashboard after successful signin
       router.push('/dashboard')
     } catch (err) {
       console.error('Google sign in error:', err)
@@ -184,58 +185,6 @@ export default function SignIn() {
   const goToSignUpFromModal = () => {
     setShowSignupModal(false)
     router.push('/signup')
-  }
-
-  // Role selection handlers
-  const handleRoleSelection = (role) => {
-    setSelectedRole(role)
-  }
-
-  const completeGoogleRegistration = async () => {
-    if (!selectedRole || !pendingGoogleUser) return
-
-    setLoading(true)
-    try {
-      const { doc, setDoc } = await import('firebase/firestore')
-      const { db } = await import('../lib/firebase')
-      
-      // Create user profile in Firestore with selected role
-      await setDoc(doc(db, 'Users', pendingGoogleUser.uid), {
-        firstName: pendingGoogleUser.displayName?.split(' ')[0] || 'User',
-        lastName: pendingGoogleUser.displayName?.split(' ').slice(1).join(' ') || '',
-        email: pendingGoogleUser.email,
-        role: selectedRole,
-        createdAt: new Date(),
-        photoURL: pendingGoogleUser.photoURL || null,
-        verified: true
-      })
-
-      // Close modal and redirect
-      setShowRoleModal(false)
-      setPendingGoogleUser(null)
-      setSelectedRole('')
-      router.push('/dashboard')
-    } catch (error) {
-      console.error('Error completing registration:', error)
-      showErrorToast('Failed to complete registration')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const cancelGoogleRegistration = async () => {
-    if (pendingGoogleUser) {
-      try {
-        const { signOut } = await import('firebase/auth')
-        const { auth } = await import('../lib/firebase')
-        await signOut(auth)
-      } catch (error) {
-        console.error('Error signing out:', error)
-      }
-    }
-    setShowRoleModal(false)
-    setPendingGoogleUser(null)
-    setSelectedRole('')
   }
 
   // Photo carousel handlers
@@ -571,61 +520,6 @@ export default function SignIn() {
               onClick={goToSignUpFromModal}
             >
               Create Account
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Role Selection Modal for Google Sign In */}
-      <div className={`${styles.modalOverlay} ${showRoleModal ? styles.show : ''}`}>
-        <div className={styles.modal}>
-          <div className={styles.modalHeader}>
-            <div className={styles.modalIcon}>
-              <i className="fas fa-user-plus"></i>
-            </div>
-            <h3 className={styles.modalTitle}>Choose Your Role</h3>
-          </div>
-          <p className={styles.modalMessage}>
-            Welcome to AgriLink! Please select your role to complete your registration.
-          </p>
-          
-          <div className={styles.roleSelection}>
-            <div 
-              className={`${styles.roleOption} ${selectedRole === 'crop_farmer' ? styles.selected : ''}`}
-              onClick={() => handleRoleSelection('crop_farmer')}
-            >
-              <div className={styles.roleIcon}>🌾</div>
-              <div className={styles.roleInfo}>
-                <h4>Crop Farmer</h4>
-                <p>I grow crops and need organic fertilizer</p>
-              </div>
-            </div>
-            
-            <div 
-              className={`${styles.roleOption} ${selectedRole === 'livestock_owner' ? styles.selected : ''}`}
-              onClick={() => handleRoleSelection('livestock_owner')}
-            >
-              <div className={styles.roleIcon}>🐄</div>
-              <div className={styles.roleInfo}>
-                <h4>Livestock Owner</h4>
-                <p>I have livestock waste to share</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className={styles.modalActions}>
-            <button 
-              className={`${styles.modalButton} ${styles.modalButtonSecondary}`}
-              onClick={cancelGoogleRegistration}
-            >
-              Cancel
-            </button>
-            <button 
-              className={`${styles.modalButton} ${styles.modalButtonPrimary}`}
-              onClick={completeGoogleRegistration}
-              disabled={!selectedRole || loading}
-            >
-              {loading ? 'Creating Account...' : 'Continue'}
             </button>
           </div>
         </div>

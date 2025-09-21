@@ -48,7 +48,204 @@ export default function Dashboard() {
   const [showChat, setShowChat] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [editingComment, setEditingComment] = useState(null)
+  const [editCommentText, setEditCommentText] = useState('')
+  const [showCommentMenu, setShowCommentMenu] = useState(null)
   const router = useRouter()
+
+  // Force correct chronological order
+  const forceCorrectOrder = async () => {
+    if (!db) return
+    
+    try {
+      console.log('🔄 Forcing correct chronological order...')
+      
+      // Get all posts and sort them properly
+      const postsSnapshot = await getDocs(collection(db, 'Posts'))
+      console.log('📊 Total posts for reordering:', postsSnapshot.docs.length)
+      
+      const allPosts = postsSnapshot.docs.map((doc) => {
+        const data = doc.data()
+        return {
+          id: doc.id,
+          ...data,
+          userName: data.userName || data.authorName || data.firstName || 'Anonymous',
+          text: data.text || data.content || '',
+          likes: data.likes || 0,
+          likedBy: data.likedBy || [],
+          comments: data.comments || []
+        }
+      })
+      
+      // Sort with detailed logging
+      const sortedPosts = allPosts.sort((a, b) => {
+        let aTime = 0
+        let bTime = 0
+        
+        // Get timestamps
+        if (a.createdAt?.toDate) {
+          aTime = a.createdAt.toDate().getTime()
+        } else if (a.createdAt?.toMillis) {
+          aTime = a.createdAt.toMillis()
+        } else if (a.createdAt?.seconds) {
+          aTime = a.createdAt.seconds * 1000
+        } else if (a.createdAt) {
+          aTime = new Date(a.createdAt).getTime()
+        }
+        
+        if (b.createdAt?.toDate) {
+          bTime = b.createdAt.toDate().getTime()
+        } else if (b.createdAt?.toMillis) {
+          bTime = b.createdAt.toMillis()
+        } else if (b.createdAt?.seconds) {
+          bTime = b.createdAt.seconds * 1000
+        } else if (b.createdAt) {
+          bTime = new Date(b.createdAt).getTime()
+        }
+        
+        console.log('Comparing posts:', {
+          postA: { 
+            id: a.id.substring(0, 8), 
+            text: a.text?.substring(0, 30) + '...', 
+            time: aTime, 
+            date: new Date(aTime).toLocaleDateString() 
+          },
+          postB: { 
+            id: b.id.substring(0, 8), 
+            text: b.text?.substring(0, 30) + '...', 
+            time: bTime, 
+            date: new Date(bTime).toLocaleDateString() 
+          },
+          result: bTime - aTime > 0 ? 'B is newer (goes first)' : 'A is newer (goes first)'
+        })
+        
+        return bTime - aTime // Newest first
+      })
+      
+      console.log('📅 Final post order (newest to oldest):')
+      sortedPosts.forEach((post, index) => {
+        const time = post.createdAt?.toDate ? post.createdAt.toDate() : 
+                    post.createdAt?.toMillis ? new Date(post.createdAt.toMillis()) :
+                    new Date(post.createdAt)
+        console.log(`${index + 1}. ${post.text?.substring(0, 40)}... (${time.toLocaleDateString()})`)
+      })
+      
+      setPosts(sortedPosts)
+      console.log('✅ Posts reordered correctly!')
+      
+    } catch (error) {
+      console.error('❌ Error forcing correct order:', error)
+    }
+  }
+
+  // Manual refresh function to load posts directly
+  const refreshPosts = async () => {
+    if (!db) return
+    
+    try {
+      console.log('🔄 Manually loading posts...')
+      const postsSnapshot = await getDocs(collection(db, 'Posts'))
+      console.log('📊 Manual query found:', postsSnapshot.docs.length, 'posts')
+      
+      const fetchedPosts = postsSnapshot.docs.map((doc) => {
+        const data = doc.data()
+        console.log('📝 Loading post:', doc.id, data)
+        return {
+          id: doc.id,
+          ...data,
+          // Ensure we have display fields
+          userName: data.userName || data.authorName || data.firstName || 'Anonymous',
+          text: data.text || data.content || '',
+          likes: data.likes || 0,
+          likedBy: data.likedBy || [],
+          comments: data.comments || []
+        }
+      }).sort((a, b) => {
+        // Sort chronologically - NEWEST FIRST (top of feed)
+        let aTime = 0
+        let bTime = 0
+        
+        // Handle different timestamp formats for post A
+        if (a.createdAt?.toMillis) {
+          aTime = a.createdAt.toMillis()
+        } else if (a.createdAt?.seconds) {
+          aTime = a.createdAt.seconds * 1000
+        } else if (a.createdAt?.toDate) {
+          aTime = a.createdAt.toDate().getTime()
+        } else if (a.createdAt) {
+          aTime = new Date(a.createdAt).getTime()
+        }
+        
+        // Handle different timestamp formats for post B
+        if (b.createdAt?.toMillis) {
+          bTime = b.createdAt.toMillis()
+        } else if (b.createdAt?.seconds) {
+          bTime = b.createdAt.seconds * 1000
+        } else if (b.createdAt?.toDate) {
+          bTime = b.createdAt.toDate().getTime()
+        } else if (b.createdAt) {
+          bTime = new Date(b.createdAt).getTime()
+        }
+        
+        console.log('Sorting posts:', {
+          postA: { id: a.id, time: aTime, date: new Date(aTime) },
+          postB: { id: b.id, time: bTime, date: new Date(bTime) }
+        })
+        
+        // Return positive if a is older (b should come first)
+        // bTime - aTime: if bTime > aTime, result is positive, b comes first (newer)
+        return bTime - aTime // NEWEST FIRST (larger timestamp = newer = top)
+      })
+      
+      setPosts(fetchedPosts)
+      console.log('✅ Posts manually loaded and set:', fetchedPosts.length)
+      alert(`Successfully loaded ${fetchedPosts.length} posts!`)
+      
+    } catch (error) {
+      console.error('❌ Error manually loading posts:', error)
+      alert('Error loading posts: ' + error.message)
+    }
+  }
+
+  // Debug function to check Firebase data
+  const debugFirebase = async () => {
+    if (!db) {
+      console.log('❌ Database not initialized')
+      return
+    }
+    
+    try {
+      console.log('🔍 === FIREBASE DEBUG START ===')
+      
+      // Check Posts collection
+      const postsSnapshot = await getDocs(collection(db, 'Posts'))
+      console.log('📊 Total posts in Firebase:', postsSnapshot.docs.length)
+      
+      postsSnapshot.docs.forEach((doc, index) => {
+        const data = doc.data()
+        console.log(`📝 Post ${index + 1}:`, {
+          id: doc.id,
+          text: data.text || data.content || 'No text',
+          author: data.userName || data.authorName || data.firstName || 'No author',
+          createdAt: data.createdAt,
+          likes: data.likes || 0
+        })
+      })
+      
+      // Check current posts state
+      console.log('📱 Posts in React state:', posts.length)
+      console.log('👤 Current user:', user?.firstName, user?.email)
+      
+      console.log('🔍 === FIREBASE DEBUG END ===')
+      
+      // Show alert with results
+      alert(`Firebase Debug Results:\n\nPosts in database: ${postsSnapshot.docs.length}\nPosts in UI: ${posts.length}\n\nCheck console for detailed info.`)
+      
+    } catch (error) {
+      console.error('❌ Error debugging Firebase:', error)
+      alert('Error accessing Firebase. Check console for details.')
+    }
+  }
 
   // Handle ESC key to close comment modal and dropdown
   useEffect(() => {
@@ -60,22 +257,61 @@ export default function Dashboard() {
         if (showDropdown) {
           setShowDropdown(null)
         }
+        if (showNotifications) {
+          setShowNotifications(false)
+        }
+        if (showChat) {
+          setShowChat(false)
+        }
+        if (showProfileMenu) {
+          setShowProfileMenu(false)
+        }
+        if (showMobileSearch) {
+          setShowMobileSearch(false)
+        }
+        if (showCommentMenu) {
+          setShowCommentMenu(null)
+        }
+        if (editingComment) {
+          setEditingComment(null)
+          setEditCommentText('')
+        }
       }
     }
 
     const handleClickOutside = (event) => {
-      if (showDropdown && !event.target.closest(`.${styles.postOptions}`) && !event.target.closest(`.${styles.dropdown}`)) {
+      // Close dropdowns when clicking outside
+      if (!event.target.closest('.dropdown-container')) {
         setShowDropdown(null)
+        setShowNotifications(false)
+        setShowChat(false)
+        setShowProfileMenu(false)
+        setShowMobileSearch(false)
+      }
+      // Close comment menu when clicking outside
+      if (!event.target.closest('.comment-menu-container')) {
+        setShowCommentMenu(null)
       }
     }
 
     document.addEventListener('keydown', handleEscKey)
     document.addEventListener('click', handleClickOutside)
+
     return () => {
       document.removeEventListener('keydown', handleEscKey)
       document.removeEventListener('click', handleClickOutside)
     }
-  }, [showCommentModal, showDropdown])
+  }, [showCommentModal, showDropdown, showNotifications, showChat, showProfileMenu, showMobileSearch, showCommentMenu, editingComment])
+
+  // Update selectedPost when posts change (for real-time comments)
+  useEffect(() => {
+    if (selectedPost && posts.length > 0) {
+      const updatedPost = posts.find(p => p.id === selectedPost.id)
+      if (updatedPost) {
+        setSelectedPost(updatedPost)
+      }
+    }
+  }, [posts, selectedPost])
 
   // Listen for auth state changes and real-time posts
   useEffect(() => {
@@ -121,15 +357,92 @@ export default function Dashboard() {
       }
     })
 
-    // Real-time posts listener (same as mobile app)
-    const q = query(collection(db, 'Posts'), orderBy('createdAt', 'desc'))
-    const unsubscribePosts = onSnapshot(q, (snapshot) => {
-      const fetchedPosts = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }))
-      setPosts(fetchedPosts)
-    })
+    // Real-time posts listener with proper ordering
+    console.log('🔄 Setting up posts listener with orderBy...')
+    
+    let unsubscribePosts = null
+    
+    // Try the ordered query first (this should work for proper chronological order)
+    try {
+      const q = query(collection(db, 'Posts'), orderBy('createdAt', 'desc'))
+      unsubscribePosts = onSnapshot(q, 
+        (snapshot) => {
+          console.log('📊 Ordered posts snapshot received:', snapshot.docs.length, 'documents')
+          
+          const fetchedPosts = snapshot.docs.map((doc) => {
+            const data = doc.data()
+            console.log('📝 Post data (ordered):', {
+              id: doc.id,
+              text: data.text?.substring(0, 50) + '...',
+              createdAt: data.createdAt,
+              timestamp: data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt
+            })
+            return {
+              id: doc.id,
+              ...data,
+            }
+          })
+          
+          console.log('✅ Ordered posts set in state:', fetchedPosts.length)
+          setPosts(fetchedPosts)
+        },
+        (error) => {
+          console.error('❌ Error loading posts:', error)
+          console.log('🔄 Trying fallback query without orderBy...')
+          
+          // Fallback: Try without orderBy in case of index issues
+          unsubscribePosts = onSnapshot(
+            collection(db, 'Posts'),
+            (snapshot) => {
+              console.log('📊 Fallback query - Posts found:', snapshot.docs.length)
+              const fetchedPosts = snapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+              })).sort((a, b) => {
+                // Sort chronologically - NEWEST FIRST (top of feed)
+                let aTime = 0
+                let bTime = 0
+                
+                // Handle different timestamp formats for post A
+                if (a.createdAt?.toMillis) {
+                  aTime = a.createdAt.toMillis()
+                } else if (a.createdAt?.seconds) {
+                  aTime = a.createdAt.seconds * 1000
+                } else if (a.createdAt?.toDate) {
+                  aTime = a.createdAt.toDate().getTime()
+                } else if (a.createdAt) {
+                  aTime = new Date(a.createdAt).getTime()
+                }
+                
+                // Handle different timestamp formats for post B
+                if (b.createdAt?.toMillis) {
+                  bTime = b.createdAt.toMillis()
+                } else if (b.createdAt?.seconds) {
+                  bTime = b.createdAt.seconds * 1000
+                } else if (b.createdAt?.toDate) {
+                  bTime = b.createdAt.toDate().getTime()
+                } else if (b.createdAt) {
+                  bTime = new Date(b.createdAt).getTime()
+                }
+                
+                return bTime - aTime // NEWEST FIRST
+              })
+              console.log('✅ Fallback posts set:', fetchedPosts.length)
+              setPosts(fetchedPosts)
+            }
+          )
+        }
+      )
+    } catch (setupError) {
+      console.error('❌ Error setting up posts listener:', setupError)
+      // Call the force correct order function as fallback
+      forceCorrectOrder()
+    }
+    
+    // Also call force correct order after a short delay to ensure proper synchronization
+    setTimeout(() => {
+      forceCorrectOrder()
+    }, 2000)
 
     // Listen to notifications when user is authenticated
     let unsubscribeNotifications = null
@@ -143,7 +456,9 @@ export default function Dashboard() {
 
     return () => {
       unsubscribeAuth()
-      unsubscribePosts()
+      if (unsubscribePosts) {
+        unsubscribePosts()
+      }
       if (unsubscribeNotifications) {
         unsubscribeNotifications()
       }
@@ -533,9 +848,11 @@ export default function Dashboard() {
     try {
       const postRef = doc(db, 'Posts', selectedPost.id)
       const newComment = {
+        id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         text: commentText.trim(),
         userName: user.firstName + ' ' + (user.lastName || ''),
         userEmail: user.email,
+        userId: user.uid,
         createdAt: new Date()
       }
 
@@ -543,9 +860,66 @@ export default function Dashboard() {
         comments: arrayUnion(newComment)
       })
 
+      // Update selectedPost immediately for real-time feel
+      setSelectedPost(prev => ({
+        ...prev,
+        comments: [...(prev.comments || []), newComment]
+      }))
+
       setCommentText('')
     } catch (error) {
       console.error('Error adding comment:', error)
+    }
+  }
+
+  // Migration function to update existing comments with proper structure
+  const migrateCommentsStructure = async () => {
+    if (!db || !user) return
+
+    try {
+      console.log('🔄 Starting comment structure migration...')
+      const postsSnapshot = await getDocs(collection(db, 'Posts'))
+      let updatedPostsCount = 0
+
+      for (const postDoc of postsSnapshot.docs) {
+        const postData = postDoc.data()
+        if (postData.comments && postData.comments.length > 0) {
+          let needsUpdate = false
+          const updatedComments = postData.comments.map((comment, index) => {
+            // Check if comment needs migration (missing id or userId)
+            if (!comment.id || !comment.userId) {
+              needsUpdate = true
+              return {
+                ...comment,
+                id: comment.id || `migrated-${Date.now()}-${index}`,
+                userId: comment.userId || 'unknown',
+                createdAt: comment.createdAt || new Date().toISOString()
+              }
+            }
+            return comment
+          })
+
+          if (needsUpdate) {
+            await updateDoc(doc(db, 'Posts', postDoc.id), {
+              comments: updatedComments
+            })
+            updatedPostsCount++
+            console.log(`✅ Updated post ${postDoc.id} with ${updatedComments.length} comments`)
+          }
+        }
+      }
+
+      console.log(`🎉 Migration complete! Updated ${updatedPostsCount} posts`)
+      if (updatedPostsCount > 0) {
+        alert(`Successfully migrated ${updatedPostsCount} posts with updated comment structure!`)
+        // Refresh posts to show updated data
+        await refreshPosts()
+      } else {
+        alert('No posts needed migration. All comments are already properly structured!')
+      }
+    } catch (error) {
+      console.error('❌ Error during migration:', error)
+      alert('Migration failed. Please try again.')
     }
   }
 
@@ -581,6 +955,159 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error deleting post:', error)
       alert('Failed to delete post. Please try again.')
+    }
+  }
+
+  // Comment management functions
+  const handleEditComment = (comment) => {
+    console.log('Edit comment called for:', comment)
+    setEditingComment(comment.id)
+    setEditCommentText(comment.text)
+    setShowCommentMenu(null) // Close the dropdown
+    
+    // Auto-scroll to the comment being edited
+    setTimeout(() => {
+      const commentElement = document.querySelector(`[data-comment-id="${comment.id}"]`)
+      if (commentElement) {
+        commentElement.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'nearest'
+        })
+      }
+    }, 100) // Small delay to ensure the edit interface has rendered
+  }
+
+  const handleReportComment = (commentId) => {
+    console.log('Report comment called for:', commentId)
+    const confirmReport = window.confirm('Are you sure you want to report this comment?')
+    if (!confirmReport) return
+
+    // Here you would implement actual reporting logic
+    // For now, we'll just show a success message
+    alert('Comment has been reported for review')
+    setShowCommentMenu(null)
+  }
+
+  const handleDeleteComment = async (commentId) => {
+    console.log('Delete comment called for:', commentId)
+    console.log('Available posts:', posts.map(p => ({ id: p.id, commentsCount: p.comments?.length })))
+    console.log('Selected post:', selectedPost?.id)
+    
+    // Find the post that contains this comment
+    const targetPost = selectedPost || posts.find(post => 
+      post.comments && post.comments.some(comment => comment.id === commentId)
+    )
+    
+    if (!targetPost) {
+      console.error('Could not find post containing comment with ID:', commentId)
+      alert('Error: Could not find the post containing this comment. Please refresh the page and try again.')
+      return
+    }
+
+    console.log('Target post found:', targetPost.id, 'Comments:', targetPost.comments?.length)
+
+    // Find the specific comment to check ownership
+    const commentToDelete = targetPost.comments.find(comment => comment.id === commentId)
+    
+    if (!commentToDelete) {
+      console.error('Could not find comment with ID:', commentId, 'in post:', targetPost.id)
+      alert('Error: Could not find this comment. It may have already been deleted.')
+      return
+    }
+
+    console.log('Comment to delete:', commentToDelete)
+
+    const isOwnComment = commentToDelete && (
+      commentToDelete.userId === user?.uid || 
+      (!commentToDelete.userId && commentToDelete.userEmail === user?.email)
+    )
+
+    // Different confirmation messages for own vs other's comments
+    const confirmMessage = isOwnComment 
+      ? 'Are you sure you want to delete this comment?' 
+      : `Are you sure you want to delete ${commentToDelete?.userName || 'this user'}'s comment? This action cannot be undone.`
+    
+    const confirmDelete = window.confirm(confirmMessage)
+    if (!confirmDelete) return
+
+    try {
+      console.log('Attempting to delete comment from Firebase...')
+      const postRef = doc(db, 'Posts', targetPost.id)
+      
+      // Filter out the comment by ID, handling both string and object IDs
+      const updatedComments = targetPost.comments.filter(comment => {
+        const commentIdToCheck = comment.id || comment.commentId || `${comment.text}-${comment.createdAt}`
+        return commentIdToCheck !== commentId
+      })
+      
+      console.log('Original comments count:', targetPost.comments.length)
+      console.log('Updated comments count:', updatedComments.length)
+      
+      await updateDoc(postRef, {
+        comments: updatedComments
+      })
+
+      setShowCommentMenu(null) // Close the dropdown
+      console.log('Comment deleted successfully from Firebase')
+      
+      // Update selectedPost if it's the current post
+      if (selectedPost && selectedPost.id === targetPost.id) {
+        setSelectedPost(prev => ({ ...prev, comments: updatedComments }))
+      }
+      
+      // Show success message
+      alert(`Comment ${isOwnComment ? '' : `by ${commentToDelete?.userName || 'user'} `}has been deleted successfully.`)
+      
+    } catch (error) {
+      console.error('Error deleting comment:', error)
+      alert(`Failed to delete comment: ${error.message}. Please try again.`)
+    }
+  }
+
+  const handleSaveCommentEdit = async () => {
+    if (!editCommentText.trim() || !user) return
+
+    // Find the post that contains the comment being edited
+    const targetPost = selectedPost || posts.find(post => 
+      post.comments?.some(comment => comment.id === editingComment)
+    )
+    
+    if (!targetPost) return
+
+    try {
+      const postRef = doc(db, 'Posts', targetPost.id)
+      const currentPost = posts.find(p => p.id === targetPost.id)
+      const updatedComments = currentPost.comments.map(comment => 
+        comment.id === editingComment 
+          ? { ...comment, text: editCommentText.trim(), editedAt: new Date().toISOString() }
+          : comment
+      )
+
+      await updateDoc(postRef, {
+        comments: updatedComments
+      })
+
+      // Update local state
+      setPosts(prevPosts => 
+        prevPosts.map(post => 
+          post.id === targetPost.id 
+            ? { ...post, comments: updatedComments }
+            : post
+        )
+      )
+      
+      // Update selected post if in modal
+      if (selectedPost && selectedPost.id === targetPost.id) {
+        setSelectedPost(prev => ({ ...prev, comments: updatedComments }))
+      }
+      
+      setEditingComment(null)
+      setEditCommentText('')
+      alert('Comment updated successfully!')
+    } catch (error) {
+      console.error('Error editing comment:', error)
+      alert('Failed to edit comment. Please try again.')
     }
   }
 
@@ -728,7 +1255,10 @@ export default function Dashboard() {
           <div className={styles.headerRight}>
             <div 
               className={`${styles.notificationIcon} ${unreadCount > 0 ? styles.hasUnread : ''}`}
-              onClick={() => {
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                console.log('Notification clicked')
                 setShowNotifications(!showNotifications)
                 setShowChat(false) // Close chat when opening notifications
                 setShowProfileMenu(false) // Close profile menu when opening notifications
@@ -744,7 +1274,10 @@ export default function Dashboard() {
             </div>
             <div 
               className={`${styles.chatIcon}`}
-              onClick={() => {
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                console.log('Chat clicked')
                 setShowChat(!showChat)
                 setShowNotifications(false) // Close notifications when opening chat
                 setShowProfileMenu(false) // Close profile menu when opening chat
@@ -755,7 +1288,10 @@ export default function Dashboard() {
             </div>
             <div 
               className={styles.userProfile}
-              onClick={() => {
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                console.log('Profile menu clicked')
                 setShowProfileMenu(!showProfileMenu)
                 setShowNotifications(false) // Close notifications when opening profile
                 setShowChat(false) // Close chat when opening profile
@@ -926,6 +1462,7 @@ export default function Dashboard() {
             </div>
           </div>
 
+
           {/* News Feed */}
           <div className={styles.newsFeed}>
             {posts.map((post) => (
@@ -939,7 +1476,7 @@ export default function Dashboard() {
                       {post.editedAt && <span className={styles.edited}> (edited)</span>}
                     </span>
                   </div>
-                  <div className={styles.postOptions}>
+                  <div className={`${styles.postOptions} dropdown-container`}>
                     <button 
                       className={styles.optionsBtn}
                       onClick={() => toggleDropdown(post.id)}
@@ -983,10 +1520,21 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ) : (
-                    <p style={{ whiteSpace: 'pre-wrap' }}>{post.text}</p>
+                    <p 
+                      style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
+                      onClick={() => openCommentModal(post)}
+                    >
+                      {post.text}
+                    </p>
                   )}
                   {post.imageUrl && (
-                    <img src={post.imageUrl} alt="Post image" className={styles.postImage} />
+                    <img 
+                      src={post.imageUrl} 
+                      alt="Post image" 
+                      className={styles.postImage}
+                      onClick={() => openCommentModal(post)}
+                      style={{ cursor: 'pointer' }}
+                    />
                   )}
                 </div>
                 <div className={styles.postStats}>
@@ -1017,45 +1565,6 @@ export default function Dashboard() {
                   </button>
                 </div>
                 
-                {/* Comments Section */}
-                {post.comments && post.comments.length > 0 && (
-                  <div className={styles.commentsSection}>
-                    {getDisplayedComments(post).map((comment, index) => (
-                      <div key={index} className={styles.comment}>
-                        <div className={styles.commentAvatar}>
-                          {comment.userName ? comment.userName[0].toUpperCase() : 'U'}
-                        </div>
-                        <div className={styles.commentContent}>
-                          <div className={styles.commentBubble}>
-                            <span className={styles.commentAuthor}>{comment.userName}</span>
-                            <p className={styles.commentText}>{comment.text}</p>
-                          </div>
-                          <span className={styles.commentTime}>
-                            {formatTime(comment.createdAt)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {post.comments.length > 2 && !showAllComments[post.id] && (
-                      <button 
-                        className={styles.viewAllCommentsBtn}
-                        onClick={() => toggleShowAllComments(post.id)}
-                      >
-                        View all {post.comments.length} comments
-                      </button>
-                    )}
-                    
-                    {post.comments.length > 2 && showAllComments[post.id] && (
-                      <button 
-                        className={styles.viewAllCommentsBtn}
-                        onClick={() => toggleShowAllComments(post.id)}
-                      >
-                        Show less
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -1242,18 +1751,18 @@ export default function Dashboard() {
               
               {/* Like Stats */}
               <div className={styles.modalPostStats}>
-                <span>{posts.find(p => p.id === selectedPost.id)?.likes || 0} likes</span>
-                <span>{posts.find(p => p.id === selectedPost.id)?.comments?.length || 0} comments</span>
+                <span>{selectedPost?.likes || 0} likes</span>
+                <span>{selectedPost?.comments?.length || 0} comments</span>
               </div>
               
               {/* Like Button */}
               <div className={styles.modalPostActions}>
                 <button 
-                  className={`${styles.modalActionBtn} ${hasUserLiked(posts.find(p => p.id === selectedPost.id) || selectedPost) ? styles.liked : ''}`}
-                  onClick={() => handleLikePost(posts.find(p => p.id === selectedPost.id) || selectedPost)}
+                  className={`${styles.modalActionBtn} ${hasUserLiked(selectedPost) ? styles.liked : ''}`}
+                  onClick={() => handleLikePost(selectedPost)}
                 >
                   <img 
-                    src={hasUserLiked(posts.find(p => p.id === selectedPost.id) || selectedPost) ? "/assets/icons/red-heart.png" : "/assets/icons/heart.png"} 
+                    src={hasUserLiked(selectedPost) ? "/assets/icons/red-heart.png" : "/assets/icons/heart.png"} 
                     alt="Like" 
                     className={styles.actionIcon} 
                   />
@@ -1264,22 +1773,113 @@ export default function Dashboard() {
               {/* Comments List */}
               <div className={styles.modalCommentsSection}>
                 {selectedPost.comments && selectedPost.comments.length > 0 ? (
-                  selectedPost.comments.map((comment, index) => (
-                    <div key={index} className={styles.modalComment}>
+                  selectedPost.comments.map((comment, index) => {
+                    const commentId = comment.id || comment.commentId || `comment-${index}-${comment.text?.substring(0, 10)}`
+                    return (
+                    <div key={commentId} className={styles.modalComment} data-comment-id={commentId}>
                       <div className={styles.commentAvatar}>
                         {comment.userName ? comment.userName[0].toUpperCase() : 'U'}
                       </div>
                       <div className={styles.commentContent}>
-                        <div className={styles.commentBubble}>
-                          <span className={styles.commentAuthor}>{comment.userName}</span>
-                          <p className={styles.commentText}>{comment.text}</p>
-                        </div>
+                        {editingComment === commentId ? (
+                          <div className={styles.editCommentContainer}>
+                            <textarea
+                              value={editCommentText}
+                              onChange={(e) => setEditCommentText(e.target.value)}
+                              className={styles.editCommentInput}
+                              rows="3"
+                            />
+                            <div className={styles.editCommentButtons}>
+                              <button 
+                                onClick={handleSaveCommentEdit}
+                                className={styles.saveCommentBtn}
+                                disabled={!editCommentText.trim() || editCommentText.trim() === comment.text}
+                              >
+                                Save
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  setEditingComment(null)
+                                  setEditCommentText('')
+                                }}
+                                className={styles.cancelCommentBtn}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={styles.commentBubbleWrapper}>
+                            <div className={styles.commentBubble}>
+                              <span className={styles.commentAuthor}>{comment.userName}</span>
+                              <p className={styles.commentText}>
+                                {comment.text}
+                                {comment.editedAt && <span className={styles.editedIndicator}> (edited)</span>}
+                              </p>
+                            </div>
+                            {/* 3-dot menu right after the comment bubble */}
+                            <div className={`${styles.commentMenuContainer} comment-menu-container ${showCommentMenu === commentId ? styles.menuOpen : ''}`}>
+                              <button 
+                                className={styles.commentMenuBtn}
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  console.log('Modal comment menu clicked for comment:', commentId)
+                                  setShowCommentMenu(showCommentMenu === commentId ? null : commentId)
+                                  
+                                  // Position dropdown relative to button
+                                  if (showCommentMenu !== commentId) {
+                                    setTimeout(() => {
+                                      const dropdown = document.querySelector(`[data-comment-id="${commentId}"] .${styles.commentDropdown}`)
+                                      if (dropdown) {
+                                        const buttonRect = e.target.getBoundingClientRect()
+                                        dropdown.style.left = `${buttonRect.right + 4}px`
+                                        dropdown.style.top = `${buttonRect.top}px`
+                                      }
+                                    }, 10)
+                                  }
+                                }}
+                              >
+                                ⋯
+                              </button>
+                              {showCommentMenu === commentId && (
+                                <div className={styles.commentDropdown}>
+                                  {(comment.userId === user?.uid || 
+                                    (!comment.userId && comment.userEmail === user?.email)) ? (
+                                    <>
+                                      <button 
+                                        onClick={() => handleEditComment(comment)}
+                                        className={styles.commentMenuItem}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button 
+                                        onClick={() => handleDeleteComment(commentId)}
+                                        className={`${styles.commentMenuItem} ${styles.deleteMenuItem}`}
+                                      >
+                                        Delete
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button 
+                                      onClick={() => handleReportComment(commentId)}
+                                      className={`${styles.commentMenuItem} ${styles.reportMenuItem}`}
+                                    >
+                                      Report
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         <span className={styles.commentTime}>
                           {formatTime(comment.createdAt)}
                         </span>
                       </div>
                     </div>
-                  ))
+                  )
+                  })
                 ) : (
                   <p className={styles.noComments}>No comments yet. Be the first to comment!</p>
                 )}

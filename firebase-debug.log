@@ -1,0 +1,21 @@
+[debug] [2025-09-25T09:58:47.949Z] ----------------------------------------------------------------------
+[debug] [2025-09-25T09:58:47.958Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\ASUS\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules
+[debug] [2025-09-25T09:58:47.959Z] CLI Version:   14.14.0
+[debug] [2025-09-25T09:58:47.960Z] Platform:      win32
+[debug] [2025-09-25T09:58:47.960Z] Node Version:  v22.18.0
+[debug] [2025-09-25T09:58:47.961Z] Time:          Thu Sep 25 2025 17:58:47 GMT+0800 (Singapore Standard Time)
+[debug] [2025-09-25T09:58:47.962Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-09-25T09:58:47.971Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[error] 
+[error] Error: Cannot understand what targets to deploy/serve. No targets in firebase.json match '--only firestore:rules'. If you are using PowerShell make sure you place quotes around any comma-separated lists (ex: --only "functions,firestore").
+[debug] [2025-09-25T09:58:49.229Z] Error: EBUSY: resource busy or locked, unlink 'E:\AgriLink Github\AgriLinkWebsite\firebase-debug.log'
+    at Object.unlinkSync (node:fs:1952:11)
+    at process.<anonymous> (C:\Users\ASUS\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\cli.js:44:16)
+    at process.emit (node:events:530:35)
+    at process.exit (node:internal/process/per_thread:194:15)
+    at Timeout._onTimeout (C:\Users\ASUS\AppData\Roaming\npm\node_modules\firebase-tools\lib\errorOut.js:20:17)
+    at listOnTimeout (node:internal/timers:588:17)
+    at process.processTimers (node:internal/timers:523:7)
+[error] 
+[error] Error: An unexpected error has occurred.

@@ -1372,9 +1372,17 @@
   margin: 8px 0;
 }
 
-/* Remove left sidebar completely */
+/* Enable left sidebar */
 .leftSidebar {
-  display: none !important;
+  display: block !important;
+  width: 360px;
+  padding: 16px;
+  position: fixed;
+  left: 0;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
+  background: #f0f2f5;
+  border-right: 1px solid #dadde1;
 }
 
 /* Restore original main layout */
@@ -1386,7 +1394,7 @@
 
 .mainFeed {
   flex: 1;
-  padding: 12px;
+  padding: 20px;
   max-width: 650px;
   margin: 0 auto;
 }
@@ -2592,4 +2600,413 @@
 .commentMenuBtn:hover {
   background: #f0f2f5;
   color: #1c1e21;
+}
+
+/* Agriculture News Section */
+.newsSection {
+  margin-bottom: 20px;
+  margin-top: 0; /* Remove top margin for first section */
+}
+
+.newsCard {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.newsHeader {
+  padding: 16px;
+  border-bottom: 1px solid #e4e6ea;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.newsHeader h4 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1c1e21;
+  letter-spacing: -0.5px;
+}
+
+.newsDate {
+  font-size: 12px;
+  color: #65676b;
+}
+
+.newsList {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.newsItem {
+  display: flex;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f2f5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+  margin: 4px 8px;
+}
+
+.newsItem:hover {
+  background: #f8f9fa;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.newsItem:last-child {
+  border-bottom: none;
+}
+
+.newsImage {
+  width: 60px;
+  height: 60px;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.newsImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #e4e6ea;
+  transition: transform 0.2s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+
+.newsImg[src] {
+  opacity: 1;
+}
+
+.newsItem:hover .newsImg {
+  transform: scale(1.05);
+}
+
+.newsContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.newsTitle {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1e21;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2; /* Standard property for compatibility */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.newsExcerpt {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  color: #65676b;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2; /* Standard property for compatibility */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.newsFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.newsSource {
+  font-size: 11px;
+  color: #1877f2;
+  font-weight: 500;
+}
+
+.newsTime {
+  font-size: 11px;
+  color: #65676b;
+}
+
+.newsFooterAction {
+  padding: 12px 16px;
+  border-top: 1px solid #e4e6ea;
+}
+
+.viewMoreNews {
+  width: 100%;
+  padding: 8px 12px;
+  background: #f0f2f5;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1c1e21;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.viewMoreNews:hover {
+  background: #e4e6ea;
+}
+
+/* Weather Section */
+.weatherSection {
+  margin-bottom: 20px;
+}
+
+.weatherCard {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+}
+
+.weatherCard h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c1e21;
+}
+
+.weatherMain {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.weatherIcon {
+  font-size: 32px;
+  margin-right: 12px;
+}
+
+.weatherDetails {
+  display: flex;
+  flex-direction: column;
+}
+
+.temperature {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1c1e21;
+  line-height: 1;
+}
+
+.condition {
+  font-size: 14px;
+  color: #65676b;
+}
+
+.weatherStats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.weatherStat {
+  text-align: center;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.weatherStat .statLabel {
+  display: block;
+  font-size: 11px;
+  color: #65676b;
+  margin-bottom: 2px;
+}
+
+.weatherStat .statValue {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1e21;
+}
+
+.weatherAlert {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: #e7f3ff;
+  border-radius: 6px;
+  border-left: 3px solid #1877f2;
+}
+
+.alertIcon {
+  margin-right: 8px;
+}
+
+.alertText {
+  font-size: 12px;
+  color: #1c1e21;
+  font-weight: 500;
+}
+
+/* Tips Section */
+.tipsSection {
+  margin-bottom: 20px;
+}
+
+.tipsCard {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+}
+
+.tipsCard h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c1e21;
+}
+
+.tipContent {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.tipIcon {
+  font-size: 24px;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.tipText h5 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1e21;
+}
+
+.tipText p {
+  margin: 0;
+  font-size: 13px;
+  color: #65676b;
+  line-height: 1.4;
+}
+
+.tipFooter {
+  text-align: right;
+}
+
+.nextTip {
+  background: none;
+  border: none;
+  color: #1877f2;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.nextTip:hover {
+  background: #e7f3ff;
+}
+
+/* Market Prices Section */
+.marketSection {
+  margin-bottom: 20px;
+}
+
+.marketCard {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.marketCard h4 {
+  margin: 0;
+  padding: 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c1e21;
+  border-bottom: 1px solid #e4e6ea;
+}
+
+.priceList {
+  padding: 8px 0;
+}
+
+.priceItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  transition: background-color 0.2s;
+}
+
+.priceItem:hover {
+  background: #f8f9fa;
+}
+
+.commodity {
+  font-size: 14px;
+  color: #1c1e21;
+  font-weight: 500;
+  flex: 1;
+}
+
+.price {
+  font-size: 14px;
+  color: #1c1e21;
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.priceChange {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  min-width: 40px;
+  text-align: center;
+}
+
+.priceChange.up {
+  background: #d4edda;
+  color: #155724;
+}
+
+.priceChange.down {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.priceChange.neutral {
+  background: #e2e3e5;
+  color: #383d41;
+}
+
+.marketFooter {
+  padding: 12px 16px;
+  border-top: 1px solid #e4e6ea;
+}
+
+.viewFullMarket {
+  width: 100%;
+  padding: 8px 12px;
+  background: #f0f2f5;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1c1e21;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.viewFullMarket:hover {
+  background: #e4e6ea;
 }

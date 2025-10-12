@@ -198,88 +198,157 @@ export default function ChatRoom() {
   }
 
   return (
-    <div className={styles.chatContainer}>
-      {/* Header */}
-      <div className={styles.chatHeader}>
-        <button 
-          className={styles.backButton}
-          onClick={() => router.push('/dashboard')}
-        >
-          <img src="/assets/icons/back.png" alt="Back" className={styles.backIcon} />
-        </button>
-        <div className={styles.userInfo}>
-          <div className={styles.userAvatar}>
-            {otherUser?.name ? otherUser.name[0].toUpperCase() : 'U'}
+    <div className={styles.appContainer}>
+      {/* Left Sidebar Menu */}
+      <div className={styles.sidebar}>
+        <div className={styles.sidebarHeader}>
+          <div className={styles.logo}>
+            <img src="/assets/icons/logo.png" alt="AgriLink" className={styles.logoIcon} />
+            <span className={styles.logoText}>AgriLink</span>
           </div>
-          <div className={styles.userDetails}>
-            <h3 className={styles.userName}>{otherUser?.name || 'User'}</h3>
-            <span className={styles.userStatus}>Online</span>
+        </div>
+        
+        <div className={styles.sidebarContent}>
+          <nav className={styles.navigation}>
+            <button 
+              className={styles.navItem}
+              onClick={() => router.push('/dashboard')}
+            >
+              <img src="/assets/icons/dashboard.png" alt="Dashboard" className={styles.navIcon} />
+              <span>Dashboard</span>
+            </button>
+            
+            <button 
+              className={`${styles.navItem} ${styles.active}`}
+              onClick={() => router.push('/chat')}
+            >
+              <img src="/assets/icons/chat.png" alt="Messages" className={styles.navIcon} />
+              <span>Messages</span>
+            </button>
+            
+            <button 
+              className={styles.navItem}
+              onClick={() => router.push('/marketplace')}
+            >
+              <img src="/assets/icons/marketplace.png" alt="Marketplace" className={styles.navIcon} />
+              <span>Marketplace</span>
+            </button>
+            
+            <button 
+              className={styles.navItem}
+              onClick={() => router.push('/community')}
+            >
+              <img src="/assets/icons/community.png" alt="Community" className={styles.navIcon} />
+              <span>Community</span>
+            </button>
+            
+            <button 
+              className={styles.navItem}
+              onClick={() => router.push('/profile')}
+            >
+              <img src="/assets/icons/profile.png" alt="Profile" className={styles.navIcon} />
+              <span>Profile</span>
+            </button>
+          </nav>
+        </div>
+        
+        <div className={styles.sidebarFooter}>
+          <div className={styles.userProfile}>
+            <div className={styles.userProfileAvatar}>
+              {user?.displayName ? user.displayName[0].toUpperCase() : 'U'}
+            </div>
+            <div className={styles.userProfileInfo}>
+              <span className={styles.userProfileName}>{user?.displayName || 'User'}</span>
+              <span className={styles.userProfileEmail}>{user?.email}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className={styles.messagesContainer}>
-        {messages.length === 0 ? (
-          <div className={styles.emptyMessages}>
-            <img src="/assets/icons/chat.png" alt="No messages" className={styles.emptyIcon} />
-            <p>No messages yet. Start the conversation!</p>
+      {/* Main Chat Area */}
+      <div className={styles.chatContainer}>
+        {/* Header */}
+        <div className={styles.chatHeader}>
+          <button 
+            className={styles.backButton}
+            onClick={() => router.push('/dashboard')}
+          >
+            <img src="/assets/icons/back.png" alt="Back" className={styles.backIcon} />
+          </button>
+          <div className={styles.userInfo}>
+            <div className={styles.userAvatar}>
+              {otherUser?.name ? otherUser.name[0].toUpperCase() : 'U'}
+            </div>
+            <div className={styles.userDetails}>
+              <h3 className={styles.userName}>{otherUser?.name || 'User'}</h3>
+              <span className={styles.userStatus}>Online</span>
+            </div>
           </div>
-        ) : (
-          messages.map((message, index) => {
-            const isOwnMessage = message.senderId === user.uid
-            const showTime = index === 0 || 
-              (messages[index - 1] && 
-               new Date(message.createdAt?.toDate?.() || message.createdAt) - 
-               new Date(messages[index - 1].createdAt?.toDate?.() || messages[index - 1].createdAt) > 300000)
+        </div>
 
-            return (
-              <div key={message.id} className={styles.messageGroup}>
-                {showTime && (
-                  <div className={styles.timeStamp}>
-                    {formatTime(message.createdAt)}
-                  </div>
-                )}
-                <div className={`${styles.message} ${isOwnMessage ? styles.ownMessage : styles.otherMessage}`}>
-                  <div className={styles.messageContent}>
-                    <p className={styles.messageText}>{message.text}</p>
-                  </div>
-                  {isOwnMessage && (
-                    <div className={styles.messageStatus}>
-                      {message.read ? (
-                        <img src="/assets/icons/read.png" alt="Read" className={styles.statusIcon} />
-                      ) : (
-                        <img src="/assets/icons/sent.png" alt="Sent" className={styles.statusIcon} />
-                      )}
+        {/* Messages */}
+        <div className={styles.messagesContainer}>
+          {messages.length === 0 ? (
+            <div className={styles.emptyMessages}>
+              <img src="/assets/icons/chat.png" alt="No messages" className={styles.emptyIcon} />
+              <p>No messages yet. Start the conversation!</p>
+            </div>
+          ) : (
+            messages.map((message, index) => {
+              const isOwnMessage = message.senderId === user.uid
+              const showTime = index === 0 || 
+                (messages[index - 1] && 
+                 new Date(message.createdAt?.toDate?.() || message.createdAt) - 
+                 new Date(messages[index - 1].createdAt?.toDate?.() || messages[index - 1].createdAt) > 300000)
+
+              return (
+                <div key={message.id} className={styles.messageGroup}>
+                  {showTime && (
+                    <div className={styles.timeStamp}>
+                      {formatTime(message.createdAt)}
                     </div>
                   )}
+                  <div className={`${styles.message} ${isOwnMessage ? styles.ownMessage : styles.otherMessage}`}>
+                    <div className={styles.messageContent}>
+                      <p className={styles.messageText}>{message.text}</p>
+                    </div>
+                    {isOwnMessage && (
+                      <div className={styles.messageStatus}>
+                        {message.read ? (
+                          <img src="/assets/icons/read.png" alt="Read" className={styles.statusIcon} />
+                        ) : (
+                          <img src="/assets/icons/sent.png" alt="Sent" className={styles.statusIcon} />
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )
-          })
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+              )
+            })
+          )}
+          <div ref={messagesEndRef} />
+        </div>
 
-      {/* Message Input */}
-      <div className={styles.messageInputContainer}>
-        <div className={styles.inputWrapper}>
-          <textarea
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Type a message..."
-            className={styles.messageInput}
-            rows={1}
-            disabled={sending}
-          />
-          <button 
-            onClick={sendMessage}
-            disabled={!newMessage.trim() || sending}
-            className={styles.sendButton}
-          >
-            <img src="/assets/icons/send.png" alt="Send" className={styles.sendIcon} />
-          </button>
+        {/* Message Input */}
+        <div className={styles.messageInputContainer}>
+          <div className={styles.inputWrapper}>
+            <textarea
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Type a message..."
+              className={styles.messageInput}
+              rows={1}
+              disabled={sending}
+            />
+            <button 
+              onClick={sendMessage}
+              disabled={!newMessage.trim() || sending}
+              className={styles.sendButton}
+            >
+              <img src="/assets/icons/send.png" alt="Send" className={styles.sendIcon} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

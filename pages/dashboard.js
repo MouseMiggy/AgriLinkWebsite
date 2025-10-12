@@ -20,7 +20,7 @@ import {
   setDoc
 } from 'firebase/firestore'
 import { uploadImageToCloudinary } from '../lib/cloudinary'
-import { listenToNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadNotificationCount } from '../lib/notificationService'
+import { listenToNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadNotificationCount, sendPostLikeNotification, sendCommentNotification, debugNotifications } from '../lib/notificationService'
 import styles from '../styles/dashboard.module.css'
 
 export default function Dashboard() {
@@ -51,7 +51,99 @@ export default function Dashboard() {
   const [editingComment, setEditingComment] = useState(null)
   const [editCommentText, setEditCommentText] = useState('')
   const [showCommentMenu, setShowCommentMenu] = useState(null)
+  const [previousUnreadCount, setPreviousUnreadCount] = useState(0)
+  const [unreadChats, setUnreadChats] = useState(0)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
   const router = useRouter()
+
+  // Play notification sound for new notifications
+  const playNotificationSound = () => {
+    try {
+      // Create a simple notification sound using Web Audio API
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime)
+      oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1)
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3)
+      
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 0.3)
+    } catch (error) {
+      console.log('Could not play notification sound:', error)
+    }
+  }
+
+  // Load all user data on login (Facebook-style)
+  const loadAllUserData = async (userId) => {
+    console.log('🚀 Loading all user data for:', userId)
+    
+    try {
+      // Load all notifications
+      console.log('📬 Loading notifications...')
+      const notificationsData = await debugNotifications(userId)
+      setNotifications(notificationsData)
+      
+      const unreadNotifications = notificationsData.filter(n => !n.read)
+      setUnreadCount(unreadNotifications.length)
+      setPreviousUnreadCount(unreadNotifications.length)
+      
+      console.log('✅ Loaded', notificationsData.length, 'notifications,', unreadNotifications.length, 'unread')
+      
+      // Load all chats
+      console.log('💬 Loading chats...')
+      await loadUserChats(userId)
+      
+      console.log('🎉 All user data loaded successfully!')
+      setIsInitialLoad(false)
+      
+    } catch (error) {
+      console.error('❌ Error loading user data:', error)
+      setIsInitialLoad(false)
+    }
+  }
+
+  // Load user chats and count unread messages
+  const loadUserChats = async (userId) => {
+    try {
+      const chatsQuery = query(
+        collection(db, 'chats'),
+        where('participants', 'array-contains', userId)
+      )
+      
+      const chatsSnapshot = await getDocs(chatsQuery)
+      let totalUnreadChats = 0
+      
+      for (const chatDoc of chatsSnapshot.docs) {
+        const chatData = chatDoc.data()
+        const chatId = chatDoc.id
+        
+        // Check for unread messages in this chat
+        const messagesQuery = query(
+          collection(db, 'chats', chatId, 'messages'),
+          where('senderId', '!=', userId),
+          where('read', '==', false)
+        )
+        
+        const unreadMessages = await getDocs(messagesQuery)
+        if (unreadMessages.size > 0) {
+          totalUnreadChats++
+        }
+      }
+      
+      setUnreadChats(totalUnreadChats)
+      console.log('💬 Found', totalUnreadChats, 'chats with unread messages')
+      
+    } catch (error) {
+      console.error('Error loading chats:', error)
+    }
+  }
 
   // Force correct chronological order
   const forceCorrectOrder = async () => {
@@ -319,19 +411,16 @@ export default function Dashboard() {
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // Load user data from Firestore to get firstName and lastName
+        console.log('🔐 User authenticated:', currentUser.uid)
+        setUser(currentUser)
+        
+        // Get user role from Firestore
         try {
-          const userDoc = await getDoc(doc(db, 'Users', currentUser.uid))
+          const userDoc = await getDoc(doc(db, 'users', currentUser.uid))
           if (userDoc.exists()) {
             const userData = userDoc.data()
-            setUser({
-              firstName: userData.firstName || currentUser.displayName?.split(' ')[0] || 'User',
-              lastName: userData.lastName || currentUser.displayName?.split(' ')[1] || '',
-              email: currentUser.email,
-              uid: currentUser.uid
-            })
-            console.log('Loaded user role:', userData.role)
-            setUserRole(userData.role || null)
+            setUserRole(userData.role)
+            console.log('👤 User role:', userData.role)
           } else {
             console.log('User document does not exist')
             setUser({
@@ -352,8 +441,18 @@ export default function Dashboard() {
           })
           setUserRole(null)
         }
+
+        // Load all user data (Facebook-style)
+        await loadAllUserData(currentUser.uid)
+        
       } else {
-        router.push('/signin')
+        console.log('🚪 User not authenticated')
+        setUser(null)
+        setUserRole(null)
+        setNotifications([])
+        setUnreadCount(0)
+        setUnreadChats(0)
+        setIsInitialLoad(true)
       }
     })
 
@@ -447,10 +546,22 @@ export default function Dashboard() {
     // Listen to notifications when user is authenticated
     let unsubscribeNotifications = null
     if (user) {
+      console.log('Starting notification listener for user:', user.uid)
       unsubscribeNotifications = listenToNotifications(user.uid, (notificationsList) => {
+        console.log('Dashboard received notifications update:', notificationsList.length, 'notifications')
         setNotifications(notificationsList)
         const unreadNotifications = notificationsList.filter(n => !n.read)
-        setUnreadCount(unreadNotifications.length)
+        const newUnreadCount = unreadNotifications.length
+        
+        // Play sound and show visual feedback for new notifications
+        if (newUnreadCount > previousUnreadCount && previousUnreadCount >= 0) {
+          console.log('🔔 New notification received! Playing sound...')
+          playNotificationSound()
+        }
+        
+        setUnreadCount(newUnreadCount)
+        setPreviousUnreadCount(newUnreadCount)
+        console.log('Updated unread count to:', newUnreadCount)
       })
     }
 
@@ -770,6 +881,41 @@ export default function Dashboard() {
           likes: (post.likes || 0) + 1,
           likedBy: newLikedBy
         })
+        
+        // Send notification to post owner
+        if (post.userId && post.userId !== user.uid) {
+          console.log('Sending like notification for post:', post.id, 'to user:', post.userId)
+          console.log('Current user data for notification:', {
+            uid: user.uid,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            displayName: user.displayName,
+            email: user.email
+          })
+          
+          // Get the full user name - try multiple sources
+          let userName = ''
+          if (user.firstName) {
+            userName = `${user.firstName} ${user.lastName || ''}`.trim()
+          } else if (user.displayName) {
+            userName = user.displayName
+          } else if (user.email) {
+            userName = user.email.split('@')[0] // Use email username as fallback
+          } else {
+            userName = 'AgriLink User'
+          }
+          
+          console.log('Using username for notification:', userName)
+          
+          await sendPostLikeNotification(
+            post.id,
+            post.userId,
+            user.uid,
+            userName
+          )
+        } else {
+          console.log('Not sending like notification - same user or missing userId')
+        }
       }
     } catch (error) {
       console.error('Error liking post:', error)
@@ -859,6 +1005,42 @@ export default function Dashboard() {
       await updateDoc(postRef, {
         comments: arrayUnion(newComment)
       })
+
+      // Send notification to post owner
+      if (selectedPost.userId && selectedPost.userId !== user.uid) {
+        console.log('Sending comment notification for post:', selectedPost.id, 'to user:', selectedPost.userId)
+        console.log('Current user data for comment notification:', {
+          uid: user.uid,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          displayName: user.displayName,
+          email: user.email
+        })
+        
+        // Get the full user name - try multiple sources
+        let userName = ''
+        if (user.firstName) {
+          userName = `${user.firstName} ${user.lastName || ''}`.trim()
+        } else if (user.displayName) {
+          userName = user.displayName
+        } else if (user.email) {
+          userName = user.email.split('@')[0] // Use email username as fallback
+        } else {
+          userName = 'AgriLink User'
+        }
+        
+        console.log('Using username for comment notification:', userName)
+        
+        await sendCommentNotification(
+          selectedPost.id,
+          selectedPost.userId,
+          user.uid,
+          userName,
+          commentText.trim()
+        )
+      } else {
+        console.log('Not sending comment notification - same user or missing userId')
+      }
 
       // Update selectedPost immediately for real-time feel
       setSelectedPost(prev => ({
@@ -978,14 +1160,82 @@ export default function Dashboard() {
     }, 100) // Small delay to ensure the edit interface has rendered
   }
 
-  const handleReportComment = (commentId) => {
+  const handleReportComment = async (commentId) => {
     console.log('Report comment called for:', commentId)
-    const confirmReport = window.confirm('Are you sure you want to report this comment?')
-    if (!confirmReport) return
+    
+    // Find the comment and post
+    let targetComment = null
+    let targetPost = null
+    
+    for (const post of posts) {
+      if (post.comments) {
+        const comment = post.comments.find(c => c.id === commentId)
+        if (comment) {
+          targetComment = comment
+          targetPost = post
+          break
+        }
+      }
+    }
+    
+    if (!targetComment || !targetPost) {
+      alert('Comment not found')
+      return
+    }
 
-    // Here you would implement actual reporting logic
-    // For now, we'll just show a success message
-    alert('Comment has been reported for review')
+    const reason = prompt('Please select a reason for reporting this comment:\n\n1. Spam\n2. Inappropriate Content\n3. Harassment\n4. False Information\n\nEnter the number (1-4):')
+    
+    if (!reason || !['1', '2', '3', '4'].includes(reason)) {
+      setShowCommentMenu(null)
+      return
+    }
+
+    const reasonMap = {
+      '1': { key: 'spam', desc: 'This comment appears to be spam' },
+      '2': { key: 'inappropriate', desc: 'This comment contains inappropriate content' },
+      '3': { key: 'harassment', desc: 'This comment contains harassment or bullying' },
+      '4': { key: 'misinformation', desc: 'This comment contains false or misleading information' }
+    }
+
+    const selectedReason = reasonMap[reason]
+
+    try {
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        alert('You must be logged in to report comments')
+        return
+      }
+
+      const reportData = {
+        commentId: commentId,
+        postId: targetPost.id,
+        reporterId: currentUser.uid,
+        reporterName: currentUser.displayName || 'Anonymous',
+        reporterEmail: currentUser.email || '',
+        reason: selectedReason.key,
+        description: selectedReason.desc,
+        commentContent: targetComment.text || '',
+        commentAuthor: targetComment.userName || targetComment.userEmail || 'Unknown'
+      }
+
+      const response = await fetch('http://192.168.0.109:3000/report-comment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reportData)
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('Report submitted successfully. Our AI system will review it shortly and take appropriate action if needed.')
+      } else {
+        alert('Error: ' + (data.error || 'Failed to submit report. Please try again.'))
+      }
+    } catch (error) {
+      console.error('Error submitting comment report:', error)
+      alert('Network error. Please check your connection and try again.')
+    }
+    
     setShowCommentMenu(null)
   }
 
@@ -1111,9 +1361,65 @@ export default function Dashboard() {
     }
   }
 
-  const handleReportPost = (postId) => {
-    // Simple report functionality - in real app would send to moderation system
-    alert('Post has been reported. Thank you for helping keep our community safe.')
+  const handleReportPost = async (postId) => {
+    const targetPost = posts.find(post => post.id === postId)
+    if (!targetPost) {
+      alert('Post not found')
+      return
+    }
+
+    const reason = prompt('Please select a reason for reporting this post:\n\n1. Spam\n2. Inappropriate Content\n3. Harassment\n4. False Information\n\nEnter the number (1-4):')
+    
+    if (!reason || !['1', '2', '3', '4'].includes(reason)) {
+      setShowDropdown(null)
+      return
+    }
+
+    const reasonMap = {
+      '1': { key: 'spam', desc: 'This post appears to be spam' },
+      '2': { key: 'inappropriate', desc: 'This post contains inappropriate content' },
+      '3': { key: 'harassment', desc: 'This post contains harassment or bullying' },
+      '4': { key: 'misinformation', desc: 'This post contains false or misleading information' }
+    }
+
+    const selectedReason = reasonMap[reason]
+
+    try {
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        alert('You must be logged in to report posts')
+        return
+      }
+
+      const reportData = {
+        postId: postId,
+        reporterId: currentUser.uid,
+        reporterName: currentUser.displayName || 'Anonymous',
+        reporterEmail: currentUser.email || '',
+        reason: selectedReason.key,
+        description: selectedReason.desc,
+        postContent: targetPost.text || '',
+        postAuthor: targetPost.userName || targetPost.userEmail || 'Unknown'
+      }
+
+      const response = await fetch('http://192.168.0.109:3000/report-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reportData)
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('Report submitted successfully. Our AI system will review it shortly and take appropriate action if needed.')
+      } else {
+        alert('Error: ' + (data.error || 'Failed to submit report. Please try again.'))
+      }
+    } catch (error) {
+      console.error('Error submitting post report:', error)
+      alert('Network error. Please check your connection and try again.')
+    }
+    
     setShowDropdown(null)
   }
 
@@ -1194,14 +1500,43 @@ export default function Dashboard() {
     return roleNames[role] || 'No Role Selected'
   }
 
-  const handleNotificationClick = (notification) => {
+
+  const handleNotificationClick = async (notification) => {
+    console.log('Notification clicked:', notification)
     setShowNotifications(false)
     
     // Navigate based on notification type
     switch (notification.type) {
       case 'post_like':
       case 'post_comment':
-        // Stay on dashboard (posts are here)
+        // Find and open the post in comment modal
+        if (notification.postId) {
+          console.log('Looking for post with ID:', notification.postId)
+          const post = posts.find(p => p.id === notification.postId)
+          if (post) {
+            console.log('Found post in current posts, opening modal')
+            setSelectedPost(post)
+            setShowCommentModal(true)
+          } else {
+            // If post not in current posts, fetch it
+            console.log('Post not found in current posts, fetching from database')
+            try {
+              const postDoc = await getDoc(doc(db, 'Posts', notification.postId))
+              if (postDoc.exists()) {
+                const postData = { id: postDoc.id, ...postDoc.data() }
+                console.log('Fetched post from database:', postData)
+                setSelectedPost(postData)
+                setShowCommentModal(true)
+              } else {
+                console.log('Post not found in database')
+              }
+            } catch (error) {
+              console.error('Error fetching post:', error)
+            }
+          }
+        } else {
+          console.log('No postId in notification')
+        }
         break
       case 'friend_request':
       case 'friend_accepted':
@@ -1254,7 +1589,7 @@ export default function Dashboard() {
           </div>
           <div className={styles.headerRight}>
             <div 
-              className={`${styles.notificationIcon} ${unreadCount > 0 ? styles.hasUnread : ''}`}
+              className={`${styles.notificationBell} ${unreadCount > 0 ? styles.hasUnread : ''}`}
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -1263,7 +1598,6 @@ export default function Dashboard() {
                 setShowChat(false) // Close chat when opening notifications
                 setShowProfileMenu(false) // Close profile menu when opening notifications
               }}
-              style={{ cursor: 'pointer' }}
             >
               🔔
               {unreadCount > 0 && (
@@ -1273,7 +1607,7 @@ export default function Dashboard() {
               )}
             </div>
             <div 
-              className={`${styles.chatIcon}`}
+              className={`${styles.notificationBell} ${unreadChats > 0 ? styles.hasUnread : ''}`}
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -1282,9 +1616,13 @@ export default function Dashboard() {
                 setShowNotifications(false) // Close notifications when opening chat
                 setShowProfileMenu(false) // Close profile menu when opening chat
               }}
-              style={{ cursor: 'pointer' }}
             >
               💬
+              {unreadChats > 0 && (
+                <span className={styles.notificationBadge}>
+                  {unreadChats > 99 ? '99+' : unreadChats}
+                </span>
+              )}
             </div>
             <div 
               className={styles.userProfile}
@@ -1431,12 +1769,29 @@ export default function Dashboard() {
                       handleNotificationClick(notification)
                     }}
                   >
+                    <div className={styles.notificationAvatar}>
+                      {notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName[0].toUpperCase() : 'A'}
+                    </div>
                     <div className={styles.notificationContent}>
-                      <h4>{notification.title}</h4>
-                      <p>{notification.message}</p>
+                      <div className={styles.notificationHeader}>
+                        <span className={styles.notificationUserName}>
+                          {notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName : 'AgriLink User'}
+                        </span>
+                        <span className={styles.notificationAction}>
+                          {notification.actionText || (notification.actionType === 'like' ? 'liked your post' : 'commented on your post')}
+                        </span>
+                      </div>
+                      {notification.actionType === 'comment' && notification.commentPreview && (
+                        <p className={styles.notificationCommentPreview}>
+                          "{notification.commentPreview}..."
+                        </p>
+                      )}
                       <span className={styles.notificationTime}>
                         {notification.createdAt ? new Date(notification.createdAt.toDate()).toLocaleString() : 'Just now'}
                       </span>
+                    </div>
+                    <div className={styles.notificationIcon}>
+                      {notification.actionType === 'like' ? '❤️' : '💬'}
                     </div>
                     {!notification.read && <div className={styles.unreadDot}></div>}
                   </div>

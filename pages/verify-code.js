@@ -115,7 +115,7 @@ export default function VerifyCode() {
     setIsAnimating(true)
 
     try {
-      const response = await fetch('http://192.168.0.109:3000/verify-code', {
+      const response = await fetch('http://192.168.1.15:3000/verify-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code: verificationCode }),
@@ -183,7 +183,7 @@ export default function VerifyCode() {
     setError('')
 
     try {
-      const response = await fetch('http://192.168.0.109:3000/resend-code', {
+      const response = await fetch('http://192.168.1.15:3000/resend-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),

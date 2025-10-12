@@ -54,6 +54,8 @@ export default function Dashboard() {
   const [previousUnreadCount, setPreviousUnreadCount] = useState(0)
   const [unreadChats, setUnreadChats] = useState(0)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [replyTextMap, setReplyTextMap] = useState({})
+  const [showReplyInput, setShowReplyInput] = useState({})
   const router = useRouter()
 
   // Play notification sound for new notifications
@@ -944,9 +946,9 @@ export default function Dashboard() {
     const diffInSeconds = Math.floor((now - postTime) / 1000)
     
     if (diffInSeconds < 60) return "Just now"
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
-    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d ago`
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d`
     return postTime.toLocaleDateString()
   }
 
@@ -1051,6 +1053,90 @@ export default function Dashboard() {
       setCommentText('')
     } catch (error) {
       console.error('Error adding comment:', error)
+    }
+  }
+  const toggleReplyInput = (targetId) => {
+    const isCurrentlyOpen = showReplyInput[targetId]
+    
+    setShowReplyInput(prev => ({
+      ...prev,
+      [targetId]: !prev[targetId]
+    }))
+    
+    if (!isCurrentlyOpen) {
+      // Opening reply input - auto-mention the target user
+      let targetUserName = null
+      
+      // Check if it's a direct comment reply
+      const comment = selectedPost?.comments?.find(c => (c.id || c.commentId) === targetId)
+      if (comment && comment.userName) {
+        targetUserName = comment.userName
+      } else {
+        // Check if it's a reply to a reply
+        for (const comment of selectedPost?.comments || []) {
+          const reply = comment.replies?.find(r => r.id === targetId)
+          if (reply && reply.userName) {
+            targetUserName = reply.userName
+            break
+          }
+        }
+      }
+      
+      if (targetUserName) {
+        const mention = `@${targetUserName} `
+        setReplyTextMap(prev => ({ 
+          ...prev, 
+          [targetId]: mention 
+        }))
+      }
+    } else {
+      // Closing reply input - clear the text
+      setReplyTextMap(prev => ({ 
+        ...prev, 
+        [targetId]: '' 
+      }))
+    }
+  }
+  const handleAddReply = async (parentCommentId, replyToReplyId = null) => {
+    const targetId = replyToReplyId || parentCommentId
+    const text = replyTextMap[targetId]?.trim()
+    if (!text || !user || !selectedPost) return
+
+    try {
+      const postRef = doc(db, 'Posts', selectedPost.id)
+      
+      // Process the text to format mentions (remove @ and make name bold)
+      let processedText = text
+      // Find @mentions at the beginning or after a space, followed by a space or end of string
+      processedText = processedText.replace(/(^|[\s])@([A-Za-z]+(?:\s+[A-Za-z]+)*)([\s]|$)/g, '$1<strong>$2</strong>$3')
+      
+      const newReply = {
+        id: `reply-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        text: processedText,
+        userName: user.firstName + ' ' + (user.lastName || ''),
+        userEmail: user.email,
+        userId: user.uid,
+        createdAt: new Date(),
+        parentId: parentCommentId,
+        replyToReplyId: replyToReplyId // Track if this is a reply to another reply
+      }
+
+      const updatedComments = (selectedPost.comments || []).map(c => {
+        const cid = c.id || c.commentId
+        if (cid === parentCommentId) {
+          const replies = c.replies ? [...c.replies, newReply] : [newReply]
+          return { ...c, replies }
+        }
+        return c
+      })
+
+      await updateDoc(postRef, { comments: updatedComments })
+
+      setSelectedPost(prev => ({ ...prev, comments: updatedComments }))
+      setReplyTextMap(prev => ({ ...prev, [targetId]: '' }))
+      setShowReplyInput(prev => ({ ...prev, [targetId]: false }))
+    } catch (error) {
+      console.error('Error adding reply:', error)
     }
   }
 
@@ -1218,7 +1304,7 @@ export default function Dashboard() {
         commentAuthor: targetComment.userName || targetComment.userEmail || 'Unknown'
       }
 
-      const response = await fetch('http://192.168.0.109:3000/report-comment', {
+      const response = await fetch('http://192.168.1.15:3000/report-comment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(reportData)
@@ -1361,6 +1447,79 @@ export default function Dashboard() {
     }
   }
 
+  // Reply handlers
+  const handleEditReply = (reply, parentCommentId) => {
+    console.log('Edit reply:', reply, 'for comment:', parentCommentId)
+    // TODO: Implement reply editing functionality
+    setShowCommentMenu(null)
+    alert('Reply editing feature coming soon!')
+  }
+
+  const handleDeleteReply = async (replyId, parentCommentId) => {
+    if (!user || !selectedPost) return
+
+    try {
+      const postRef = doc(db, 'Posts', selectedPost.id)
+      
+      // Find and update the parent comment to remove the reply
+      const updatedComments = selectedPost.comments.map(comment => {
+        const commentIdToCheck = comment.id || comment.commentId
+        if (commentIdToCheck === parentCommentId && comment.replies) {
+          const updatedReplies = comment.replies.filter(reply => {
+            const replyIdToCheck = reply.id || `reply-${reply.text}-${reply.createdAt}`
+            return replyIdToCheck !== replyId
+          })
+          return { ...comment, replies: updatedReplies }
+        }
+        return comment
+      })
+
+      await updateDoc(postRef, { comments: updatedComments })
+      setSelectedPost(prev => ({ ...prev, comments: updatedComments }))
+      setShowCommentMenu(null)
+      alert('Reply deleted successfully!')
+      
+    } catch (error) {
+      console.error('Error deleting reply:', error)
+      alert('Failed to delete reply. Please try again.')
+    }
+  }
+
+  const handleReportReply = async (replyId) => {
+    const reason = prompt('Please select a reason for reporting this reply:\n\n1. Spam\n2. Inappropriate Content\n3. Harassment\n4. False Information\n\nEnter the number (1-4):')
+    
+    if (!reason || !['1', '2', '3', '4'].includes(reason)) {
+      setShowCommentMenu(null)
+      return
+    }
+
+    const reasons = {
+      '1': 'Spam',
+      '2': 'Inappropriate Content', 
+      '3': 'Harassment',
+      '4': 'False Information'
+    }
+
+    try {
+      await addDoc(collection(db, 'reports'), {
+        type: 'reply',
+        replyId: replyId,
+        postId: selectedPost?.id,
+        reportedBy: user.uid,
+        reporterName: user.firstName + ' ' + (user.lastName || ''),
+        reporterEmail: user.email,
+        reason: reasons[reason],
+        createdAt: serverTimestamp()
+      })
+
+      setShowCommentMenu(null)
+      alert('Reply reported successfully. Thank you for helping keep our community safe.')
+    } catch (error) {
+      console.error('Error reporting reply:', error)
+      alert('Failed to report reply. Please try again.')
+    }
+  }
+
   const handleReportPost = async (postId) => {
     const targetPost = posts.find(post => post.id === postId)
     if (!targetPost) {
@@ -1402,7 +1561,7 @@ export default function Dashboard() {
         postAuthor: targetPost.userName || targetPost.userEmail || 'Unknown'
       }
 
-      const response = await fetch('http://192.168.0.109:3000/report-post', {
+      const response = await fetch('http://192.168.1.15:3000/report-post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(reportData)
@@ -1561,86 +1720,9 @@ export default function Dashboard() {
 
 
 
+
   return (
     <div className={styles.container}>
-      {/* Facebook-style Header */}
-      <header className={styles.header}>
-        <div className={styles.headerContent}>
-          <div className={styles.headerLeft}>
-            <h1 className={styles.logo}>AgriLink</h1>
-            <div className={styles.searchBar}>
-              <input type="text" placeholder="Search AgriLink" />
-            </div>
-            <div className={styles.mobileSearchIcon} onClick={() => setShowMobileSearch(!showMobileSearch)}>
-              🔍
-            </div>
-          </div>
-          <div className={styles.headerCenter}>
-            <div className={styles.navIcons}>
-              <div className={`${styles.navIcon} ${styles.active}`}>🏠</div>
-              <div 
-                className={styles.navIcon}
-                onClick={() => router.push('/listings')}
-                style={{ cursor: 'pointer' }}
-              >
-                🛒
-              </div>
-            </div>
-          </div>
-          <div className={styles.headerRight}>
-            <div 
-              className={`${styles.notificationBell} ${unreadCount > 0 ? styles.hasUnread : ''}`}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                console.log('Notification clicked')
-                setShowNotifications(!showNotifications)
-                setShowChat(false) // Close chat when opening notifications
-                setShowProfileMenu(false) // Close profile menu when opening notifications
-              }}
-            >
-              🔔
-              {unreadCount > 0 && (
-                <span className={styles.notificationBadge}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              )}
-            </div>
-            <div 
-              className={`${styles.notificationBell} ${unreadChats > 0 ? styles.hasUnread : ''}`}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                console.log('Chat clicked')
-                setShowChat(!showChat)
-                setShowNotifications(false) // Close notifications when opening chat
-                setShowProfileMenu(false) // Close profile menu when opening chat
-              }}
-            >
-              💬
-              {unreadChats > 0 && (
-                <span className={styles.notificationBadge}>
-                  {unreadChats > 99 ? '99+' : unreadChats}
-                </span>
-              )}
-            </div>
-            <div 
-              className={styles.userProfile}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                console.log('Profile menu clicked')
-                setShowProfileMenu(!showProfileMenu)
-                setShowNotifications(false) // Close notifications when opening profile
-                setShowChat(false) // Close chat when opening profile
-              }}
-              style={{ cursor: 'pointer' }}
-            >
-              <div className={styles.avatar}>{user?.firstName?.[0]?.toUpperCase() || 'U'}</div>
-              <span>{user?.firstName || 'User'}</span>
-            </div>
-          </div>
-        </div>
 
         {/* Mobile Search Overlay */}
         {showMobileSearch && (
@@ -1800,9 +1882,176 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-      </header>
 
       <div className={styles.mainLayout}>
+        {/* Left Container - Top Layer */}
+        <aside className={styles.leftContainer}>
+          <div className={styles.leftContainerContent}>
+            {/* AgriLink Logo */}
+            <div className={styles.leftLogoContainer}>
+              <img src="/assets/images/AgrilinkLogo.png" alt="AgriLink Logo" className={styles.leftLogo} />
+            </div>
+            
+            {/* Menu Items */}
+            <div className={styles.leftMenuList}>
+              <div className={styles.leftMenuItem} onClick={() => {
+                // Navigate to home/dashboard
+                console.log('Home clicked')
+              }}>
+                <img src="/assets/icons/home.png" alt="Home" className={styles.leftMenuIcon} />
+                <span className={styles.leftMenuText}>Home</span>
+              </div>
+              
+              <div className={styles.leftMenuItem} onClick={() => {
+                // Handle search functionality when implemented
+                console.log('Search clicked')
+              }}>
+                <img src="/assets/icons/search.png" alt="Search" className={styles.leftMenuIcon} />
+                <span className={styles.leftMenuText}>Search</span>
+              </div>
+              
+              <div className={styles.leftMenuItem} onClick={() => router.push('/listings')}>
+                <img src="/assets/icons/shopping-cart.png" alt="Listings" className={styles.leftMenuIcon} />
+                <span className={styles.leftMenuText}>Listings</span>
+              </div>
+              
+              <div className={styles.leftMenuItem} onClick={() => {
+                // Navigate to transaction history when implemented
+                console.log('Transaction History clicked')
+              }}>
+                <img src="/assets/icons/time-past.png" alt="Transaction History" className={styles.leftMenuIcon} />
+                <span className={styles.leftMenuText}>Transaction History</span>
+              </div>
+              
+              <div className={styles.leftMenuItem} onClick={() => {
+                // Handle notifications
+                console.log('Notifications clicked')
+                setShowNotifications(!showNotifications)
+              }}>
+                <img src="/assets/icons/bell.png" alt="Notifications" className={styles.leftMenuIcon} />
+                <span className={styles.leftMenuText}>Notifications</span>
+              </div>
+              
+              <div className={styles.leftMenuItem} onClick={() => {
+                // Navigate to profile page when implemented
+                console.log('Profile clicked')
+              }}>
+                <div className={styles.leftProfileAvatar}>
+                  {user?.firstName?.[0]?.toUpperCase() || 'U'}
+                </div>
+                <span className={styles.leftMenuText}>Profile</span>
+              </div>
+              
+            </div>
+            
+            {/* Menu Button at Bottom */}
+            <div className={styles.leftMenuBottom}>
+              <div className={styles.leftMenuItem} onClick={() => {
+                // Handle menu toggle
+                console.log('Menu clicked')
+              }}>
+                <img src="/assets/icons/hamburger.png" alt="Menu" className={styles.leftMenuIcon} />
+                <span className={styles.leftMenuText}>Menu</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Floating Messages Button */}
+        <div className={styles.floatingMessages}>
+          <div 
+            className={styles.messagesButton}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setShowChat(!showChat)
+            }}
+          >
+            <img src="/assets/icons/message.png" alt="Messages" className={styles.messageIcon} />
+            <span className={styles.messageText}>Messages</span>
+            {unreadChats > 0 && (
+              <span className={styles.messageBadge}>
+                {unreadChats > 99 ? '99+' : unreadChats}
+              </span>
+            )}
+          </div>
+          
+          {/* Chat Popup */}
+          {showChat && (
+            <div className={styles.chatPopup}>
+              <div className={styles.chatPopupHeader}>
+                <h3 className={styles.chatPopupTitle}>Chats</h3>
+                <button 
+                  className={styles.chatPopupCloseBtn}
+                  onClick={() => setShowChat(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              
+              {/* Search Bar */}
+              <div className={styles.chatSearchContainer}>
+                <img src="/assets/icons/search.png" alt="Search" className={styles.searchIcon} />
+                <input
+                  type="text"
+                  placeholder="Search conversations"
+                  className={styles.chatSearchInput}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              {/* Conversations List */}
+              <div className={styles.conversationsList}>
+                {filteredConversations.length > 0 ? (
+                  filteredConversations.map((conversation) => (
+                    <div 
+                      key={conversation.id} 
+                      className={`${styles.conversationItem} ${conversation.unreadCount > 0 ? styles.hasUnread : ''}`}
+                      onClick={() => {
+                        setShowChat(false)
+                        router.push(`/chat/${conversation.id}`)
+                      }}
+                    >
+                      <div className={styles.conversationAvatar}>
+                        {conversation.otherUserName ? conversation.otherUserName[0].toUpperCase() : 'U'}
+                      </div>
+                      <div className={styles.conversationInfo}>
+                        <div className={styles.conversationHeader}>
+                          <span className={`${styles.conversationName} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
+                            {conversation.otherUserName || 'User'}
+                          </span>
+                          {conversation.lastMessageTime && (
+                            <span className={`${styles.conversationTime} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
+                              {formatTime(conversation.lastMessageTime)}
+                            </span>
+                          )}
+                        </div>
+                        <div className={styles.conversationPreview}>
+                          <span className={`${styles.lastMessage} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
+                            {conversation.lastMessage}
+                          </span>
+                          {conversation.unreadCount > 0 && (
+                            <div className={styles.unreadBadge}></div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className={styles.emptyChats}>
+                    <img src="/assets/icons/chat.png" alt="No chats" className={styles.emptyChatIcon} />
+                    <p className={styles.emptyChatText}>No conversations yet</p>
+                    <p className={styles.emptyChatSubtext}>
+                      Request livestock listings to start chatting with owners!
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Main Feed */}
         <main className={styles.mainFeed}>
           {/* Post Composer - Clickable */}
@@ -1994,74 +2243,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Chat Popup */}
-        {showChat && (
-          <div className={styles.chatPopup}>
-            <div className={styles.chatPopupHeader}>
-              <h3 className={styles.chatPopupTitle}>Chats</h3>
-            </div>
-            
-            {/* Search Bar */}
-            <div className={styles.chatSearchContainer}>
-              <img src="/assets/icons/search.png" alt="Search" className={styles.searchIcon} />
-              <input
-                type="text"
-                placeholder="Search conversations"
-                className={styles.chatSearchInput}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            {/* Conversations List */}
-            <div className={styles.conversationsList}>
-              {filteredConversations.length > 0 ? (
-                filteredConversations.map((conversation) => (
-                  <div 
-                    key={conversation.id} 
-                    className={`${styles.conversationItem} ${conversation.unreadCount > 0 ? styles.hasUnread : ''}`}
-                    onClick={() => {
-                      setShowChat(false)
-                      router.push(`/chat/${conversation.id}`)
-                    }}
-                  >
-                    <div className={styles.conversationAvatar}>
-                      {conversation.otherUserName ? conversation.otherUserName[0].toUpperCase() : 'U'}
-                    </div>
-                    <div className={styles.conversationInfo}>
-                      <div className={styles.conversationHeader}>
-                        <span className={`${styles.conversationName} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
-                          {conversation.otherUserName || 'User'}
-                        </span>
-                        {conversation.lastMessageTime && (
-                          <span className={`${styles.conversationTime} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
-                            {formatTime(conversation.lastMessageTime)}
-                          </span>
-                        )}
-                      </div>
-                      <div className={styles.conversationPreview}>
-                        <span className={`${styles.lastMessage} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
-                          {conversation.lastMessage}
-                        </span>
-                        {conversation.unreadCount > 0 && (
-                          <div className={styles.unreadBadge}></div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className={styles.emptyChats}>
-                  <img src="/assets/icons/chat.png" alt="No chats" className={styles.emptyChatIcon} />
-                  <p className={styles.emptyChatText}>No conversations yet</p>
-                  <p className={styles.emptyChatSubtext}>
-                    Request livestock listings to start chatting with owners!
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Right Sidebar - Chats (Hidden by default) */}
         <aside className={styles.rightSidebar} style={{ display: 'none' }}>
@@ -2094,22 +2275,18 @@ export default function Dashboard() {
                     <div className={styles.modalPostTime}>{formatTime(selectedPost.createdAt)}</div>
                   </div>
                 </div>
-                
                 {selectedPost.text && (
                   <p className={styles.modalPostText}>{selectedPost.text}</p>
                 )}
-                
                 {selectedPost.imageUrl && (
                   <img src={selectedPost.imageUrl} alt="Post image" className={styles.modalPostImage} />
                 )}
               </div>
-              
               {/* Like Stats */}
               <div className={styles.modalPostStats}>
                 <span>{selectedPost?.likes || 0} likes</span>
                 <span>{selectedPost?.comments?.length || 0} comments</span>
               </div>
-              
               {/* Like Button */}
               <div className={styles.modalPostActions}>
                 <button 
@@ -2124,122 +2301,241 @@ export default function Dashboard() {
                   Like
                 </button>
               </div>
-              
               {/* Comments List */}
               <div className={styles.modalCommentsSection}>
                 {selectedPost.comments && selectedPost.comments.length > 0 ? (
                   selectedPost.comments.map((comment, index) => {
                     const commentId = comment.id || comment.commentId || `comment-${index}-${comment.text?.substring(0, 10)}`
                     return (
-                    <div key={commentId} className={styles.modalComment} data-comment-id={commentId}>
-                      <div className={styles.commentAvatar}>
-                        {comment.userName ? comment.userName[0].toUpperCase() : 'U'}
-                      </div>
-                      <div className={styles.commentContent}>
-                        {editingComment === commentId ? (
-                          <div className={styles.editCommentContainer}>
-                            <textarea
-                              value={editCommentText}
-                              onChange={(e) => setEditCommentText(e.target.value)}
-                              className={styles.editCommentInput}
-                              rows="3"
-                            />
-                            <div className={styles.editCommentButtons}>
-                              <button 
-                                onClick={handleSaveCommentEdit}
-                                className={styles.saveCommentBtn}
-                                disabled={!editCommentText.trim() || editCommentText.trim() === comment.text}
-                              >
-                                Save
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  setEditingComment(null)
-                                  setEditCommentText('')
-                                }}
-                                className={styles.cancelCommentBtn}
-                              >
-                                Cancel
-                              </button>
+                      <div key={commentId} className={styles.modalComment} data-comment-id={commentId}>
+                        <div className={styles.commentAvatar}>
+                          {comment.userName ? comment.userName[0].toUpperCase() : 'U'}
+                        </div>
+                        <div className={styles.commentContent}>
+                          {editingComment === commentId ? (
+                            <div className={styles.editCommentContainer}>
+                              <textarea
+                                value={editCommentText}
+                                onChange={(e) => setEditCommentText(e.target.value)}
+                                className={styles.editCommentInput}
+                                rows="3"
+                              />
+                              <div className={styles.editCommentButtons}>
+                                <button 
+                                  onClick={handleSaveCommentEdit}
+                                  className={styles.saveCommentBtn}
+                                  disabled={!editCommentText.trim() || editCommentText.trim() === comment.text}
+                                >
+                                  Save
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setEditingComment(null)
+                                    setEditCommentText('')
+                                  }}
+                                  className={styles.cancelCommentBtn}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <div className={styles.commentBubbleWrapper}>
-                            <div className={styles.commentBubble}>
-                              <span className={styles.commentAuthor}>{comment.userName}</span>
-                              <p className={styles.commentText}>
-                                {comment.text}
-                                {comment.editedAt && <span className={styles.editedIndicator}> (edited)</span>}
-                              </p>
-                            </div>
-                            {/* 3-dot menu right after the comment bubble */}
-                            <div className={`${styles.commentMenuContainer} comment-menu-container ${showCommentMenu === commentId ? styles.menuOpen : ''}`}>
-                              <button 
-                                className={styles.commentMenuBtn}
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  console.log('Modal comment menu clicked for comment:', commentId)
-                                  setShowCommentMenu(showCommentMenu === commentId ? null : commentId)
-                                  
-                                  // Position dropdown relative to button
-                                  if (showCommentMenu !== commentId) {
-                                    setTimeout(() => {
-                                      const dropdown = document.querySelector(`[data-comment-id="${commentId}"] .${styles.commentDropdown}`)
-                                      if (dropdown) {
-                                        const buttonRect = e.target.getBoundingClientRect()
-                                        dropdown.style.left = `${buttonRect.right + 4}px`
-                                        dropdown.style.top = `${buttonRect.top}px`
-                                      }
-                                    }, 10)
-                                  }
-                                }}
-                              >
-                                ⋯
-                              </button>
-                              {showCommentMenu === commentId && (
-                                <div className={styles.commentDropdown}>
-                                  {(comment.userId === user?.uid || 
-                                    (!comment.userId && comment.userEmail === user?.email)) ? (
-                                    <>
-                                      <button 
-                                        onClick={() => handleEditComment(comment)}
-                                        className={styles.commentMenuItem}
-                                      >
-                                        Edit
-                                      </button>
-                                      <button 
-                                        onClick={() => handleDeleteComment(commentId)}
-                                        className={`${styles.commentMenuItem} ${styles.deleteMenuItem}`}
-                                      >
-                                        Delete
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <button 
-                                      onClick={() => handleReportComment(commentId)}
-                                      className={`${styles.commentMenuItem} ${styles.reportMenuItem}`}
+                          ) : (
+                            <div className={styles.commentBubbleWrapper}>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                                {/* Left: bubble + reply controls */}
+                                <div style={{ display: 'inline-block' }}>
+                                  <div className={styles.commentBubble}>
+                                    <span className={styles.commentAuthor}>{comment.userName}</span>
+                                    <p className={styles.commentText}>
+                                      {comment.text}
+                                      {comment.editedAt && <span className={styles.editedIndicator}> (edited)</span>}
+                                    </p>
+                                  </div>
+                                  {/* Reply button with timestamp on the left */}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 2, width: '100%' }}>
+                                    <span className={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</span>
+                                    <button
+                                      onClick={() => toggleReplyInput(commentId)}
+                                      className={styles.commentMenuItem}
+                                      style={{ 
+                                        padding: 0, 
+                                        background: 'transparent', 
+                                        fontSize: '12px',
+                                        textDecoration: 'none',
+                                        cursor: 'pointer'
+                                      }}
+                                      onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+                                      onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
                                     >
-                                      Report
+                                      Reply
                                     </button>
+                                  </div>
+                                  {showReplyInput[commentId] && (
+                                    <div className={styles.replyGroup}>
+                                      <div className={styles.replyInputRow}>
+                                        <input
+                                          type="text"
+                                          placeholder={`Reply to ${comment.userName}...`}
+                                          value={replyTextMap[commentId] || ''}
+                                          onChange={(e) => setReplyTextMap(prev => ({ ...prev, [commentId]: e.target.value }))}
+                                          onKeyPress={(e) => { if (e.key === 'Enter') { handleAddReply(commentId) } }}
+                                          className={styles.commentInput}
+                                          style={{ flex: 1 }}
+                                        />
+                                        <button
+                                          onClick={() => handleAddReply(commentId)}
+                                          disabled={!((replyTextMap[commentId] || '').trim())}
+                                          className={styles.commentSubmitBtn}
+                                        >
+                                          Post
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Replies section - directly under the comment */}
+                                  {comment.replies && comment.replies.length > 0 && (
+                                    <div style={{ marginTop: 8, marginLeft: 40, display: 'grid', gap: 8, justifyItems: 'start' }}>
+                                      {comment.replies.map((reply, rIdx) => {
+                                        const replyId = reply.id || `reply-${rIdx}`
+                                        return (
+                                          <div key={replyId} className={styles.modalComment} data-reply-id={replyId}>
+                                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                                              {/* Left: reply bubble + reply controls */}
+                                              <div style={{ display: 'inline-block' }}>
+                                                <div className={styles.commentAvatar}>
+                                                  {reply.userName ? reply.userName[0].toUpperCase() : 'U'}
+                                                </div>
+                                                <div className={styles.commentContent}>
+                                                  <div className={styles.commentBubble}>
+                                                    <span className={styles.commentAuthor}>{reply.userName}</span>
+                                                    <p className={styles.commentText} dangerouslySetInnerHTML={{ __html: reply.text }}></p>
+                                                  </div>
+                                                  {/* Reply button with timestamp */}
+                                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 2, width: '100%' }}>
+                                                    <span className={styles.commentTime}>{formatTimeAgo(reply.createdAt)}</span>
+                                                    <button
+                                                      onClick={() => toggleReplyInput(replyId)}
+                                                      className={styles.commentMenuItem}
+                                                      style={{ 
+                                                        padding: 0, 
+                                                        background: 'transparent', 
+                                                        fontSize: '12px',
+                                                        textDecoration: 'none',
+                                                        cursor: 'pointer'
+                                                      }}
+                                                      onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+                                                      onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+                                                    >
+                                                      Reply
+                                                    </button>
+                                                  </div>
+                                                  {showReplyInput[replyId] && (
+                                                    <div className={styles.replyGroup}>
+                                                      <div className={styles.replyInputRow}>
+                                                        <input
+                                                          type="text"
+                                                          placeholder={`Reply to ${reply.userName}...`}
+                                                          value={replyTextMap[replyId] || ''}
+                                                          onChange={(e) => setReplyTextMap(prev => ({ ...prev, [replyId]: e.target.value }))}
+                                                          onKeyPress={(e) => { if (e.key === 'Enter') { handleAddReply(commentId, replyId) } }}
+                                                          className={styles.commentInput}
+                                                          style={{ flex: 1 }}
+                                                        />
+                                                        <button
+                                                          onClick={() => handleAddReply(commentId, replyId)}
+                                                          disabled={!((replyTextMap[replyId] || '').trim())}
+                                                          className={styles.commentSubmitBtn}
+                                                        >
+                                                          Post
+                                                        </button>
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                              {/* Right: menu */}
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                <div className={`${styles.commentMenuContainer} comment-menu-container ${showCommentMenu === replyId ? styles.menuOpen : ''}`}>
+                                                  <button 
+                                                    className={styles.commentMenuBtn}
+                                                    onClick={(e) => {
+                                                      e.preventDefault()
+                                                      e.stopPropagation()
+                                                      setShowCommentMenu(showCommentMenu === replyId ? null : replyId)
+                                                    }}
+                                                  >
+                                                    ⋯
+                                                  </button>
+                                                  {showCommentMenu === replyId && (
+                                                    <div className={styles.commentDropdown}>
+                                                      {(reply.userId === user?.uid || (!reply.userId && reply.userEmail === user?.email)) ? (
+                                                        <>
+                                                          <button onClick={() => handleEditReply(reply, commentId)} className={styles.commentMenuItem}>Edit</button>
+                                                          <button onClick={() => handleDeleteReply(replyId, commentId)} className={`${styles.commentMenuItem} ${styles.deleteMenuItem}`}>Delete</button>
+                                                        </>
+                                                      ) : (
+                                                        <button onClick={() => handleReportReply(replyId)} className={`${styles.commentMenuItem} ${styles.reportMenuItem}`}>Report</button>
+                                                      )}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
                                   )}
                                 </div>
-                              )}
+                                {/* Right: menu only */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div className={`${styles.commentMenuContainer} comment-menu-container ${showCommentMenu === commentId ? styles.menuOpen : ''}`}>
+                                    <button 
+                                      className={styles.commentMenuBtn}
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        setShowCommentMenu(showCommentMenu === commentId ? null : commentId)
+                                        if (showCommentMenu !== commentId) {
+                                          setTimeout(() => {
+                                            const dropdown = document.querySelector(`[data-comment-id="${commentId}"] .${styles.commentDropdown}`)
+                                            if (dropdown) {
+                                              const buttonRect = e.target.getBoundingClientRect()
+                                              dropdown.style.left = `${buttonRect.right + 4}px`
+                                              dropdown.style.top = `${buttonRect.top}px`
+                                            }
+                                          }, 10)
+                                        }
+                                      }}
+                                    >
+                                      ⋯
+                                    </button>
+                                    {showCommentMenu === commentId && (
+                                      <div className={styles.commentDropdown}>
+                                        {(comment.userId === user?.uid || (!comment.userId && comment.userEmail === user?.email)) ? (
+                                          <>
+                                            <button onClick={() => handleEditComment(comment)} className={styles.commentMenuItem}>Edit</button>
+                                            <button onClick={() => handleDeleteComment(commentId)} className={`${styles.commentMenuItem} ${styles.deleteMenuItem}`}>Delete</button>
+                                          </>
+                                        ) : (
+                                          <button onClick={() => handleReportComment(commentId)} className={`${styles.commentMenuItem} ${styles.reportMenuItem}`}>Report</button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        )}
-                        <span className={styles.commentTime}>
-                          {formatTime(comment.createdAt)}
-                        </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )
+                    )
                   })
                 ) : (
                   <p className={styles.noComments}>No comments yet. Be the first to comment!</p>
                 )}
               </div>
-              
               {/* Comment Input */}
               <div className={styles.modalCommentInput}>
                 <div className={styles.commentInputContainer}>

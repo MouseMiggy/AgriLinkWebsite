@@ -2,8 +2,6 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/": "pages/index.js",
-  "/onboarding": "pages/onboarding.js",
-  "/signin": "pages/signin.js",
+  "/chat/[chatId]": "pages/chat/[chatId].js",
   "/dashboard": "pages/dashboard.js"
 }

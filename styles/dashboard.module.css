@@ -241,7 +241,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: #1877f2;
+  background: #fa9100;
 }
 
 .notificationsDropdown {
@@ -378,13 +378,14 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
   font-size: 14px;
+  flex-shrink: 0;
 }
 
 .logoutBtn {
@@ -455,6 +456,62 @@
   scroll-behavior: smooth;
 }
 
+/* Menu Dropdown */
+.menuDropdown {
+  position: fixed;
+  bottom: 60px;
+  left: 190px;
+  width: 250px;
+  background: white;
+  border: 1px solid #e4e6ea;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1200;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.menuDropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  color: #1c1e21;
+  font-size: 14px;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+
+.menuDropdownItem:hover {
+  background: rgba(250, 145, 0, 0.1);
+}
+
+.menuDropdownIcon {
+  width: 20px;
+  height: 20px;
+  opacity: 0.7;
+}
+
+.menuDropdownDivider {
+  height: 1px;
+  background: #e4e6ea;
+  margin: 4px 0;
+}
+
+.menuDropdownItem.logout {
+  background: #F0394F;
+  color: white;
+  margin-bottom: 0;
+}
+
+.menuDropdownItem.logout:hover {
+  background: #d32f2f;
+}
+
 /* Left Container Logo */
 .leftLogoContainer {
   display: flex;
@@ -490,7 +547,7 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #1877f2;
+  background: #fa9100;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -560,20 +617,20 @@
   margin-right: auto;
 }
 
+.leftMenuItem:hover {
+  background: rgba(250, 145, 0, 0.07);
+}
+
+.leftMenuItem.active {
+  background: rgba(250, 145, 0, 0.1);
+}
+
 /* Ensure all text aligns by creating consistent left margin */
 .leftMenuItem .leftMenuText {
   margin-left: 0;
 }
 
 /* All menu items use consistent spacing */
-.leftMenuItem {
-  gap: 0; /* All items use margin for consistent spacing */
-}
-
-.leftMenuItem:hover {
-  background: #f0f2f5;
-}
-
 .leftMenuIcon {
   width: 24px;
   height: 24px;
@@ -743,7 +800,7 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #1877f2;
+  background: #fa9100;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -807,7 +864,7 @@
 }
 
 .chatUnreadBadge {
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   border-radius: 10px;
   padding: 2px 6px;
@@ -837,7 +894,7 @@
 .newChatBtn {
   width: 100%;
   padding: 10px 16px;
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   border: none;
   border-radius: 8px;
@@ -964,7 +1021,7 @@
 .userAvatar {
   width: 40px;
   height: 40px;
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   border-radius: 50%;
   display: flex;
@@ -1108,7 +1165,7 @@
 }
 
 .postButton {
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   border: none;
   padding: 8px 24px;
@@ -1305,7 +1362,7 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   display: flex;
   align-items: center;
@@ -1455,7 +1512,7 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   display: flex;
   align-items: center;
@@ -1497,9 +1554,20 @@
 
 .modalPreviewImage {
   width: 100%;
-  max-height: 300px;
-  object-fit: cover;
+  max-height: 500px;
+  object-fit: contain;
   display: block;
+  background-color: black;
+}
+
+.modalPostImage {
+  width: 100%;
+  max-width: none;
+  max-height: 500px;
+  height: auto;
+  object-fit: contain;
+  background-color: black;
+  flex-shrink: 0;
 }
 
 .modalRemoveImageBtn {
@@ -1553,7 +1621,7 @@
 
 .modalPostButton {
   width: 100%;
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   border: none;
   border-radius: 6px;
@@ -1834,7 +1902,7 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   display: flex;
   align-items: center;
@@ -1926,11 +1994,82 @@
   margin: 0 auto;
 }
 
+.imageCarousel {
+  position: relative;
+  margin-top: 12px;
+}
+
+.imageContainer {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: black;
+  min-height: 500px;
+  overflow: hidden;
+}
+
+.imageSlider {
+  display: flex;
+  width: 100%;
+  transition: transform 0.3s ease-in-out;
+}
+
 .postImage {
   width: 100%;
   max-width: none;
+  max-height: 500px;
   height: auto;
-  margin-top: 12px;
+  object-fit: contain;
+  background-color: black;
+  flex-shrink: 0;
+}
+
+.carouselBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: background-color 0.2s;
+}
+
+.carouselBtn img {
+  width: 20px;
+  height: 20px;
+  filter: invert(1);
+}
+
+.carouselBtn:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.prevBtn {
+  left: 10px;
+}
+
+.nextBtn {
+  right: 10px;
+}
+
+.imageIndicator {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 /* Post Options Dropdown */
@@ -2055,6 +2194,78 @@
   opacity: 1;
 }
 
+.multipleImagePreview {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items: flex-start;
+}
+
+.previewImageContainer {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid #e4e6ea;
+  flex-shrink: 0;
+}
+
+.previewImageContainer .buttonPreviewImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.addMoreImagesBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 120px;
+  height: 120px;
+  border: 2px dashed #fa9100;
+  border-radius: 8px;
+  background: rgba(250, 145, 0, 0.05);
+  color: #fa9100;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.addMoreImagesBtn:hover {
+  background: rgba(250, 145, 0, 0.1);
+  border-color: #e8820e;
+}
+
+.removeImageBtn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.removeImageBtn:hover {
+  background: rgba(0, 0, 0, 0.9);
+}
+
 .postSeparator {
   height: 1px;
   background-color: #e4e6ea;
@@ -2098,7 +2309,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   display: flex;
   align-items: center;
@@ -2281,7 +2492,7 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   display: flex;
   align-items: center;
@@ -2424,7 +2635,7 @@
 }
 
 .commentSubmitBtn {
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   border: none;
   padding: 8px 16px;
@@ -3090,7 +3301,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #1877f2;
+  background: #fa9100;
   color: white;
   display: flex;
   align-items: center;

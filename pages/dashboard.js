@@ -33,8 +33,9 @@ export default function Dashboard() {
   const [editText, setEditText] = useState('')
   const [showDropdown, setShowDropdown] = useState(null)
   const [conversations, setConversations] = useState([])
-  const [imageFile, setImageFile] = useState(null)
-  const [imagePreview, setImagePreview] = useState(null)
+  const [imageFiles, setImageFiles] = useState([])
+  const [imagePreviews, setImagePreviews] = useState([])
+  const [currentImageIndex, setCurrentImageIndex] = useState({})
   const [showPostModal, setShowPostModal] = useState(false)
   const [showAllComments, setShowAllComments] = useState({})
   const [showCommentModal, setShowCommentModal] = useState(false)
@@ -58,6 +59,8 @@ export default function Dashboard() {
   const [selectedChat, setSelectedChat] = useState(null)
   const [chatMessages, setChatMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
+  const [showMenuDropdown, setShowMenuDropdown] = useState(false)
+  const [activeMenuItem, setActiveMenuItem] = useState('home')
   const router = useRouter()
 
   // Play notification sound for new notifications
@@ -372,6 +375,9 @@ export default function Dashboard() {
           setEditingComment(null)
           setEditCommentText('')
         }
+        if (showMenuDropdown) {
+          setShowMenuDropdown(false)
+        }
       }
     }
 
@@ -382,7 +388,7 @@ export default function Dashboard() {
       const isInsideFloatingMessages = event.target.closest(`.${styles.floatingMessages}`)
       
       // Close dropdowns when clicking outside
-      if (!isInsideChatPopup && !isInsideMessagesButton && !isInsideFloatingMessages && !event.target.closest('.dropdown-container')) {
+      if (!isInsideChatPopup && !isInsideMessagesButton && !isInsideFloatingMessages && !event.target.closest('.dropdown-container') && !event.target.closest('.menu-dropdown-container')) {
         setShowDropdown(null)
         setShowNotifications(false)
         if (showChat) {
@@ -392,6 +398,7 @@ export default function Dashboard() {
         }
         setShowProfileMenu(false)
         setShowMobileSearch(false)
+        setShowMenuDropdown(false)
       }
       // Close comment menu when clicking outside
       if (!event.target.closest('.comment-menu-container')) {
@@ -406,7 +413,7 @@ export default function Dashboard() {
       document.removeEventListener('keydown', handleEscKey)
       document.removeEventListener('click', handleClickOutside)
     }
-  }, [showCommentModal, showDropdown, showNotifications, showChat, showProfileMenu, showMobileSearch, showCommentMenu, editingComment])
+  }, [showCommentModal, showDropdown, showNotifications, showChat, showProfileMenu, showMobileSearch, showCommentMenu, editingComment, showMenuDropdown])
 
   // Update selectedPost when posts change (for real-time comments)
   useEffect(() => {
@@ -804,18 +811,67 @@ export default function Dashboard() {
   }
 
   const handleImageSelect = (e) => {
-    const file = e.target.files[0]
-    if (file && file.type.startsWith('image/')) {
-      setImageFile(file)
-      const reader = new FileReader()
-      reader.onload = (e) => setImagePreview(e.target.result)
-      reader.readAsDataURL(file)
+    const files = Array.from(e.target.files)
+    const validFiles = files.filter(file => file.type.startsWith('image/'))
+    
+    if (validFiles.length > 0) {
+      // Add new files to existing ones instead of replacing
+      const newImageFiles = [...imageFiles, ...validFiles]
+      setImageFiles(newImageFiles)
+      
+      // Create previews for new images and add to existing previews
+      const newPreviews = []
+      let loadedCount = 0
+      
+      validFiles.forEach((file, index) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          newPreviews[index] = e.target.result
+          loadedCount++
+          
+          if (loadedCount === validFiles.length) {
+            setImagePreviews(prev => [...prev, ...newPreviews])
+          }
+        }
+        reader.readAsDataURL(file)
+      })
+    }
+    
+    // Reset the input value so the same file can be selected again
+    e.target.value = ''
+  }
+
+  const removeImage = (index) => {
+    const newFiles = imageFiles.filter((_, i) => i !== index)
+    const newPreviews = imagePreviews.filter((_, i) => i !== index)
+    setImageFiles(newFiles)
+    setImagePreviews(newPreviews)
+  }
+
+  const removeAllImages = () => {
+    setImageFiles([])
+    setImagePreviews([])
+  }
+
+  // Carousel navigation functions with smooth animation
+  const nextImage = (postId, maxImages) => {
+    const currentIndex = currentImageIndex[postId] || 0
+    if (currentIndex < maxImages - 1) {
+      setCurrentImageIndex(prev => ({
+        ...prev,
+        [postId]: currentIndex + 1
+      }))
     }
   }
 
-  const removeImage = () => {
-    setImageFile(null)
-    setImagePreview(null)
+  const prevImage = (postId) => {
+    const currentIndex = currentImageIndex[postId] || 0
+    if (currentIndex > 0) {
+      setCurrentImageIndex(prev => ({
+        ...prev,
+        [postId]: currentIndex - 1
+      }))
+    }
   }
 
   const openPostModal = () => {
@@ -825,8 +881,7 @@ export default function Dashboard() {
   const closePostModal = () => {
     setShowPostModal(false)
     setPostText('')
-    setImageFile(null)
-    setImagePreview(null)
+    removeAllImages()
   }
 
   // Auto-resize textarea and adjust font size based on content length
@@ -893,28 +948,32 @@ export default function Dashboard() {
   }
 
   const handlePost = async () => {
-    if ((!postText.trim() && !imageFile) || !user || !db) return
+    if ((!postText.trim() && imageFiles.length === 0) || !user || !db) return
 
     setLoading(true)
     try {
-      let imageUrl = null
+      let imageUrls = []
       
-      // Upload image to Cloudinary if selected
-      if (imageFile) {
-        console.log('Uploading image to Cloudinary...')
-        imageUrl = await uploadImageToCloudinary(imageFile)
-        console.log('Image uploaded successfully:', imageUrl)
+      // Upload multiple images to Cloudinary if selected
+      if (imageFiles.length > 0) {
+        console.log('Uploading images to Cloudinary...')
+        for (const imageFile of imageFiles) {
+          const imageUrl = await uploadImageToCloudinary(imageFile)
+          imageUrls.push(imageUrl)
+          console.log('Image uploaded successfully:', imageUrl)
+        }
       }
 
       console.log('Saving post to Firestore...')
       
-      // Create post with same structure as mobile app
+      // Create post with multiple images support
       const postData = {
         text: postText.trim(),
         userId: user.uid,
         userName: `${user.firstName} ${user.lastName}`.trim(),
         userEmail: user.email,
-        imageUrl: imageUrl,
+        imageUrls: imageUrls,
+        imageUrl: imageUrls.length > 0 ? imageUrls[0] : null, // Keep backward compatibility
         likes: 0,
         likedBy: [],
         comments: [],
@@ -928,8 +987,7 @@ export default function Dashboard() {
       console.log('Post created successfully!')
       
       setPostText('')
-      setImageFile(null)
-      setImagePreview(null)
+      removeAllImages()
       closePostModal()
     } catch (error) {
       console.error('Error creating post:', error)
@@ -1971,8 +2029,9 @@ export default function Dashboard() {
             
             {/* Menu Items */}
             <div className={styles.leftMenuList}>
-              <div className={styles.leftMenuItem} onClick={() => {
+              <div className={`${styles.leftMenuItem} ${activeMenuItem === 'home' ? styles.active : ''}`} onClick={() => {
                 // Navigate to home/dashboard
+                setActiveMenuItem('home')
                 console.log('Home clicked')
               }}>
                 <img src="/assets/icons/home.png" alt="Home" className={styles.leftMenuIcon} />
@@ -1988,7 +2047,7 @@ export default function Dashboard() {
               </div>
               
               <div className={styles.leftMenuItem} onClick={() => router.push('/listings')}>
-                <img src="/assets/icons/shopping-cart.png" alt="Listings" className={styles.leftMenuIcon} />
+                <img src="/assets/icons/listing.png" alt="Listings" className={styles.leftMenuIcon} />
                 <span className={styles.leftMenuText}>Listings</span>
               </div>
               
@@ -2023,12 +2082,58 @@ export default function Dashboard() {
             
             {/* Menu Button at Bottom */}
             <div className={styles.leftMenuBottom}>
-              <div className={styles.leftMenuItem} onClick={() => {
-                // Handle menu toggle
-                console.log('Menu clicked')
-              }}>
-                <img src="/assets/icons/hamburger.png" alt="Menu" className={styles.leftMenuIcon} />
-                <span className={styles.leftMenuText}>Menu</span>
+              <div className="menu-dropdown-container" style={{ position: 'relative' }}>
+                <div className={styles.leftMenuItem} onClick={() => {
+                  setShowMenuDropdown(!showMenuDropdown)
+                }}>
+                  <img src="/assets/icons/menu.png" alt="Menu" className={styles.leftMenuIcon} />
+                  <span className={styles.leftMenuText}>Menu</span>
+                </div>
+                
+                {/* Menu Dropdown */}
+                {showMenuDropdown && (
+                  <div className={styles.menuDropdown}>
+                    <div className={styles.menuDropdownItem} onClick={() => {
+                      console.log('Change Role clicked')
+                      setShowMenuDropdown(false)
+                    }}>
+                      <img src="/assets/icons/rotate-reverse.png" alt="Change Role" className={styles.menuDropdownIcon} />
+                      <span>Change Role</span>
+                    </div>
+                    
+                    <div className={styles.menuDropdownItem} onClick={() => {
+                      console.log('Settings clicked')
+                      setShowMenuDropdown(false)
+                    }}>
+                      <img src="/assets/icons/settings.png" alt="Settings" className={styles.menuDropdownIcon} />
+                      <span>Settings</span>
+                    </div>
+                    
+                    <div className={styles.menuDropdownItem} onClick={() => {
+                      console.log('Reports clicked')
+                      setShowMenuDropdown(false)
+                    }}>
+                      <img src="/assets/icons/triangle-warning.png" alt="Reports" className={styles.menuDropdownIcon} />
+                      <span>Reports</span>
+                    </div>
+                    
+                    <div className={styles.menuDropdownItem} onClick={() => {
+                      console.log('Appearance clicked')
+                      setShowMenuDropdown(false)
+                    }}>
+                      <img src="/assets/icons/appearance.png" alt="Appearance" className={styles.menuDropdownIcon} />
+                      <span>Switch Appearance</span>
+                    </div>
+                    
+                    <div className={`${styles.menuDropdownItem} ${styles.logout}`} onClick={() => {
+                      handleLogout()
+                      setShowMenuDropdown(false)
+                    }}>
+                      <img src="/assets/icons/logout.png" alt="Logout" className={styles.menuDropdownIcon} />
+                      <span>Logout</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -2044,7 +2149,7 @@ export default function Dashboard() {
               setShowChat(!showChat)
             }}
           >
-            <img src="/assets/icons/message.png" alt="Messages" className={styles.messageIcon} />
+            <img src="/assets/icons/chat.png" alt="Messages" className={styles.messageIcon} />
             <span className={styles.messageText}>Messages</span>
             {unreadChats > 0 && (
               <span className={styles.messageBadge}>
@@ -2191,7 +2296,7 @@ export default function Dashboard() {
                       <img src="/assets/icons/chat.png" alt="No chats" className={styles.emptyChatIcon} />
                       <p className={styles.emptyChatText}>No conversations yet</p>
                       <p className={styles.emptyChatSubtext}>
-                        Request livestock listings to start chatting with owners!
+                        Request livestock listings to start chatting with owners
                       </p>
                     </div>
                   )}
@@ -2280,14 +2385,68 @@ export default function Dashboard() {
                       {post.text}
                     </p>
                   )}
-                  {post.imageUrl && (
-                    <img 
-                      src={post.imageUrl} 
-                      alt="Post image" 
-                      className={styles.postImage}
-                      onClick={() => openCommentModal(post)}
-                      style={{ cursor: 'pointer' }}
-                    />
+                  {(post.imageUrls?.length > 0 || post.imageUrl) && (
+                    <div className={styles.imageCarousel}>
+                      {(() => {
+                        const images = post.imageUrls || (post.imageUrl ? [post.imageUrl] : [])
+                        const currentIndex = currentImageIndex[post.id] || 0
+                        const currentImage = images[currentIndex] || images[0]
+                        
+                        return (
+                          <>
+                            <div className={styles.imageContainer} data-post-id={post.id}>
+                              <div 
+                                className={styles.imageSlider}
+                                style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+                              >
+                                {images.map((imageUrl, index) => (
+                                  <img 
+                                    key={index}
+                                    src={imageUrl} 
+                                    alt={`Post image ${index + 1}`} 
+                                    className={styles.postImage}
+                                    onClick={() => openCommentModal(post)}
+                                    style={{ cursor: 'pointer' }}
+                                  />
+                                ))}
+                              </div>
+                              
+                              {images.length > 1 && (
+                                <>
+                                  {currentIndex > 0 && (
+                                    <button 
+                                      className={`${styles.carouselBtn} ${styles.prevBtn}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        prevImage(post.id)
+                                      }}
+                                    >
+                                      <img src="/assets/icons/back.png" alt="Previous" />
+                                    </button>
+                                  )}
+                                  
+                                  {currentIndex < images.length - 1 && (
+                                    <button 
+                                      className={`${styles.carouselBtn} ${styles.nextBtn}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        nextImage(post.id, images.length)
+                                      }}
+                                    >
+                                      <img src="/assets/icons/greater-than-symbol.png" alt="Next" />
+                                    </button>
+                                  )}
+                                  
+                                  <div className={styles.imageIndicator}>
+                                    {currentIndex + 1} / {images.length}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </>
+                        )
+                      })()}
+                    </div>
                   )}
                 </div>
                 <div className={styles.postStats}>
@@ -2355,33 +2514,55 @@ export default function Dashboard() {
                 
                 <div className={styles.modalFooter}>
                   <div className={styles.modalActions}>
-                    <label className={styles.modalImageUpload}>
-                      {imagePreview ? (
-                        <div className={styles.buttonImagePreview}>
-                          <img src={imagePreview} alt="Preview" className={styles.buttonPreviewImage} />
-                          <div className={styles.buttonPreviewOverlay}>
-                            <img src="/assets/icons/image.png" alt="Photo" className={styles.modalActionIcon} />
-                            Change Photo
+                    {imagePreviews.length > 0 ? (
+                      <div className={styles.multipleImagePreview}>
+                        {imagePreviews.map((preview, index) => (
+                          <div key={index} className={styles.previewImageContainer}>
+                            <img src={preview} alt={`Preview ${index + 1}`} className={styles.buttonPreviewImage} />
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                removeImage(index)
+                              }}
+                              className={styles.removeImageBtn}
+                            >
+                              ×
+                            </button>
                           </div>
-                        </div>
-                      ) : (
-                        <>
+                        ))}
+                        
+                        <label className={styles.addMoreImagesBtn}>
                           <img src="/assets/icons/image.png" alt="Photo" className={styles.modalActionIcon} />
-                          Add Photo
-                        </>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageSelect}
-                        className={styles.hiddenInput}
-                      />
-                    </label>
+                          Add More
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleImageSelect}
+                            className={styles.hiddenInput}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className={styles.modalImageUpload}>
+                        <img src="/assets/icons/image.png" alt="Photo" className={styles.modalActionIcon} />
+                        Add Photos
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleImageSelect}
+                          className={styles.hiddenInput}
+                        />
+                      </label>
+                    )}
                   </div>
                   
                   <button
                     onClick={handlePost}
-                    disabled={loading || (!postText.trim() && !imageFile)}
+                    disabled={loading || (!postText.trim() && imageFiles.length === 0)}
                     className={styles.modalPostButton}
                   >
                     {loading ? 'Posting...' : 'Post'}
@@ -2427,8 +2608,65 @@ export default function Dashboard() {
                 {selectedPost.text && (
                   <p className={styles.modalPostText}>{selectedPost.text}</p>
                 )}
-                {selectedPost.imageUrl && (
-                  <img src={selectedPost.imageUrl} alt="Post image" className={styles.modalPostImage} />
+                {(selectedPost.imageUrls?.length > 0 || selectedPost.imageUrl) && (
+                  <div className={styles.imageCarousel}>
+                    {(() => {
+                      const images = selectedPost.imageUrls || (selectedPost.imageUrl ? [selectedPost.imageUrl] : [])
+                      const currentIndex = currentImageIndex[`modal-${selectedPost.id}`] || 0
+                      
+                      return (
+                        <>
+                          <div className={styles.imageContainer} data-post-id={`modal-${selectedPost.id}`}>
+                            <div 
+                              className={styles.imageSlider}
+                              style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+                            >
+                              {images.map((imageUrl, index) => (
+                                <img 
+                                  key={index}
+                                  src={imageUrl} 
+                                  alt={`Post image ${index + 1}`} 
+                                  className={styles.modalPostImage}
+                                />
+                              ))}
+                            </div>
+                            
+                            {images.length > 1 && (
+                              <>
+                                {currentIndex > 0 && (
+                                  <button 
+                                    className={`${styles.carouselBtn} ${styles.prevBtn}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      prevImage(`modal-${selectedPost.id}`)
+                                    }}
+                                  >
+                                    <img src="/assets/icons/back.png" alt="Previous" />
+                                  </button>
+                                )}
+                                
+                                {currentIndex < images.length - 1 && (
+                                  <button 
+                                    className={`${styles.carouselBtn} ${styles.nextBtn}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      nextImage(`modal-${selectedPost.id}`, images.length)
+                                    }}
+                                  >
+                                    <img src="/assets/icons/greater-than-symbol.png" alt="Next" />
+                                  </button>
+                                )}
+                                
+                                <div className={styles.imageIndicator}>
+                                  {currentIndex + 1} / {images.length}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )
+                    })()}
+                  </div>
                 )}
               </div>
               {/* Like Stats */}

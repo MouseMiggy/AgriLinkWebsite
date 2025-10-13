@@ -3,6 +3,10 @@
     "id": "dashboard.js -> firebase/auth",
     "files": []
   },
+  "dashboard.js -> firebase/firestore": {
+    "id": "dashboard.js -> firebase/firestore",
+    "files": []
+  },
   "signin.js -> ../lib/firebase": {
     "id": "signin.js -> ../lib/firebase",
     "files": []

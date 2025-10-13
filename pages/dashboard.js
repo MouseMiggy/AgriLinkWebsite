@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/router'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
@@ -61,6 +62,11 @@ export default function Dashboard() {
   const [newMessage, setNewMessage] = useState('')
   const [showMenuDropdown, setShowMenuDropdown] = useState(false)
   const [activeMenuItem, setActiveMenuItem] = useState('home')
+  const [showMessageMenu, setShowMessageMenu] = useState(null)
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 })
+  const [menuButtonRef, setMenuButtonRef] = useState(null)
+  const dropdownRef = useRef(null)
+  const markAsReadTimeoutRef = useRef(null)
   const router = useRouter()
 
   // Play notification sound for new notifications
@@ -361,6 +367,8 @@ export default function Dashboard() {
         }
         if (showChat) {
           setShowChat(false)
+          setSelectedChat(null)
+          setChatMessages([])
         }
         if (showProfileMenu) {
           setShowProfileMenu(false)
@@ -377,6 +385,9 @@ export default function Dashboard() {
         }
         if (showMenuDropdown) {
           setShowMenuDropdown(false)
+        }
+        if (showMessageMenu) {
+          setShowMessageMenu(null)
         }
       }
     }
@@ -404,16 +415,61 @@ export default function Dashboard() {
       if (!event.target.closest('.comment-menu-container')) {
         setShowCommentMenu(null)
       }
+      // Close message menu when clicking outside
+      const isInsideMessageButton = event.target.closest('.message-menu-container')
+      const isInsideDropdown = dropdownRef.current?.contains(event.target) || 
+                              event.target.closest('[data-dropdown="message-menu"]')
+      
+      if (showMessageMenu && !isInsideMessageButton && !isInsideDropdown) {
+        setShowMessageMenu(null)
+        setMenuButtonRef(null)
+        // Re-enable scrolling when dropdown closes
+        document.body.style.overflow = 'auto'
+        const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
+        if (chatMessagesContainer) {
+          chatMessagesContainer.style.overflow = 'auto'
+        }
+      }
+    }
+
+    // Function to update dropdown position on scroll
+    const updateDropdownPosition = () => {
+      if (menuButtonRef && showMessageMenu) {
+        const rect = menuButtonRef.getBoundingClientRect()
+        const chatPopup = document.querySelector(`.${styles.chatPopup}`)
+        const chatPopupRect = chatPopup?.getBoundingClientRect()
+        
+        if (chatPopupRect) {
+          // Position relative to chat popup
+          setDropdownPosition({
+            top: rect.top - chatPopupRect.top,
+            left: rect.right - chatPopupRect.left + 8
+          })
+        } else {
+          // Fallback to viewport positioning
+          setDropdownPosition({
+            top: rect.top,
+            left: rect.right + 8
+          })
+        }
+      }
+    }
+
+    // Add scroll listener to update dropdown position
+    const handleScroll = () => {
+      updateDropdownPosition()
     }
 
     document.addEventListener('keydown', handleEscKey)
     document.addEventListener('click', handleClickOutside)
+    document.addEventListener('scroll', handleScroll, true)
 
     return () => {
       document.removeEventListener('keydown', handleEscKey)
       document.removeEventListener('click', handleClickOutside)
+      document.removeEventListener('scroll', handleScroll, true)
     }
-  }, [showCommentModal, showDropdown, showNotifications, showChat, showProfileMenu, showMobileSearch, showCommentMenu, editingComment, showMenuDropdown])
+  }, [showCommentModal, showDropdown, showNotifications, showChat, showProfileMenu, showMobileSearch, showCommentMenu, editingComment, showMenuDropdown, showMessageMenu, menuButtonRef])
 
   // Update selectedPost when posts change (for real-time comments)
   useEffect(() => {
@@ -424,6 +480,55 @@ export default function Dashboard() {
       }
     }
   }, [posts, selectedPost])
+
+  // Cleanup scrolling when dropdown closes or component unmounts
+  useEffect(() => {
+    if (!showMessageMenu) {
+      document.body.style.overflow = 'auto'
+      const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
+      if (chatMessagesContainer) {
+        chatMessagesContainer.style.overflow = 'auto'
+      }
+    }
+    return () => {
+      document.body.style.overflow = 'auto'
+      const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
+      if (chatMessagesContainer) {
+        chatMessagesContainer.style.overflow = 'auto'
+      }
+    }
+  }, [showMessageMenu])
+
+  // Dedicated click-outside handler for message menu dropdown
+  useEffect(() => {
+    if (!showMessageMenu) return
+
+    const handleMessageMenuClickOutside = (event) => {
+      const isInsideButton = event.target.closest('.message-menu-container')
+      const isInsideDropdown = dropdownRef.current?.contains(event.target) || 
+                              event.target.closest('[data-dropdown="message-menu"]')
+      
+      if (!isInsideButton && !isInsideDropdown) {
+        setShowMessageMenu(null)
+        setMenuButtonRef(null)
+        document.body.style.overflow = 'auto'
+        const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
+        if (chatMessagesContainer) {
+          chatMessagesContainer.style.overflow = 'auto'
+        }
+      }
+    }
+
+    // Add event listener with a slight delay to avoid immediate closure
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleMessageMenuClickOutside, true)
+    }, 100)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('click', handleMessageMenuClickOutside, true)
+    }
+  }, [showMessageMenu])
 
   // Listen for auth state changes and real-time posts
   useEffect(() => {
@@ -678,6 +783,8 @@ export default function Dashboard() {
               // Auto-open chat if there's a new message from someone else
               if (isLastMessageFromOther && unreadCount > 0) {
                 setShowChat(true)
+                setSelectedChat(null) // Ensure we show conversations list
+                setChatMessages([])
                 setShowNotifications(false) // Close notifications if open
               }
               
@@ -693,17 +800,70 @@ export default function Dashboard() {
             })
           })
           
-          // Add initial conversation data
-          conversationsList.push({
-            id: chatId,
-            otherUserId,
-            otherUserName,
-            otherUserEmail,
-            lastMessage: chatData.lastMessage || 'No messages yet',
-            lastMessageTime: chatData.lastMessageTime,
-            lastMessageSenderId: chatData.lastMessageSenderId,
-            unreadCount: 0,
-            isLastMessageFromOther: false
+          // Calculate initial unread count for this conversation
+          const initialMessagesQuery = query(
+            collection(db, 'chats', chatId, 'messages'),
+            orderBy('createdAt', 'desc')
+          )
+          
+          // Get initial unread count
+          getDocs(initialMessagesQuery).then((initialSnapshot) => {
+            let initialUnreadCount = 0
+            let initialIsLastMessageFromOther = false
+            
+            // Count unread messages from other user
+            initialSnapshot.docs.forEach(msgDoc => {
+              const msgData = msgDoc.data()
+              if (msgData.senderId !== user.uid && !msgData.read) {
+                initialUnreadCount++
+              }
+            })
+            
+            // Check if last message is from other user
+            if (initialSnapshot.docs.length > 0) {
+              const lastMsg = initialSnapshot.docs[0].data()
+              initialIsLastMessageFromOther = lastMsg.senderId !== user.uid
+            }
+            
+            // Add initial conversation data with proper unread count
+            conversationsList.push({
+              id: chatId,
+              otherUserId,
+              otherUserName,
+              otherUserEmail,
+              lastMessage: chatData.lastMessage || 'No messages yet',
+              lastMessageTime: chatData.lastMessageTime,
+              lastMessageSenderId: chatData.lastMessageSenderId,
+              unreadCount: initialUnreadCount,
+              isLastMessageFromOther: initialIsLastMessageFromOther
+            })
+            
+            // Update conversations state with proper counts
+            setConversations([...conversationsList])
+            
+            // Calculate total unseen messages
+            const totalUnseen = conversationsList.reduce((total, conv) => total + conv.unreadCount, 0)
+            setTotalUnseenMessages(totalUnseen)
+            
+            // Calculate unread chats count
+            const unreadChatsCount = conversationsList.reduce((total, conv) => 
+              total + (conv.unreadCount > 0 ? 1 : 0), 0
+            )
+            setUnreadChats(unreadChatsCount)
+          }).catch(error => {
+            console.error('Error calculating initial unread count:', error)
+            // Fallback: add conversation with 0 unread count
+            conversationsList.push({
+              id: chatId,
+              otherUserId,
+              otherUserName,
+              otherUserEmail,
+              lastMessage: chatData.lastMessage || 'No messages yet',
+              lastMessageTime: chatData.lastMessageTime,
+              lastMessageSenderId: chatData.lastMessageSenderId,
+              unreadCount: 0,
+              isLastMessageFromOther: false
+            })
           })
         }
       })
@@ -740,20 +900,41 @@ export default function Dashboard() {
         orderBy('createdAt', 'asc')
       )
       
-      const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+      const unsubscribe = onSnapshot(messagesQuery, async (snapshot) => {
         const messages = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }))
         setChatMessages(messages)
         
-        // Auto-scroll to bottom when new messages arrive
-        setTimeout(() => {
-          const messagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
-          if (messagesContainer) {
-            messagesContainer.scrollTop = messagesContainer.scrollHeight
+        // Clear any existing timeout
+        if (markAsReadTimeoutRef.current) {
+          clearTimeout(markAsReadTimeoutRef.current)
+        }
+        
+        // Mark unread messages as read when viewing the chat (with delay to ensure user sees them)
+        markAsReadTimeoutRef.current = setTimeout(async () => {
+          const { updateDoc, doc: firestoreDoc } = await import('firebase/firestore')
+          const unreadMessages = snapshot.docs.filter(doc => {
+            const msgData = doc.data()
+            return msgData.senderId !== user?.uid && !msgData.read
+          })
+          
+          // Mark each unread message as read
+          for (const messageDoc of unreadMessages) {
+            try {
+              await updateDoc(messageDoc.ref, { read: true })
+            } catch (error) {
+              console.error('Error marking message as read:', error)
+            }
           }
-        }, 100)
+        }, 1000) // 1 second delay to ensure user actually sees the messages
+        
+        // Auto-scroll to bottom when new messages arrive (instant, no animation)
+        const messagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
+        if (messagesContainer) {
+          messagesContainer.scrollTop = messagesContainer.scrollHeight
+        }
       })
       
       return unsubscribe
@@ -794,9 +975,37 @@ export default function Dashboard() {
 
   // Go back to conversations list
   const goBackToConversations = () => {
+    // Clear any pending mark-as-read timeout
+    if (markAsReadTimeoutRef.current) {
+      clearTimeout(markAsReadTimeoutRef.current)
+    }
     setSelectedChat(null)
     setChatMessages([])
     setNewMessage('')
+  }
+
+  // Mark conversation as read
+  const markConversationAsRead = async (conversationId) => {
+    try {
+      // Update the conversation in the conversations state
+      setConversations(prevConversations => {
+        const updatedConversations = prevConversations.map(conv => 
+          conv.id === conversationId 
+            ? { ...conv, unreadCount: 0 }
+            : conv
+        )
+        
+        // Recalculate total unread chats count
+        const totalUnread = updatedConversations.reduce((total, conv) => 
+          total + (conv.unreadCount > 0 ? 1 : 0), 0
+        )
+        setUnreadChats(totalUnread)
+        
+        return updatedConversations
+      })
+    } catch (error) {
+      console.error('Error marking conversation as read:', error)
+    }
   }
 
   const handleLogout = async () => {
@@ -851,6 +1060,28 @@ export default function Dashboard() {
   const removeAllImages = () => {
     setImageFiles([])
     setImagePreviews([])
+  }
+
+  // Format timestamp for chat messages
+  const formatChatTimestamp = (timestamp) => {
+    if (!timestamp) return ''
+    
+    const now = new Date()
+    const messageTime = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    const diffInMs = Math.abs(now - messageTime)
+    const diffInMinutes = Math.floor(diffInMs / (1000 * 60))
+    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60))
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24))
+    
+    if (diffInMinutes < 1) {
+      return 'just now'
+    } else if (diffInMinutes < 60) {
+      return `${diffInMinutes}min`
+    } else if (diffInHours < 24) {
+      return `${diffInHours}hr`
+    } else {
+      return `${diffInDays}day`
+    }
   }
 
   // Carousel navigation functions with smooth animation
@@ -2146,7 +2377,17 @@ export default function Dashboard() {
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              setShowChat(!showChat)
+              if (showChat) {
+                // Close chat and reset state
+                setShowChat(false)
+                setSelectedChat(null)
+                setChatMessages([])
+              } else {
+                // Open chat and ensure we're at conversations list
+                setShowChat(true)
+                setSelectedChat(null)
+                setChatMessages([])
+              }
             }}
           >
             <img src="/assets/icons/chat.png" alt="Messages" className={styles.messageIcon} />
@@ -2214,6 +2455,47 @@ export default function Dashboard() {
                       >
                         <div className={styles.messageContent}>
                           <p className={styles.messageText}>{message.text}</p>
+                          
+                          {/* 3-dots menu for received messages only */}
+                          {message.senderId !== user?.uid && (
+                            <div className="message-menu-container">
+                              <div className={styles.messageMenu}>
+                                <button 
+                                  className={styles.messageMenuBtn}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (showMessageMenu === message.id) {
+                                      setShowMessageMenu(null)
+                                      setMenuButtonRef(null)
+                                    } else {
+                                      const rect = e.target.getBoundingClientRect()
+                                      const chatPopup = document.querySelector(`.${styles.chatPopup}`)
+                                      const chatPopupRect = chatPopup?.getBoundingClientRect()
+                                      
+                                      if (chatPopupRect) {
+                                        // Position relative to chat popup
+                                        setDropdownPosition({
+                                          top: rect.top - chatPopupRect.top,
+                                          left: rect.right - chatPopupRect.left + 8
+                                        })
+                                      } else {
+                                        // Fallback to viewport positioning
+                                        setDropdownPosition({
+                                          top: rect.top,
+                                          left: rect.right + 8
+                                        })
+                                      }
+                                      setMenuButtonRef(e.target)
+                                      setShowMessageMenu(message.id)
+                                    }
+                                  }}
+                                >
+                                  <span>⋯</span>
+                                </button>
+                                
+                              </div>
+                            </div>
+                          )}
                         </div>
                         <span className={styles.messageTime}>
                           {formatTime(message.createdAt)}
@@ -2264,6 +2546,10 @@ export default function Dashboard() {
                           e.stopPropagation()
                           setSelectedChat(conversation)
                           loadChatMessages(conversation.id)
+                          // Mark conversation as read when clicked
+                          if (conversation.unreadCount > 0) {
+                            markConversationAsRead(conversation.id)
+                          }
                         }}
                       >
                         <div className={styles.conversationAvatar}>
@@ -2744,13 +3030,10 @@ export default function Dashboard() {
                                     <button
                                       onClick={() => toggleReplyInput(commentId)}
                                       className={styles.commentMenuItem}
-                                      style={{ 
-                                        padding: 0, 
-                                        background: 'transparent', 
-                                        fontSize: '12px',
-                                        textDecoration: 'none',
-                                        cursor: 'pointer'
-                                      }}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setShowMessageMenu(showMessageMenu === message.id ? null : message.id)
+                                      }}    
                                       onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
                                       onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
                                     >
@@ -2953,6 +3236,60 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Portal-based Message Menu Dropdown */}
+      {showMessageMenu && typeof window !== 'undefined' && showChat && createPortal(
+        <div 
+          ref={dropdownRef}
+          className={styles.messageMenuDropdown}
+          data-dropdown="message-menu"
+          style={{
+            position: 'absolute',
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            zIndex: 500
+          }}
+          onClick={(e) => {
+            // Prevent click events from bubbling up
+            e.stopPropagation()
+          }}
+          onMouseEnter={(e) => {
+            // Prevent scrolling when mouse is over dropdown
+            const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
+            if (chatMessagesContainer) {
+              chatMessagesContainer.style.overflow = 'hidden'
+            }
+          }}
+          onMouseLeave={(e) => {
+            // Re-enable scrolling when mouse leaves dropdown
+            const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
+            if (chatMessagesContainer) {
+              chatMessagesContainer.style.overflow = 'auto'
+            }
+          }}
+        >
+          <div className={styles.messageTimestampDisplay}>
+            {formatChatTimestamp(chatMessages.find(m => m.id === showMessageMenu)?.createdAt)}
+          </div>
+          
+          <div 
+            className={styles.messageMenuOption}
+            onClick={() => {
+              console.log('Report message:', showMessageMenu)
+              setShowMessageMenu(null)
+              setMenuButtonRef(null)
+              // Re-enable scrolling when dropdown closes
+              const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
+              if (chatMessagesContainer) {
+                chatMessagesContainer.style.overflow = 'auto'
+              }
+            }}
+          >
+            <span>Report</span>
+          </div>
+        </div>,
+        document.querySelector(`.${styles.chatPopup}`)
       )}
     </div>
   )

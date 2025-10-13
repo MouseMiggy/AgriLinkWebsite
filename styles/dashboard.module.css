@@ -1092,7 +1092,7 @@
   flex: 1;
   max-width: 600px;
   margin: 0 auto;
-  margin-left: 280px; /* Account for left container width + gap */
+  margin-left: 330px; /* Account for left container width + gap + extra spacing */
   padding: 20px 0;
 }
 
@@ -1990,7 +1990,7 @@
   flex: 1;
   padding: 20px;
   max-width: 650px;
-  margin: 0 auto 0 350px;
+  margin: 0 auto 0 400px;
 }
 
 .imageCarousel {
@@ -2400,7 +2400,7 @@
   border-radius: 12px;
   width: 90%;
   max-width: 600px;
-  height: 80vh;
+  height: 90vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -3821,20 +3821,12 @@
 }
 
 .chatMessagesContainer::-webkit-scrollbar {
-  width: 6px;
+  display: none;
 }
 
-.chatMessagesContainer::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.chatMessagesContainer::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 3px;
-}
-
-.chatMessagesContainer::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.3);
+.chatMessagesContainer {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .chatMessage {
@@ -3842,6 +3834,29 @@
   margin-bottom: 8px;
   animation: messageSlideIn 0.3s ease-out;
   position: relative;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+/* Hide message menu by default */
+.messageMenu {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+/* Show message menu on hover */
+.chatMessage:hover .messageMenu {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Keep menu visible when dropdown is open */
+.messageMenu.menuOpen,
+.menuOpen {
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 @keyframes messageSlideIn {
@@ -3914,22 +3929,25 @@
   background: transparent;
   border: none;
   border-radius: 50%;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #666;
+  color: #65676b;
   font-size: 16px;
-  font-weight: bold;
   transition: all 0.2s;
 }
 
 .messageMenuBtn:hover {
-  background: transparent;
+  background: rgba(0, 0, 0, 0.05);
   color: #333;
   transform: scale(1.1);
+}
+
+.messageMenuBtn:active {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .messageMenuDropdown {

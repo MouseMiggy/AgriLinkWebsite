@@ -720,9 +720,10 @@ export default function Dashboard() {
       where('participants', 'array-contains', user.uid)
     )
     
+    const messageListeners = new Map() // Track message listeners to prevent duplicates
+    const conversationsMap = new Map() // Use Map to prevent duplicate conversations
+    
     const unsubscribe = onSnapshot(chatsQuery, (chatsSnapshot) => {
-      const conversationsList = []
-      
       // Process each chat
       chatsSnapshot.docs.forEach(chatDoc => {
         const chatId = chatDoc.id
@@ -733,13 +734,32 @@ export default function Dashboard() {
           const otherUserName = chatData.participantNames[otherUserId] || 'User'
           const otherUserEmail = chatData.participantEmails?.[otherUserId] || ''
           
+          // Clean up existing listener for this chat if it exists
+          if (messageListeners.has(chatId)) {
+            messageListeners.get(chatId)()
+            messageListeners.delete(chatId)
+          }
+          
+          // Initialize conversation in map first (prevents duplicates)
+          conversationsMap.set(chatId, {
+            id: chatId,
+            otherUserId,
+            otherUserName,
+            otherUserEmail,
+            lastMessage: chatData.lastMessage || 'No messages yet',
+            lastMessageTime: chatData.lastMessageTime,
+            lastMessageSenderId: chatData.lastMessageSenderId,
+            unreadCount: 0,
+            isLastMessageFromOther: false
+          })
+          
           // Set up real-time listener for messages in this chat
           const messagesQuery = query(
             collection(db, 'chats', chatId, 'messages'),
             orderBy('createdAt', 'desc')
           )
           
-          onSnapshot(messagesQuery, (messagesSnapshot) => {
+          const messageUnsubscribe = onSnapshot(messagesQuery, (messagesSnapshot) => {
             let unreadCount = 0
             let isLastMessageFromOther = false
             let actualLastMessage = chatData.lastMessage || 'No messages yet'
@@ -763,116 +783,59 @@ export default function Dashboard() {
               actualLastMessageSenderId = lastMsg.senderId
             }
             
-            // Update conversations state
-            setConversations(prevConversations => {
-              const updatedConversations = prevConversations.filter(conv => conv.id !== chatId)
-              const newConversation = {
-                id: chatId,
-                otherUserId,
-                otherUserName,
-                otherUserEmail,
-                lastMessage: actualLastMessage,
-                lastMessageTime: actualLastMessageTime,
-                lastMessageSenderId: actualLastMessageSenderId,
-                unreadCount,
-                isLastMessageFromOther
-              }
-              
-              updatedConversations.push(newConversation)
-              
-              // Auto-open chat if there's a new message from someone else
-              if (isLastMessageFromOther && unreadCount > 0) {
-                setShowChat(true)
-                setSelectedChat(null) // Ensure we show conversations list
-                setChatMessages([])
-                setShowNotifications(false) // Close notifications if open
-              }
-              
-              // Sort by last message time
-              return updatedConversations.sort((a, b) => {
-                if (!a.lastMessageTime && !b.lastMessageTime) return 0
-                if (!a.lastMessageTime) return 1
-                if (!b.lastMessageTime) return -1
-                const aTime = a.lastMessageTime?.toMillis ? a.lastMessageTime.toMillis() : new Date(a.lastMessageTime).getTime()
-                const bTime = b.lastMessageTime?.toMillis ? b.lastMessageTime.toMillis() : new Date(b.lastMessageTime).getTime()
-                return bTime - aTime
-              })
-            })
-          })
-          
-          // Calculate initial unread count for this conversation
-          const initialMessagesQuery = query(
-            collection(db, 'chats', chatId, 'messages'),
-            orderBy('createdAt', 'desc')
-          )
-          
-          // Get initial unread count
-          getDocs(initialMessagesQuery).then((initialSnapshot) => {
-            let initialUnreadCount = 0
-            let initialIsLastMessageFromOther = false
-            
-            // Count unread messages from other user
-            initialSnapshot.docs.forEach(msgDoc => {
-              const msgData = msgDoc.data()
-              if (msgData.senderId !== user.uid && !msgData.read) {
-                initialUnreadCount++
-              }
+            // Update conversation in map (this prevents duplicates)
+            conversationsMap.set(chatId, {
+              id: chatId,
+              otherUserId,
+              otherUserName,
+              otherUserEmail,
+              lastMessage: actualLastMessage,
+              lastMessageTime: actualLastMessageTime,
+              lastMessageSenderId: actualLastMessageSenderId,
+              unreadCount,
+              isLastMessageFromOther
             })
             
-            // Check if last message is from other user
-            if (initialSnapshot.docs.length > 0) {
-              const lastMsg = initialSnapshot.docs[0].data()
-              initialIsLastMessageFromOther = lastMsg.senderId !== user.uid
+            // Auto-open chat if there's a new message from someone else
+            if (isLastMessageFromOther && unreadCount > 0) {
+              setShowChat(true)
+              setSelectedChat(null)
+              setChatMessages([])
+              setShowNotifications(false)
             }
             
-            // Add initial conversation data with proper unread count
-            conversationsList.push({
-              id: chatId,
-              otherUserId,
-              otherUserName,
-              otherUserEmail,
-              lastMessage: chatData.lastMessage || 'No messages yet',
-              lastMessageTime: chatData.lastMessageTime,
-              lastMessageSenderId: chatData.lastMessageSenderId,
-              unreadCount: initialUnreadCount,
-              isLastMessageFromOther: initialIsLastMessageFromOther
+            // Update conversations state from map (guaranteed no duplicates)
+            const uniqueConversations = Array.from(conversationsMap.values())
+            const sortedConversations = uniqueConversations.sort((a, b) => {
+              if (!a.lastMessageTime && !b.lastMessageTime) return 0
+              if (!a.lastMessageTime) return 1
+              if (!b.lastMessageTime) return -1
+              const aTime = a.lastMessageTime?.toMillis ? a.lastMessageTime.toMillis() : new Date(a.lastMessageTime).getTime()
+              const bTime = b.lastMessageTime?.toMillis ? b.lastMessageTime.toMillis() : new Date(b.lastMessageTime).getTime()
+              return bTime - aTime
             })
             
-            // Update conversations state with proper counts
-            setConversations([...conversationsList])
-            
-            // Calculate total unseen messages
-            const totalUnseen = conversationsList.reduce((total, conv) => total + conv.unreadCount, 0)
-            setTotalUnseenMessages(totalUnseen)
-            
-            // Calculate unread chats count
-            const unreadChatsCount = conversationsList.reduce((total, conv) => 
-              total + (conv.unreadCount > 0 ? 1 : 0), 0
-            )
-            setUnreadChats(unreadChatsCount)
-          }).catch(error => {
-            console.error('Error calculating initial unread count:', error)
-            // Fallback: add conversation with 0 unread count
-            conversationsList.push({
-              id: chatId,
-              otherUserId,
-              otherUserName,
-              otherUserEmail,
-              lastMessage: chatData.lastMessage || 'No messages yet',
-              lastMessageTime: chatData.lastMessageTime,
-              lastMessageSenderId: chatData.lastMessageSenderId,
-              unreadCount: 0,
-              isLastMessageFromOther: false
-            })
+            setConversations(sortedConversations)
+            setUnreadChats(sortedConversations.filter(conv => conv.unreadCount > 0).length)
           })
+          
+          // Store the unsubscribe function
+          messageListeners.set(chatId, messageUnsubscribe)
         }
       })
       
-      // Set initial conversations
-      setConversations(conversationsList)
+      // Set initial conversations from map (no duplicates possible)
+      const initialConversations = Array.from(conversationsMap.values())
+      setConversations(initialConversations)
     })
     
-    return unsubscribe
+    // Return cleanup function
+    return () => {
+      unsubscribe()
+      // Clean up all message listeners
+      messageListeners.forEach(unsubscribeFunc => unsubscribeFunc())
+      messageListeners.clear()
+    }
   }
 
   const formatTime = (timestamp) => {
@@ -931,10 +894,12 @@ export default function Dashboard() {
         }, 1000) // 1 second delay to ensure user actually sees the messages
         
         // Auto-scroll to bottom when new messages arrive (instant, no animation)
-        const messagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
-        if (messagesContainer) {
-          messagesContainer.scrollTop = messagesContainer.scrollHeight
-        }
+        setTimeout(() => {
+          const messagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
+          if (messagesContainer) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight
+          }
+        }, 100) // Small delay to ensure DOM is updated
       })
       
       return unsubscribe
@@ -2459,7 +2424,7 @@ export default function Dashboard() {
                           {/* 3-dots menu for received messages only */}
                           {message.senderId !== user?.uid && (
                             <div className="message-menu-container">
-                              <div className={styles.messageMenu}>
+                              <div className={`${styles.messageMenu} ${showMessageMenu === message.id ? styles.menuOpen : ''}`}>
                                 <button 
                                   className={styles.messageMenuBtn}
                                   onClick={(e) => {
@@ -3030,10 +2995,6 @@ export default function Dashboard() {
                                     <button
                                       onClick={() => toggleReplyInput(commentId)}
                                       className={styles.commentMenuItem}
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setShowMessageMenu(showMessageMenu === message.id ? null : message.id)
-                                      }}    
                                       onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
                                       onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
                                     >

@@ -33,7 +33,6 @@ export default function Dashboard() {
   const [editText, setEditText] = useState('')
   const [showDropdown, setShowDropdown] = useState(null)
   const [conversations, setConversations] = useState([])
-  const [searchQuery, setSearchQuery] = useState('')
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [showPostModal, setShowPostModal] = useState(false)
@@ -56,6 +55,9 @@ export default function Dashboard() {
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [replyTextMap, setReplyTextMap] = useState({})
   const [showReplyInput, setShowReplyInput] = useState({})
+  const [selectedChat, setSelectedChat] = useState(null)
+  const [chatMessages, setChatMessages] = useState([])
+  const [newMessage, setNewMessage] = useState('')
   const router = useRouter()
 
   // Play notification sound for new notifications
@@ -374,11 +376,20 @@ export default function Dashboard() {
     }
 
     const handleClickOutside = (event) => {
+      // Check if click is inside chat popup or messages button
+      const isInsideChatPopup = event.target.closest(`.${styles.chatPopup}`)
+      const isInsideMessagesButton = event.target.closest(`.${styles.messagesButton}`)
+      const isInsideFloatingMessages = event.target.closest(`.${styles.floatingMessages}`)
+      
       // Close dropdowns when clicking outside
-      if (!event.target.closest('.dropdown-container')) {
+      if (!isInsideChatPopup && !isInsideMessagesButton && !isInsideFloatingMessages && !event.target.closest('.dropdown-container')) {
         setShowDropdown(null)
         setShowNotifications(false)
-        setShowChat(false)
+        if (showChat) {
+          setShowChat(false)
+          setSelectedChat(null)
+          setChatMessages([])
+        }
         setShowProfileMenu(false)
         setShowMobileSearch(false)
       }
@@ -710,10 +721,76 @@ export default function Dashboard() {
     }
   }
 
-  const filteredConversations = conversations.filter(conversation => {
-    const name = conversation.otherUserName || ''
-    return name.toLowerCase().includes(searchQuery.toLowerCase())
-  })
+  const filteredConversations = conversations
+
+  // Load messages for selected chat
+  const loadChatMessages = async (chatId) => {
+    if (!chatId || !db) return
+    
+    try {
+      const messagesQuery = query(
+        collection(db, 'chats', chatId, 'messages'),
+        orderBy('createdAt', 'asc')
+      )
+      
+      const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+        const messages = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        setChatMessages(messages)
+        
+        // Auto-scroll to bottom when new messages arrive
+        setTimeout(() => {
+          const messagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
+          if (messagesContainer) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight
+          }
+        }, 100)
+      })
+      
+      return unsubscribe
+    } catch (error) {
+      console.error('Error loading chat messages:', error)
+    }
+  }
+
+  // Send a new message
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !selectedChat || !user || !db) return
+    
+    try {
+      const chatId = selectedChat.id
+      const messageData = {
+        text: newMessage.trim(),
+        senderId: user.uid,
+        senderName: `${user.firstName} ${user.lastName}`.trim(),
+        createdAt: serverTimestamp(),
+        read: false
+      }
+      
+      // Add message to chat
+      await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
+      
+      // Update chat's last message
+      await updateDoc(doc(db, 'chats', chatId), {
+        lastMessage: newMessage.trim(),
+        lastMessageTime: serverTimestamp(),
+        lastMessageSenderId: user.uid
+      })
+      
+      setNewMessage('')
+    } catch (error) {
+      console.error('Error sending message:', error)
+    }
+  }
+
+  // Go back to conversations list
+  const goBackToConversations = () => {
+    setSelectedChat(null)
+    setChatMessages([])
+    setNewMessage('')
+  }
 
   const handleLogout = async () => {
     try {
@@ -1978,76 +2055,148 @@ export default function Dashboard() {
           
           {/* Chat Popup */}
           {showChat && (
-            <div className={styles.chatPopup}>
+            <div 
+              className={styles.chatPopup} 
+              onClick={(e) => e.stopPropagation()}
+              onWheel={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
+              }}
+              onMouseEnter={() => {
+                document.body.style.overflow = 'hidden'
+              }}
+              onMouseLeave={() => {
+                document.body.style.overflow = 'auto'
+              }}
+            >
               <div className={styles.chatPopupHeader}>
-                <h3 className={styles.chatPopupTitle}>Chats</h3>
+                {selectedChat ? (
+                  <>
+                    <button 
+                      className={styles.backButton}
+                      onClick={goBackToConversations}
+                    >
+                      <img src="/assets/icons/back.png" alt="Back" style={{width: '16px', height: '16px'}} />
+                    </button>
+                    <h3 className={styles.chatPopupTitle}>{selectedChat.otherUserName}</h3>
+                  </>
+                ) : (
+                  <h3 className={styles.chatPopupTitle}>Chats</h3>
+                )}
                 <button 
                   className={styles.chatPopupCloseBtn}
-                  onClick={() => setShowChat(false)}
+                  onClick={() => {
+                    setShowChat(false)
+                    setSelectedChat(null)
+                    setChatMessages([])
+                  }}
                 >
-                  ✕
+                  <img src="/assets/icons/cross-small.png" alt="Close" style={{width: '16px', height: '16px'}} />
                 </button>
               </div>
               
-              {/* Search Bar */}
-              <div className={styles.chatSearchContainer}>
-                <img src="/assets/icons/search.png" alt="Search" className={styles.searchIcon} />
-                <input
-                  type="text"
-                  placeholder="Search conversations"
-                  className={styles.chatSearchInput}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-
-              {/* Conversations List */}
-              <div className={styles.conversationsList}>
-                {filteredConversations.length > 0 ? (
-                  filteredConversations.map((conversation) => (
-                    <div 
-                      key={conversation.id} 
-                      className={`${styles.conversationItem} ${conversation.unreadCount > 0 ? styles.hasUnread : ''}`}
-                      onClick={() => {
-                        setShowChat(false)
-                        router.push(`/chat/${conversation.id}`)
-                      }}
-                    >
-                      <div className={styles.conversationAvatar}>
-                        {conversation.otherUserName ? conversation.otherUserName[0].toUpperCase() : 'U'}
-                      </div>
-                      <div className={styles.conversationInfo}>
-                        <div className={styles.conversationHeader}>
-                          <span className={`${styles.conversationName} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
-                            {conversation.otherUserName || 'User'}
-                          </span>
-                          {conversation.lastMessageTime && (
-                            <span className={`${styles.conversationTime} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
-                              {formatTime(conversation.lastMessageTime)}
-                            </span>
-                          )}
+              {selectedChat ? (
+                /* Chat Messages View */
+                <>
+                  <div 
+                    className={styles.chatMessagesContainer}
+                    onWheel={(e) => e.stopPropagation()}
+                  >
+                    {chatMessages.map((message) => (
+                      <div 
+                        key={message.id} 
+                        className={`${styles.chatMessage} ${message.senderId === user?.uid ? styles.sentMessage : styles.receivedMessage}`}
+                      >
+                        <div className={styles.messageContent}>
+                          <p className={styles.messageText}>{message.text}</p>
                         </div>
-                        <div className={styles.conversationPreview}>
-                          <span className={`${styles.lastMessage} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
-                            {conversation.lastMessage}
-                          </span>
-                          {conversation.unreadCount > 0 && (
-                            <div className={styles.unreadBadge}></div>
-                          )}
-                        </div>
+                        <span className={styles.messageTime}>
+                          {formatTime(message.createdAt)}
+                        </span>
                       </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className={styles.emptyChats}>
-                    <img src="/assets/icons/chat.png" alt="No chats" className={styles.emptyChatIcon} />
-                    <p className={styles.emptyChatText}>No conversations yet</p>
-                    <p className={styles.emptyChatSubtext}>
-                      Request livestock listings to start chatting with owners!
-                    </p>
+                    ))}
                   </div>
-                )}
-              </div>
+                  
+                  <div 
+                    className={styles.chatInputContainer}
+                    onWheel={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="text"
+                      placeholder="Type a message..."
+                      className={styles.chatInput}
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          sendMessage()
+                        }
+                      }}
+                      onWheel={(e) => e.stopPropagation()}
+                    />
+                    <button 
+                      className={styles.sendButton}
+                      onClick={sendMessage}
+                      disabled={!newMessage.trim()}
+                      onWheel={(e) => e.stopPropagation()}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* Conversations List */
+                <div 
+                  className={styles.conversationsList}
+                  onWheel={(e) => e.stopPropagation()}
+                >
+                  {filteredConversations.length > 0 ? (
+                    filteredConversations.map((conversation) => (
+                      <div 
+                        key={conversation.id} 
+                        className={`${styles.conversationItem} ${conversation.unreadCount > 0 ? styles.hasUnread : ''} ${selectedChat?.id === conversation.id ? styles.selectedConversation : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedChat(conversation)
+                          loadChatMessages(conversation.id)
+                        }}
+                      >
+                        <div className={styles.conversationAvatar}>
+                          {conversation.otherUserName ? conversation.otherUserName[0].toUpperCase() : 'U'}
+                        </div>
+                        <div className={styles.conversationInfo}>
+                          <div className={styles.conversationHeader}>
+                            <span className={`${styles.conversationName} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
+                              {conversation.otherUserName || 'User'}
+                            </span>
+                            {conversation.lastMessageTime && (
+                              <span className={`${styles.conversationTime} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
+                                {formatTime(conversation.lastMessageTime)}
+                              </span>
+                            )}
+                          </div>
+                          <div className={styles.conversationPreview}>
+                            <span className={`${styles.lastMessage} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
+                              {conversation.lastMessage}
+                            </span>
+                            {conversation.unreadCount > 0 && (
+                              <div className={styles.unreadBadge}></div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className={styles.emptyChats}>
+                      <img src="/assets/icons/chat.png" alt="No chats" className={styles.emptyChatIcon} />
+                      <p className={styles.emptyChatText}>No conversations yet</p>
+                      <p className={styles.emptyChatSubtext}>
+                        Request livestock listings to start chatting with owners!
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

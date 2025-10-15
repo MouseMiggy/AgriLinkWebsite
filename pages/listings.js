@@ -392,46 +392,77 @@ export default function Listings() {
   }
 
   return (
-    <div className={styles.container}>
-      {/* Header */}
-      <div className={styles.header}>
-        <div className={styles.headerLeft}>
-          <button 
-            className={styles.backButton}
-            onClick={() => router.push('/dashboard')}
-          >
-            ← Back
-          </button>
-          <h1 className={styles.headerTitle}>
+    <div style={{ padding: '20px', minHeight: '100vh', backgroundColor: '#f8f9fa', width: '100vw', boxSizing: 'border-box' }}>
+      {/* Header and Search in One Container - Full Width */}
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '32px',
+        marginBottom: '32px',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+        width: '100%'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h1 style={{ 
+            margin: 0, 
+            fontSize: '28px', 
+            fontWeight: '600', 
+            color: '#1c1e21' 
+          }}>
             {userRole === 'livestock_owner' ? 'My Listings' : 'Available Listings'}
           </h1>
+          
+          {userRole === 'livestock_owner' && (
+            <button 
+              onClick={openAddModal}
+              style={{
+                backgroundColor: '#fa9100',
+                color: 'white',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}
+            >
+              + Add Listing
+            </button>
+          )}
         </div>
-        
-        {userRole === 'livestock_owner' && (
-          <button className={styles.addButton} onClick={openAddModal}>
-            + Add Listing
-          </button>
-        )}
-      </div>
 
-      {/* Search Bar */}
-      <div className={styles.searchContainer}>
+        {/* Search Bar */}
         <input
           type="text"
           placeholder="Search listings..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className={styles.searchInput}
+          style={{
+            width: '100%',
+            padding: '12px 16px',
+            border: '1px solid #e4e6ea',
+            borderRadius: '8px',
+            fontSize: '14px',
+            outline: 'none',
+            boxSizing: 'border-box'
+          }}
         />
       </div>
 
-      {/* Listings Grid */}
-      <div className={styles.listingsGrid}>
+      {/* Listings Grid - 3 Columns - Full Width */}
+      <div style={{ width: '100%' }}>
         {filteredListings.length === 0 ? (
-          <div className={styles.emptyState}>
-            <div className={styles.emptyIcon}>📝</div>
-            <h3>No Listings Available</h3>
-            <p>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '40px',
+            textAlign: 'center',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
+            <h3 style={{ margin: '0 0 8px 0', color: '#1c1e21' }}>No Listings Available</h3>
+            <p style={{ margin: 0, color: '#65676b' }}>
               {userRole === 'livestock_owner' 
                 ? "You haven't created any listings yet. Click 'Add Listing' to get started!"
                 : "No livestock listings are available at the moment. Check back later!"
@@ -439,79 +470,197 @@ export default function Listings() {
             </p>
           </div>
         ) : (
-          filteredListings.map((listing) => (
-            <div key={listing.id} className={styles.listingCard}>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(3, 1fr)', 
+            gap: '60px'
+          }}>
+          {filteredListings.map((listing) => (
+            <div key={listing.id} style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+              overflow: 'hidden',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+              cursor: 'pointer'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)'
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.15)'
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)'
+            }}>
               {/* Image */}
-              <div className={styles.imageContainer}>
+              <div style={{ height: '250px', overflow: 'hidden', position: 'relative' }}>
                 {listing.image ? (
                   <img 
                     src={listing.image} 
                     alt={listing.name}
-                    className={styles.listingImage}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      cursor: 'pointer'
+                    }}
                     onClick={() => setPreviewImage(listing.image)}
                   />
                 ) : (
-                  <div className={styles.placeholderImage}>
-                    <span>📷</span>
-                    <p>No Image</p>
+                  <div style={{
+                    width: '100%',
+                    height: '100%',
+                    background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#6c757d'
+                  }}>
+                    <span style={{ fontSize: '48px', marginBottom: '8px' }}>📷</span>
+                    <p style={{ margin: 0, fontSize: '14px', fontWeight: '500' }}>No Image</p>
                   </div>
                 )}
+                
+                {/* Price Badge */}
+                <div style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  background: listing.isFree ? '#28a745' : '#fa9100',
+                  color: 'white',
+                  padding: '6px 12px',
+                  borderRadius: '20px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+                }}>
+                  {listing.isFree ? 'Free' : `₱${listing.price}`}
+                </div>
               </div>
 
               {/* Content */}
-              <div className={styles.cardContent}>
-                <div className={styles.cardHeader}>
-                  <h3 className={styles.listingName}>{listing.name}</h3>
-                  <div className={styles.price}>
-                    {listing.isFree ? 'Free' : `₱${listing.price}`}
-                  </div>
-                </div>
+              <div style={{ padding: '32px' }}>
+                <h3 style={{ 
+                  margin: '0 0 8px 0', 
+                  fontSize: '18px', 
+                  fontWeight: '600', 
+                  color: '#1c1e21',
+                  lineHeight: '1.3'
+                }}>
+                  {listing.name}
+                </h3>
 
-                <p className={styles.ownerName}>by {listing.ownerName}</p>
+                <p style={{ 
+                  margin: '0 0 12px 0', 
+                  fontSize: '13px', 
+                  color: '#65676b',
+                  fontWeight: '500'
+                }}>
+                  by {listing.ownerName}
+                </p>
 
                 {listing.details && (
-                  <p className={styles.details}>{listing.details}</p>
+                  <p style={{ 
+                    margin: '0 0 16px 0', 
+                    fontSize: '14px', 
+                    color: '#1c1e21', 
+                    lineHeight: '1.4',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden'
+                  }}>
+                    {listing.details}
+                  </p>
                 )}
 
                 {listing.measurements && (
-                  <div className={styles.measurements}>
-                    {listing.measurements} {listing.measurementUnit}
+                  <div style={{
+                    background: '#f8f9fa',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    color: '#495057',
+                    marginBottom: '16px',
+                    fontWeight: '500'
+                  }}>
+                    📦 {listing.measurements} {listing.measurementUnit}
                   </div>
                 )}
 
                 {/* Actions */}
-                <div className={styles.cardActions}>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                   {userRole === 'livestock_owner' && isUserListing(listing) ? (
                     <>
                       <button 
-                        className={styles.editButton}
                         onClick={() => openEditModal(listing)}
+                        style={{
+                          background: '#1877f2',
+                          color: 'white',
+                          border: 'none',
+                          padding: '8px 16px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
                       >
                         Edit
                       </button>
                       <button 
-                        className={styles.deleteButton}
-                        onClick={() => deleteListing(listing)}
+                        onClick={() => deleteListing(listing.id)}
+                        style={{
+                          background: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          padding: '8px 16px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
                       >
                         Delete
                       </button>
                     </>
                   ) : userRole === 'crop_farmer' && !isUserListing(listing) ? (
                     <button 
-                      className={`${styles.requestButton} ${requestedListings.has(listing.id) ? styles.requestedButton : ''}`}
                       onClick={() => requestListing(listing)}
                       disabled={requestingListings.has(listing.id) || requestedListings.has(listing.id)}
+                      style={{
+                        background: requestedListings.has(listing.id) ? '#28a745' : '#fa9100',
+                        color: 'white',
+                        border: 'none',
+                        padding: '10px 20px',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        cursor: requestingListings.has(listing.id) || requestedListings.has(listing.id) ? 'not-allowed' : 'pointer',
+                        opacity: requestingListings.has(listing.id) || requestedListings.has(listing.id) ? 0.7 : 1,
+                        width: '100%'
+                      }}
                     >
                       {requestingListings.has(listing.id) ? 'Sending...' : 
-                       requestedListings.has(listing.id) ? 'Requested' : 'Request'}
+                       requestedListings.has(listing.id) ? '✓ Requested' : 'Request'}
                     </button>
                   ) : userRole === 'crop_farmer' && isUserListing(listing) ? (
-                    <span className={styles.ownListingLabel}>Your Listing</span>
+                    <span style={{
+                      color: '#6c757d',
+                      fontSize: '12px',
+                      fontStyle: 'italic',
+                      padding: '8px 0',
+                      textAlign: 'center',
+                      width: '100%'
+                    }}>
+                      Your Listing
+                    </span>
                   ) : null}
                 </div>
               </div>
             </div>
-          ))
+          ))}
+        </div>
         )}
       </div>
 

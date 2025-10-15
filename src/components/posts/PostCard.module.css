@@ -1,0 +1,76 @@
+/* Post Card Component Styles */
+.post {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s;
+}
+
+.post:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #fa9100;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.info {
+  flex: 1;
+}
+
+.author {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c1e21;
+}
+
+.time {
+  font-size: 12px;
+  color: #65676b;
+}
+
+.edited {
+  font-style: italic;
+}
+
+.content {
+  margin-bottom: 12px;
+}
+
+.text {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1c1e21;
+  white-space: pre-wrap;
+}
+
+.videoContainer {
+  margin-top: 12px;
+}
+
+.video {
+  width: 100%;
+  max-height: 400px;
+  border-radius: 8px;
+}

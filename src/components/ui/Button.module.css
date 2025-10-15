@@ -1,0 +1,88 @@
+/* Button Component Styles */
+.button {
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: inherit;
+}
+
+.button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(250, 145, 0, 0.3);
+}
+
+/* Variants */
+.primary {
+  background: #fa9100;
+  color: white;
+}
+
+.primary:hover:not(.disabled) {
+  background: #e8820e;
+}
+
+.secondary {
+  background: white;
+  color: #fa9100;
+  border: 1px solid #fa9100;
+}
+
+.secondary:hover:not(.disabled) {
+  background: #fa9100;
+  color: white;
+}
+
+.danger {
+  background: #ff4444;
+  color: white;
+}
+
+.danger:hover:not(.disabled) {
+  background: #cc3333;
+}
+
+/* Sizes */
+.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.medium {
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
+.large {
+  padding: 14px 28px;
+  font-size: 16px;
+}
+
+/* States */
+.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.loading {
+  cursor: wait;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

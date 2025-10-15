@@ -1,0 +1,424 @@
+{
+  "name": "AgriLink Report Validation System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "report-validation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an AI content moderator for AgriLink, an agricultural social platform. Your job is to analyze user reports and determine if they are VALID or INVALID.\n\nAnalyze the following factors:\n1. Report Type: {{ $json.reportType }}\n2. Post Content: {{ $json.postContent }}\n3. Reporter's Description: {{ $json.description }}\n4. Context: Agricultural/farming community platform\n\nValidation Criteria:\n- SPAM: Repetitive, promotional, or irrelevant content\n- FRAUD: Fake products, scams, misleading business practices\n- MISINFORMATION: False agricultural advice, fake scientific claims\n- INAPPROPRIATE: Offensive language, adult content, harassment\n- HARASSMENT: Personal attacks, bullying, threats\n- VIOLENCE: Threats of violence, dangerous content\n- COPYRIGHT: Stolen images, plagiarized content\n\nRespond with ONLY a JSON object in this exact format:\n{\n  \"decision\": \"VALID\" or \"INVALID\",\n  \"confidence\": 0.0-1.0,\n  \"reasoning\": \"Brief explanation of your decision\",\n  \"severity\": \"LOW\", \"MEDIUM\", or \"HIGH\",\n  \"recommendedAction\": \"WARN\", \"REMOVE\", \"RESTRICT\", or \"NONE\"\n}"
+            },
+            {
+              "role": "user",
+              "content": "Please analyze this report:\n\nReport Type: {{ $json.reportType }}\nPost Content: \"{{ $json.postContent }}\"\nReporter Description: \"{{ $json.description }}\"\nPost Author: {{ $json.postAuthor }}\nReporter: {{ $json.reporterName }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 500
+        }
+      },
+      "id": "gpt4o-analysis",
+      "name": "GPT-4o Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "openAiApi": "openai-credentials"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse GPT-4o response and extract decision data\nconst gptResponse = $input.first().json.message.content;\n\ntry {\n  // Extract JSON from GPT response\n  const jsonMatch = gptResponse.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) {\n    throw new Error('No JSON found in GPT response');\n  }\n  \n  const aiDecision = JSON.parse(jsonMatch[0]);\n  \n  // Validate required fields\n  if (!aiDecision.decision || !['VALID', 'INVALID'].includes(aiDecision.decision)) {\n    throw new Error('Invalid decision format');\n  }\n  \n  // Get original report data\n  const reportData = $('Webhook Trigger').first().json;\n  \n  return {\n    reportId: reportData.reportId,\n    reporterId: reportData.reporterId,\n    reportedUserId: reportData.reportedUserId,\n    postId: reportData.postId,\n    reportType: reportData.reportType,\n    aiDecision: aiDecision.decision,\n    confidence: aiDecision.confidence || 0.5,\n    reasoning: aiDecision.reasoning || 'No reasoning provided',\n    severity: aiDecision.severity || 'MEDIUM',\n    recommendedAction: aiDecision.recommendedAction || 'NONE',\n    processedAt: new Date().toISOString(),\n    originalReport: reportData\n  };\n} catch (error) {\n  // Fallback for parsing errors\n  const reportData = $('Webhook Trigger').first().json;\n  return {\n    reportId: reportData.reportId,\n    reporterId: reportData.reporterId,\n    reportedUserId: reportData.reportedUserId,\n    postId: reportData.postId,\n    reportType: reportData.reportType,\n    aiDecision: 'INVALID',\n    confidence: 0.1,\n    reasoning: 'AI analysis failed - defaulting to invalid',\n    severity: 'LOW',\n    recommendedAction: 'NONE',\n    processedAt: new Date().toISOString(),\n    error: error.message,\n    originalReport: reportData\n  };\n}"
+      },
+      "id": "process-decision",
+      "name": "Process AI Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-valid",
+              "leftValue": "={{ $json.aiDecision }}",
+              "rightValue": "VALID",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "decision-router",
+      "name": "Decision Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://your-region-your-project.cloudfunctions.net/updateReportStatus",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "reportId",
+              "value": "={{ $json.reportId }}"
+            },
+            {
+              "name": "status",
+              "value": "valid"
+            },
+            {
+              "name": "aiDecision",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-valid-status",
+      "name": "Update Valid Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.FIREBASE_FUNCTION_URL }}/updateReportStatus",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "reportId",
+              "value": "={{ $json.reportId }}"
+            },
+            {
+              "name": "status",
+              "value": "invalid"
+            },
+            {
+              "name": "aiDecision",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-invalid-status",
+      "name": "Update Invalid Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.FIREBASE_FUNCTION_URL }}/sendNotification",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "userId",
+              "value": "={{ $json.reportedUserId }}"
+            },
+            {
+              "name": "type",
+              "value": "report_valid"
+            },
+            {
+              "name": "title",
+              "value": "Content Report"
+            },
+            {
+              "name": "message",
+              "value": "Your post has been reported and found to violate community guidelines. Reason: {{ $json.reportType }}. {{ $json.reasoning }}"
+            },
+            {
+              "name": "reportData",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-reported-user",
+      "name": "Notify Reported User",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.FIREBASE_FUNCTION_URL }}/sendNotification",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "userId",
+              "value": "={{ $json.reporterId }}"
+            },
+            {
+              "name": "type",
+              "value": "report_invalid"
+            },
+            {
+              "name": "title",
+              "value": "Report Update"
+            },
+            {
+              "name": "message",
+              "value": "Your report has been reviewed and determined to be invalid. Reason: {{ $json.reasoning }}"
+            },
+            {
+              "name": "reportData",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-reporter-invalid",
+      "name": "Notify Reporter (Invalid)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.FIREBASE_FUNCTION_URL }}/handlePostAction",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "postId",
+              "value": "={{ $json.postId }}"
+            },
+            {
+              "name": "action",
+              "value": "={{ $json.recommendedAction }}"
+            },
+            {
+              "name": "reportData",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "handle-post-action",
+      "name": "Handle Post Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"reportId\": $json.reportId, \"status\": \"processed\", \"decision\": $json.aiDecision } }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o Analysis": {
+      "main": [
+        [
+          {
+            "node": "Process AI Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process AI Decision": {
+      "main": [
+        [
+          {
+            "node": "Decision Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Router": {
+      "main": [
+        [
+          {
+            "node": "Update Valid Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Invalid Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Valid Status": {
+      "main": [
+        [
+          {
+            "node": "Notify Reported User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Invalid Status": {
+      "main": [
+        [
+          {
+            "node": "Notify Reporter (Invalid)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Reported User": {
+      "main": [
+        [
+          {
+            "node": "Handle Post Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Reporter (Invalid)": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Post Action": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "report-validation",
+      "name": "Report Validation"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

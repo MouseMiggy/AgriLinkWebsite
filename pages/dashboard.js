@@ -42,6 +42,7 @@ export default function Dashboard() {
   const [showCommentModal, setShowCommentModal] = useState(false)
   const [selectedPost, setSelectedPost] = useState(null)
   const [commentText, setCommentText] = useState('')
+  const [commentLoading, setCommentLoading] = useState(false)
   const [currentPost, setCurrentPost] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -65,6 +66,16 @@ export default function Dashboard() {
   const [showMessageMenu, setShowMessageMenu] = useState(null)
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 })
   const [menuButtonRef, setMenuButtonRef] = useState(null)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportType, setReportType] = useState('')
+  const [reportDescription, setReportDescription] = useState('')
+  const [reportedPost, setReportedPost] = useState(null)
+  const [reportEvidence, setReportEvidence] = useState(null)
+  const [reportLoading, setReportLoading] = useState(false)
+  const [reportImageIndex, setReportImageIndex] = useState(0)
+  const [userReports, setUserReports] = useState([])
+  const [reportsLoading, setReportsLoading] = useState(false)
+  const [reportsFilter, setReportsFilter] = useState('all')
   const dropdownRef = useRef(null)
   const markAsReadTimeoutRef = useRef(null)
   const router = useRouter()
@@ -364,6 +375,7 @@ export default function Dashboard() {
         }
         if (showNotifications) {
           setShowNotifications(false)
+          document.body.style.overflow = 'auto'
         }
         if (showChat) {
           setShowChat(false)
@@ -401,7 +413,10 @@ export default function Dashboard() {
       // Close dropdowns when clicking outside
       if (!isInsideChatPopup && !isInsideMessagesButton && !isInsideFloatingMessages && !event.target.closest('.dropdown-container') && !event.target.closest('.menu-dropdown-container')) {
         setShowDropdown(null)
-        setShowNotifications(false)
+        if (showNotifications) {
+          setShowNotifications(false)
+          document.body.style.overflow = 'auto'
+        }
         if (showChat) {
           setShowChat(false)
           setSelectedChat(null)
@@ -1072,12 +1087,16 @@ export default function Dashboard() {
 
   const openPostModal = () => {
     setShowPostModal(true)
+    // Disable body scroll
+    document.body.style.overflow = 'hidden'
   }
 
   const closePostModal = () => {
     setShowPostModal(false)
     setPostText('')
     removeAllImages()
+    // Re-enable body scroll
+    document.body.style.overflow = 'unset'
   }
 
   // Auto-resize textarea and adjust font size based on content length
@@ -1322,18 +1341,33 @@ export default function Dashboard() {
   }
 
   const handleAddComment = async () => {
-    if (!commentText.trim() || !user || !selectedPost) return
+    if (!commentText.trim() || !user || !selectedPost || commentLoading) return
+
+    // Store the comment text before clearing it
+    const currentCommentText = commentText.trim()
+    
+    // Clear the input immediately (social media behavior)
+    setCommentText('')
+    
+    // Set loading state
+    setCommentLoading(true)
 
     try {
       const postRef = doc(db, 'Posts', selectedPost.id)
       const newComment = {
         id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        text: commentText.trim(),
+        text: currentCommentText,
         userName: user.firstName + ' ' + (user.lastName || ''),
         userEmail: user.email,
         userId: user.uid,
         createdAt: new Date()
       }
+
+      // Update selectedPost immediately for optimistic UI
+      setSelectedPost(prev => ({
+        ...prev,
+        comments: [...(prev.comments || []), newComment]
+      }))
 
       await updateDoc(postRef, {
         comments: arrayUnion(newComment)
@@ -1369,21 +1403,24 @@ export default function Dashboard() {
           selectedPost.userId,
           user.uid,
           userName,
-          commentText.trim()
+          currentCommentText
         )
       } else {
         console.log('Not sending comment notification - same user or missing userId')
       }
 
-      // Update selectedPost immediately for real-time feel
-      setSelectedPost(prev => ({
-        ...prev,
-        comments: [...(prev.comments || []), newComment]
-      }))
-
-      setCommentText('')
     } catch (error) {
       console.error('Error adding comment:', error)
+      // If there's an error, restore the comment text
+      setCommentText(currentCommentText)
+      // Remove the optimistically added comment
+      setSelectedPost(prev => ({
+        ...prev,
+        comments: prev.comments.filter(comment => comment.text !== currentCommentText || comment.userId !== user.uid)
+      }))
+    } finally {
+      // Clear loading state
+      setCommentLoading(false)
     }
   }
   const toggleReplyInput = (targetId) => {
@@ -1851,66 +1888,263 @@ export default function Dashboard() {
     }
   }
 
-  const handleReportPost = async (postId) => {
+  const handleReportPost = (postId) => {
     const targetPost = posts.find(post => post.id === postId)
     if (!targetPost) {
       alert('Post not found')
       return
     }
 
-    const reason = prompt('Please select a reason for reporting this post:\n\n1. Spam\n2. Inappropriate Content\n3. Harassment\n4. False Information\n\nEnter the number (1-4):')
+    setReportedPost(targetPost)
+    setShowReportModal(true)
+    setShowDropdown(null)
+    // Prevent all scrolling when modal is open
+    document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.width = '100%'
+  }
+
+  // Handle ESC key to close report modal
+  useEffect(() => {
+    const handleEscapeKey = (event) => {
+      if (event.key === 'Escape' && showReportModal) {
+        closeReportModal()
+      }
+    }
+
+    if (showReportModal) {
+      document.addEventListener('keydown', handleEscapeKey)
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscapeKey)
+    }
+  }, [showReportModal])
+
+  const closeReportModal = () => {
+    setShowReportModal(false)
+    setReportType('')
+    setReportDescription('')
+    setReportedPost(null)
+    setReportEvidence(null)
+    setReportImageIndex(0)
+    // Re-enable body scroll
+    document.body.style.overflow = 'unset'
+    document.body.style.position = 'unset'
+    document.body.style.width = 'unset'
+  }
+
+  // Load user's reports
+  const loadUserReports = async () => {
+    if (!user) {
+      console.log('No user found, cannot load reports')
+      return
+    }
     
-    if (!reason || !['1', '2', '3', '4'].includes(reason)) {
-      setShowDropdown(null)
+    console.log('Loading reports for user:', user.uid)
+    setReportsLoading(true)
+    
+    try {
+      const { collection, query, where, orderBy, getDocs } = await import('firebase/firestore')
+      const reportsRef = collection(db, 'reports')
+      const q = query(
+        reportsRef,
+        where('reporterId', '==', user.uid),
+        orderBy('createdAt', 'desc')
+      )
+
+      console.log('Executing reports query...')
+      const snapshot = await getDocs(q)
+      console.log('Reports query result:', snapshot.size, 'documents found')
+      
+      const reportsData = snapshot.docs.map(doc => {
+        const data = doc.data()
+        console.log('Report document:', doc.id, data)
+        return {
+          id: doc.id,
+          ...data
+        }
+      })
+      
+      setUserReports(reportsData)
+      setReportsLoading(false)
+      console.log('Reports loaded successfully:', reportsData.length, 'reports')
+      
+    } catch (error) {
+      console.error('Error loading reports:', error)
+      setUserReports([])
+      setReportsLoading(false)
+    }
+  }
+
+  // Report modal carousel navigation functions
+  const nextReportImage = () => {
+    const images = getPostImages(reportedPost)
+    if (images.length > 1) {
+      setReportImageIndex((prev) => (prev + 1) % images.length)
+    }
+  }
+
+  const prevReportImage = () => {
+    const images = getPostImages(reportedPost)
+    if (images.length > 1) {
+      setReportImageIndex((prev) => (prev - 1 + images.length) % images.length)
+    }
+  }
+
+  // Helper function to get all images from a post (exact match with original post)
+  const getPostImages = (post) => {
+    if (!post) return []
+    
+    // Priority order: use the most comprehensive image source available
+    // 1. Check for multiple images array first (most common for multiple images)
+    if (post.imageUrls && Array.isArray(post.imageUrls) && post.imageUrls.length > 0) {
+      return post.imageUrls.filter(Boolean)
+    }
+    
+    // 2. Check for images array
+    if (post.images && Array.isArray(post.images) && post.images.length > 0) {
+      return post.images.filter(Boolean)
+    }
+    
+    // 3. Check for single image (only if no arrays exist)
+    if (post.imageUrl || post.image) {
+      return [post.imageUrl || post.image].filter(Boolean)
+    }
+    
+    return []
+  }
+
+  const handleReportSubmit = async () => {
+    if (!reportType) {
+      alert('Please select a report type')
       return
     }
 
-    const reasonMap = {
-      '1': { key: 'spam', desc: 'This post appears to be spam' },
-      '2': { key: 'inappropriate', desc: 'This post contains inappropriate content' },
-      '3': { key: 'harassment', desc: 'This post contains harassment or bullying' },
-      '4': { key: 'misinformation', desc: 'This post contains false or misleading information' }
-    }
-
-    const selectedReason = reasonMap[reason]
-
+    setReportLoading(true)
+    
     try {
       const currentUser = auth.currentUser
       if (!currentUser) {
         alert('You must be logged in to report posts')
+        setReportLoading(false)
         return
       }
 
+      // Generate unique report ID
+      const reportId = `report_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      
       const reportData = {
-        postId: postId,
-        reporterId: currentUser.uid,
-        reporterName: currentUser.displayName || 'Anonymous',
-        reporterEmail: currentUser.email || '',
-        reason: selectedReason.key,
-        description: selectedReason.desc,
-        postContent: targetPost.text || '',
-        postAuthor: targetPost.userName || targetPost.userEmail || 'Unknown'
+        // Auto-captured data from selected post
+        reportId: reportId,
+        reporterId: currentUser.uid, // Auto: Current user ID
+        reportedUserId: reportedPost.userId || reportedPost.userEmail, // Auto: Reported user ID
+        postId: reportedPost.id, // Auto: Post ID
+        postContent: reportedPost.text || reportedPost.content || '', // Auto: Post caption/text
+        postAuthor: reportedPost.userName || reportedPost.userEmail || 'Unknown', // Auto: Post author
+        postImageUrl: reportedPost.imageUrl || reportedPost.image || null, // Auto: Post photo if exists
+        postVideoUrl: reportedPost.videoUrl || reportedPost.video || null, // Auto: Post video if exists
+        postCreatedAt: reportedPost.createdAt || reportedPost.timestamp || null, // Auto: When post was created
+        
+        // User-provided data
+        reportType: reportType, // User selects this
+        description: reportDescription || '', // User types this (optional)
+        
+        // System data
+        timestamp: new Date().toISOString(),
+        reporterName: currentUser.displayName || currentUser.email || 'Anonymous',
+        reporterEmail: currentUser.email || ''
       }
 
-      const response = await fetch('http://192.168.1.15:3000/report-post', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reportData)
+      // Handle additional evidence upload if present (separate from post photo)
+      if (reportEvidence) {
+        // This is additional evidence the reporter uploads
+        reportData.additionalEvidenceFileName = reportEvidence.name
+        reportData.additionalEvidenceType = reportEvidence.type
+        reportData.additionalEvidenceSize = reportEvidence.size
+      }
+
+      // First, save report to Firebase
+      const { addDoc, collection } = await import('firebase/firestore')
+      const docRef = await addDoc(collection(db, 'reports'), {
+        ...reportData,
+        status: 'processing',
+        createdAt: new Date()
       })
 
-      const data = await response.json()
+      console.log('Report saved to Firebase with ID:', docRef.id)
+      console.log('📋 Auto-captured data:', {
+        userID: reportData.reporterId,
+        reportedUserID: reportData.reportedUserId,
+        postID: reportData.postId,
+        caption: reportData.postContent,
+        photo: reportData.postImageUrl,
+        video: reportData.postVideoUrl,
+        reportType: reportData.reportType,
+        description: reportData.description
+      })
 
-      if (data.success) {
-        alert('Report submitted successfully. Our AI system will review it shortly and take appropriate action if needed.')
+      // Send to n8n webhook
+      const webhookUrl = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL
+      
+      if (webhookUrl && webhookUrl !== 'https://your-n8n-instance.com/webhook/report-validation') {
+        try {
+          const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(reportData)
+          })
+
+          if (!response.ok) {
+            console.warn('n8n webhook failed, but report saved to Firebase')
+          }
+        } catch (webhookError) {
+          console.warn('n8n webhook error:', webhookError)
+          // Continue anyway since report is saved to Firebase
+        }
       } else {
-        alert('Error: ' + (data.error || 'Failed to submit report. Please try again.'))
+        console.log('No n8n webhook URL configured, report saved to Firebase only')
       }
+
+      // Show success message and add to notifications
+      alert('Report submitted successfully! Your report is being processed.')
+
+      // Add a notification to the user's notification list
+      try {
+        const { addDoc, collection } = await import('firebase/firestore')
+        await addDoc(collection(db, 'notifications'), {
+          userId: currentUser.uid,
+          type: 'report_submitted',
+          title: 'Report Submitted',
+          message: `Your report for ${reportType} has been submitted and is being processed.`,
+          read: false,
+          createdAt: new Date(),
+          reportId: reportId
+        })
+      } catch (notificationError) {
+        console.warn('Failed to create notification:', notificationError)
+      }
+
+      closeReportModal()
+      
     } catch (error) {
-      console.error('Error submitting post report:', error)
-      alert('Network error. Please check your connection and try again.')
+      console.error('Error reporting post:', error)
+      alert('Failed to submit report. Please try again.')
+    } finally {
+      setReportLoading(false)
     }
-    
-    setShowDropdown(null)
+  }
+
+  const handleEvidenceUpload = (event) => {
+    const file = event.target.files[0]
+    if (file) {
+      // Check file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('File size must be less than 10MB')
+        return
+      }
+      setReportEvidence(file)
+    }
   }
 
   const toggleDropdown = (postId) => {
@@ -1991,9 +2225,42 @@ export default function Dashboard() {
   }
 
 
+  // Format notification time
+  const formatNotificationTime = (timestamp) => {
+    if (!timestamp) return 'now'
+    
+    const now = new Date()
+    const notificationTime = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    const diffMs = now - notificationTime
+    const diffMins = Math.floor(diffMs / (1000 * 60))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    
+    if (diffMins < 1) return 'now'
+    if (diffMins < 60) return `${diffMins}m`
+    if (diffHours < 24) return `${diffHours}h`
+    if (diffDays === 1) return '1 day'
+    if (diffDays < 7) return `${diffDays} days`
+    return `${Math.floor(diffDays / 7)}w`
+  }
+
   const handleNotificationClick = async (notification) => {
     console.log('Notification clicked:', notification)
     setShowNotifications(false)
+    
+    // Mark notification as read if it's unread
+    if (!notification.read) {
+      try {
+        await markNotificationAsRead(notification.id)
+        // Update local state to reflect the change immediately
+        setNotifications(prev => prev.map(n => 
+          n.id === notification.id ? { ...n, read: true } : n
+        ))
+        setUnreadCount(prev => Math.max(0, prev - 1))
+      } catch (error) {
+        console.error('Error marking notification as read:', error)
+      }
+    }
     
     // Navigate based on notification type
     switch (notification.type) {
@@ -2054,6 +2321,7 @@ export default function Dashboard() {
 
   return (
     <div className={styles.container}>
+        
 
         {/* Mobile Search Overlay */}
         {showMobileSearch && (
@@ -2148,71 +2416,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Notifications Dropdown */}
-        {showNotifications && (
-          <div className={styles.notificationsDropdown}>
-            <div className={styles.notificationsHeader}>
-              <h3>Notifications</h3>
-              {unreadCount > 0 && (
-                <button 
-                  className={styles.markAllReadBtn}
-                  onClick={async () => {
-                    await markAllNotificationsAsRead(user.uid)
-                    setUnreadCount(0)
-                  }}
-                >
-                  Mark all as read
-                </button>
-              )}
-            </div>
-            <div className={styles.notificationsList}>
-              {notifications.length === 0 ? (
-                <div className={styles.noNotifications}>
-                  <p>No notifications yet</p>
-                </div>
-              ) : (
-                notifications.slice(0, 10).map((notification) => (
-                  <div 
-                    key={notification.id}
-                    className={`${styles.notificationItem} ${!notification.read ? styles.unread : ''}`}
-                    onClick={async () => {
-                      if (!notification.read) {
-                        await markNotificationAsRead(notification.id)
-                      }
-                      handleNotificationClick(notification)
-                    }}
-                  >
-                    <div className={styles.notificationAvatar}>
-                      {notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName[0].toUpperCase() : 'A'}
-                    </div>
-                    <div className={styles.notificationContent}>
-                      <div className={styles.notificationHeader}>
-                        <span className={styles.notificationUserName}>
-                          {notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName : 'AgriLink User'}
-                        </span>
-                        <span className={styles.notificationAction}>
-                          {notification.actionText || (notification.actionType === 'like' ? 'liked your post' : 'commented on your post')}
-                        </span>
-                      </div>
-                      {notification.actionType === 'comment' && notification.commentPreview && (
-                        <p className={styles.notificationCommentPreview}>
-                          "{notification.commentPreview}..."
-                        </p>
-                      )}
-                      <span className={styles.notificationTime}>
-                        {notification.createdAt ? new Date(notification.createdAt.toDate()).toLocaleString() : 'Just now'}
-                      </span>
-                    </div>
-                    <div className={styles.notificationIcon}>
-                      {notification.actionType === 'like' ? '❤️' : '💬'}
-                    </div>
-                    {!notification.read && <div className={styles.unreadDot}></div>}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
 
       <div className={styles.mainLayout}>
         {/* Left Container - Top Layer */}
@@ -2242,7 +2445,10 @@ export default function Dashboard() {
                 <span className={styles.leftMenuText}>Search</span>
               </div>
               
-              <div className={styles.leftMenuItem} onClick={() => router.push('/listings')}>
+              <div className={`${styles.leftMenuItem} ${activeMenuItem === 'listings' ? styles.active : ''}`} onClick={() => {
+                setActiveMenuItem('listings')
+                console.log('Listings clicked')
+              }}>
                 <img src="/assets/icons/listing.png" alt="Listings" className={styles.leftMenuIcon} />
                 <span className={styles.leftMenuText}>Listings</span>
               </div>
@@ -2255,14 +2461,7 @@ export default function Dashboard() {
                 <span className={styles.leftMenuText}>Transaction History</span>
               </div>
               
-              <div className={styles.leftMenuItem} onClick={() => {
-                // Handle notifications
-                console.log('Notifications clicked')
-                setShowNotifications(!showNotifications)
-              }}>
-                <img src="/assets/icons/bell.png" alt="Notifications" className={styles.leftMenuIcon} />
-                <span className={styles.leftMenuText}>Notifications</span>
-              </div>
+              
               
               <div className={styles.leftMenuItem} onClick={() => {
                 // Navigate to profile page when implemented
@@ -2306,11 +2505,13 @@ export default function Dashboard() {
                     </div>
                     
                     <div className={styles.menuDropdownItem} onClick={() => {
-                      console.log('Reports clicked')
+                      console.log('My Reports clicked')
+                      setActiveMenuItem('reports')
+                      loadUserReports()
                       setShowMenuDropdown(false)
                     }}>
-                      <img src="/assets/icons/triangle-warning.png" alt="Reports" className={styles.menuDropdownIcon} />
-                      <span>Reports</span>
+                      <img src="/assets/icons/triangle-warning.png" alt="My Reports" className={styles.menuDropdownIcon} />
+                      <span>My Reports</span>
                     </div>
                     
                     <div className={styles.menuDropdownItem} onClick={() => {
@@ -2348,11 +2549,22 @@ export default function Dashboard() {
                 setSelectedChat(null)
                 setChatMessages([])
               } else {
+                // Close notifications if open, then open chat
+                if (showNotifications) {
+                  setShowNotifications(false)
+                  document.body.style.overflow = 'auto'
+                }
                 // Open chat and ensure we're at conversations list
                 setShowChat(true)
                 setSelectedChat(null)
                 setChatMessages([])
               }
+            }}
+            onMouseEnter={() => {
+              document.body.style.overflow = 'hidden'
+            }}
+            onMouseLeave={() => {
+              document.body.style.overflow = 'auto'
             }}
           >
             <img src="/assets/icons/chat.png" alt="Messages" className={styles.messageIcon} />
@@ -2557,24 +2769,280 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Main Feed */}
-        <main className={styles.mainFeed}>
-          {/* Post Composer - Clickable */}
-          <div className={styles.postComposer}>
-            <div className={styles.postPrompt}>
-              <div className={styles.userAvatar}>
-                {user?.firstName ? user.firstName[0].toUpperCase() : 'U'}
+        {/* Floating Notifications Button */}
+        <div className={styles.floatingNotifications}>
+          <div 
+            className={styles.notificationsButton}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (showNotifications) {
+                // Close notifications and restore scrolling
+                setShowNotifications(false)
+                document.body.style.overflow = 'auto'
+              } else {
+                // Close chat if open, then open notifications
+                if (showChat) {
+                  setShowChat(false)
+                  setSelectedChat(null)
+                  setChatMessages([])
+                }
+                setShowNotifications(true)
+              }
+            }}
+            onMouseEnter={() => {
+              document.body.style.overflow = 'hidden'
+            }}
+            onMouseLeave={() => {
+              document.body.style.overflow = 'auto'
+            }}
+          >
+            <img src="/assets/icons/bell.png" alt="Notifications" className={styles.notificationIcon} />
+            {unreadCount > 0 && (
+              <span className={styles.notificationBadge}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </div>
+          
+          {/* Notifications Dropdown */}
+          {showNotifications && (
+            <div 
+              className={styles.notificationsDropdown}
+              onMouseEnter={() => {
+                document.body.style.overflow = 'hidden'
+              }}
+              onMouseLeave={() => {
+                document.body.style.overflow = 'auto'
+              }}
+            >
+              <div className={styles.notificationsHeader}>
+                <h3>Notifications</h3>
+                {unreadCount > 0 && (
+                  <button 
+                    className={styles.markAllReadBtn}
+                    onClick={async () => {
+                      await markAllNotificationsAsRead(user.uid)
+                      setUnreadCount(0)
+                    }}
+                  >
+                    Mark all as read
+                  </button>
+                )}
               </div>
-              <div className={styles.clickableTextBox} onClick={openPostModal}>
-                What's on your mind?
+              <div className={styles.notificationsList}>
+                {notifications.length === 0 ? (
+                  <div className={styles.noNotifications}>
+                    <p>No notifications yet</p>
+                  </div>
+                ) : (
+                  notifications
+                    .sort((a, b) => {
+                      // Sort by createdAt timestamp, newest first
+                      const timeA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0)
+                      const timeB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0)
+                      return timeB - timeA
+                    })
+                    .slice(0, 10)
+                    .map((notification) => (
+                    <div 
+                      key={notification.id}
+                      className={`${styles.notificationItem} ${!notification.read ? styles.unread : ''}`}
+                      onClick={() => handleNotificationClick(notification)}
+                    >
+                      <div className={styles.notificationAvatar}>
+                        {notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName[0].toUpperCase() : 'A'}
+                      </div>
+                      <div className={styles.notificationContent}>
+                        <div className={styles.notificationMainText}>
+                          <span>
+                            {notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName : 'AgriLink User'} {notification.actionText || (notification.actionType === 'like' ? 'liked your post' : 'commented on your post')}
+                          </span>
+                        </div>
+                        <div className={styles.notificationTimeLine}>
+                          <span className={styles.notificationTime}>
+                            {formatNotificationTime(notification.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className={styles.notificationIcon}>
+                        {notification.actionType === 'like' ? (
+                          <img src="/assets/icons/red-heart.png" alt="Like" style={{width: '28px', height: '28px', pointerEvents: 'none'}} />
+                        ) : (
+                          <img src="/assets/icons/comment-all-dots.png" alt="Comment" style={{width: '28px', height: '28px', pointerEvents: 'none'}} />
+                        )}
+                      </div>
+                      {!notification.read && <div className={styles.unreadDot}></div>}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-          </div>
+          )}
+        </div>
+
+        {/* Main Feed */}
+        <main className={styles.mainFeed}>
+          {/* Post Creation Prompt - Only show when not viewing reports or listings */}
+          {activeMenuItem !== 'reports' && activeMenuItem !== 'listings' && (
+            <div className={styles.postPromptContainer}>
+              <div className={styles.postPrompt}>
+                <div className={styles.userAvatar}>
+                  {user?.firstName ? user.firstName[0].toUpperCase() : 'U'}
+                </div>
+                <div className={styles.clickableTextBox} onClick={openPostModal}>
+                  What's on your mind?
+                </div>
+              </div>
+            </div>
+          )}
 
 
-          {/* News Feed */}
+          {/* News Feed / Reports / Listings */}
           <div className={styles.newsFeed}>
-            {posts.map((post) => (
+            {activeMenuItem === 'listings' ? (
+              // Embed Listings Page Content
+              <div style={{ width: '100%', height: '100%' }}>
+                <iframe 
+                  src="/listings" 
+                  style={{
+                    width: '100%',
+                    height: '100vh',
+                    border: 'none',
+                    borderRadius: '8px'
+                  }}
+                  title="Listings"
+                />
+              </div>
+            ) : activeMenuItem === 'reports' ? (
+              // Reports Content
+              <div className={styles.reportsContent}>
+                <div className={styles.reportsHeader}>
+                  <h2>My Reports</h2>
+                  <p>Track the status of your submitted reports</p>
+                </div>
+                
+                <div className={styles.reportsFilters}>
+                  <button 
+                    className={`${styles.filterBtn} ${reportsFilter === 'all' ? styles.active : ''}`}
+                    onClick={() => setReportsFilter('all')}
+                  >
+                    All ({userReports.length})
+                  </button>
+                  <button 
+                    className={`${styles.filterBtn} ${reportsFilter === 'processing' ? styles.active : ''}`}
+                    onClick={() => setReportsFilter('processing')}
+                  >
+                    Processing ({userReports.filter(r => r.status === 'processing').length})
+                  </button>
+                  <button 
+                    className={`${styles.filterBtn} ${reportsFilter === 'valid' ? styles.active : ''}`}
+                    onClick={() => setReportsFilter('valid')}
+                  >
+                    Valid ({userReports.filter(r => r.status === 'valid').length})
+                  </button>
+                  <button 
+                    className={`${styles.filterBtn} ${reportsFilter === 'invalid' ? styles.active : ''}`}
+                    onClick={() => setReportsFilter('invalid')}
+                  >
+                    Invalid ({userReports.filter(r => r.status === 'invalid').length})
+                  </button>
+                </div>
+
+                {reportsLoading ? (
+                  <div className={styles.reportsLoading}>
+                    <div className={styles.loadingSpinner}></div>
+                    <p>Loading your reports...</p>
+                  </div>
+                ) : userReports.length === 0 ? (
+                  <div className={styles.emptyReports}>
+                    <div className={styles.emptyIcon}>📋</div>
+                    <h3>No Reports Yet</h3>
+                    <p>You haven't submitted any reports yet. When you report a post, it will appear here with its status and details.</p>
+                  </div>
+                ) : (
+                  <div className={styles.reportsList}>
+                    {userReports.filter(report => reportsFilter === 'all' || report.status === reportsFilter).map(report => (
+                      <div key={report.id} className={styles.reportCard}>
+                        <div className={styles.reportHeader}>
+                          <span className={styles.reportType}>{report.reportType}</span>
+                          <span className={`${styles.reportStatus} ${styles[report.status]}`}>
+                            {report.status}
+                          </span>
+                        </div>
+                        <div className={styles.reportContent}>
+                          {/* Report Details */}
+                          <div className={styles.reportDetails}>
+                            <p><strong>Report ID:</strong> {report.id}</p>
+                            <p><strong>Submitted:</strong> {new Date(report.createdAt?.seconds * 1000 || report.createdAt).toLocaleString()}</p>
+                            {report.processedAt && (
+                              <p><strong>Processed:</strong> {new Date(report.processedAt?.seconds * 1000 || report.processedAt).toLocaleString()}</p>
+                            )}
+                          </div>
+
+                          {/* Reported Post Content */}
+                          <div className={styles.reportedPost}>
+                            <h4>Reported Post:</h4>
+                            <div className={styles.postPreview}>
+                              <div className={styles.postAuthor}>
+                                <strong>By:</strong> {report.reportedUserName || 'Unknown User'}
+                              </div>
+                              <div className={styles.postContent}>
+                                {report.postContent || 'No text content'}
+                              </div>
+                              {report.postImageUrl && (
+                                <div className={styles.postImage}>
+                                  <img src={report.postImageUrl} alt="Reported post" />
+                                </div>
+                              )}
+                              {report.postVideoUrl && (
+                                <div className={styles.postVideo}>
+                                  <video controls>
+                                    <source src={report.postVideoUrl} type="video/mp4" />
+                                    Your browser does not support the video tag.
+                                  </video>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* User's Report Description */}
+                          {report.description && (
+                            <div className={styles.userDescription}>
+                              <h4>Your Report:</h4>
+                              <p>{report.description}</p>
+                            </div>
+                          )}
+
+                          {/* AI Decision */}
+                          {report.aiDecision && (
+                            <div className={styles.aiDecision}>
+                              <h4>AI Analysis:</h4>
+                              <p><strong>Decision:</strong> {report.aiDecision.decision}</p>
+                              <p><strong>Reasoning:</strong> {report.aiDecision.reasoning}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {userReports.filter(report => reportsFilter === 'all' || report.status === reportsFilter).length === 0 && (
+                      <div className={styles.emptyReports}>
+                        <div className={styles.emptyIcon}>🔍</div>
+                        <h3>No {reportsFilter === 'all' ? '' : reportsFilter} Reports Found</h3>
+                        <p>
+                          {reportsFilter === 'all' 
+                            ? "You haven't submitted any reports yet."
+                            : `No reports with status "${reportsFilter}" found. Try a different filter.`
+                          }
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Regular Posts Feed
+              posts.map((post) => (
               <div key={post.id} className={styles.post}>
                 <div className={styles.postHeader}>
                   <div className={styles.postAvatar}>{post.userName ? post.userName[0].toUpperCase() : 'U'}</div>
@@ -2717,7 +3185,7 @@ export default function Dashboard() {
                       alt="Like" 
                       className={styles.actionIcon} 
                     />
-                    Like
+                    {hasUserLiked(post) ? 'Liked' : 'Like'}
                   </button>
                   <button 
                     className={styles.actionBtn}
@@ -2729,7 +3197,8 @@ export default function Dashboard() {
                 </div>
                 
               </div>
-            ))}
+              ))
+            )}
           </div>
         </main>
 
@@ -2936,7 +3405,7 @@ export default function Dashboard() {
                     alt="Like" 
                     className={styles.actionIcon} 
                   />
-                  Like
+                  {hasUserLiked(selectedPost) ? 'Liked' : 'Like'}
                 </button>
               </div>
               {/* Comments List */}
@@ -3179,7 +3648,7 @@ export default function Dashboard() {
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
                     onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === 'Enter' && !commentLoading) {
                         handleAddComment()
                       }
                     }}
@@ -3187,10 +3656,10 @@ export default function Dashboard() {
                   />
                   <button 
                     onClick={handleAddComment}
-                    disabled={!commentText.trim()}
+                    disabled={!commentText.trim() || commentLoading}
                     className={styles.commentSubmitBtn}
                   >
-                    Post
+                    {commentLoading ? 'Posting...' : 'Post'}
                   </button>
                 </div>
               </div>
@@ -3251,6 +3720,138 @@ export default function Dashboard() {
           </div>
         </div>,
         document.querySelector(`.${styles.chatPopup}`)
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && reportedPost && (
+        <div className={styles.modalOverlay} onClick={closeReportModal}>
+          <div 
+            className={styles.reportModal} 
+            onClick={(e) => e.stopPropagation()}
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <h3>Report {reportedPost.userName || reportedPost.userEmail || 'User'}'s post</h3>
+              <button onClick={closeReportModal} className={styles.closeModalBtn}>×</button>
+            </div>
+            
+            <div className={styles.modalContent}>
+              {/* Simple Post Preview */}
+              <div className={styles.reportPostPreview}>
+                <div className={styles.simplePreviewContent}>
+                  {/* Caption */}
+                  <div className={styles.simpleCaptionSection}>
+                    <p>{reportedPost.text || reportedPost.content || 'No caption'}</p>
+                  </div>
+                  
+                  {/* Photos - Carousel if multiple */}
+                  {(() => {
+                    const images = getPostImages(reportedPost)
+                    if (images.length === 0) return null
+
+                    if (images.length === 1) {
+                      return (
+                        <div className={styles.simpleMediaSection}>
+                          <img 
+                            src={images[0]} 
+                            alt="Reported post" 
+                            className={styles.simplePostImage}
+                          />
+                        </div>
+                      )
+                    }
+
+                    // Multiple images - show carousel
+                    return (
+                      <div className={styles.reportCarouselContainer}>
+                        <div className={styles.reportCarousel}>
+                          <img 
+                            src={images[reportImageIndex]} 
+                            alt={`Reported post ${reportImageIndex + 1}`} 
+                            className={styles.simplePostImage}
+                          />
+                          
+                          {/* Navigation arrows */}
+                          <button 
+                            className={styles.carouselBtnPrev}
+                            onClick={prevReportImage}
+                            disabled={images.length <= 1}
+                          >
+                            ‹
+                          </button>
+                          <button 
+                            className={styles.carouselBtnNext}
+                            onClick={nextReportImage}
+                            disabled={images.length <= 1}
+                          >
+                            ›
+                          </button>
+                          
+                          {/* Image counter */}
+                          <div className={styles.reportImageCounter}>
+                            {reportImageIndex + 1} / {images.length}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+
+              <div className={styles.modalBody}>
+                {/* Report Type Selection */}
+                <div className={styles.reportField}>
+                  <label className={styles.reportLabel}>Report Type *</label>
+                  <select 
+                    value={reportType} 
+                    onChange={(e) => setReportType(e.target.value)}
+                    className={styles.reportSelect}
+                  >
+                    <option value="">Select a reason</option>
+                    <option value="spam">Spam</option>
+                    <option value="fraud">Fraud</option>
+                    <option value="misinformation">Misinformation</option>
+                    <option value="inappropriate">Inappropriate Content</option>
+                    <option value="harassment">Harassment</option>
+                    <option value="violence">Violence or Threats</option>
+                    <option value="copyright">Copyright Violation</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                {/* Description */}
+                <div className={styles.reportField}>
+                  <label className={styles.reportLabel}>Additional Details (Optional)</label>
+                  <textarea
+                    value={reportDescription}
+                    onChange={(e) => setReportDescription(e.target.value)}
+                    placeholder="Provide additional context if needed..."
+                    className={styles.reportTextarea}
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.modalFooter}>
+              <button
+                onClick={closeReportModal}
+                disabled={reportLoading}
+                className={styles.cancelBtn}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReportSubmit}
+                disabled={!reportType || reportLoading}
+                className={styles.submitReportBtn}
+              >
+                {reportLoading ? 'Submitting...' : 'Submit Report'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -1,6 +1,6 @@
 // UI Component - Loading Spinner
 import React from 'react'
-import styles from './LoadingSpinner.module.css'
+import styles from '../../../styles/modules/LoadingSpinner.module.css'
 
 const LoadingSpinner = ({ 
   size = 'medium', 

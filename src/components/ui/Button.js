@@ -1,6 +1,6 @@
 // UI Component - Reusable Button
 import React from 'react'
-import styles from './Button.module.css'
+import styles from '../../../styles/modules/Button.module.css'
 
 const Button = ({ 
   children, 

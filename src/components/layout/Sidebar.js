@@ -1,7 +1,7 @@
 // Layout Component - Left Navigation Sidebar
 import React from 'react'
 import { useRouter } from 'next/router'
-import styles from './Sidebar.module.css'
+import styles from '../../../styles/modules/Sidebar.module.css'
 
 const Sidebar = ({ activeMenuItem, setActiveMenuItem, user, onMenuItemClick }) => {
   const router = useRouter()

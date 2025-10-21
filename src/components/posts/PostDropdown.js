@@ -1,7 +1,7 @@
 // Post Component - Dropdown Menu for Post Options
 import React, { useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import styles from './PostDropdown.module.css'
+import styles from '../../../styles/modules/PostDropdown.module.css'
 
 const PostDropdown = ({ 
   post, 

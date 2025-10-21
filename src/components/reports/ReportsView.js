@@ -5,7 +5,7 @@ import { formatDate } from '../../utils/dateUtils'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import ReportCard from './ReportCard'
 import ReportFilters from './ReportFilters'
-import styles from './ReportsView.module.css'
+import styles from '../../../styles/modules/ReportsView.module.css'
 
 const ReportsView = ({ user }) => {
   const { reports, loading, loadReports, getFilteredReports, getReportCounts } = useReports(user)

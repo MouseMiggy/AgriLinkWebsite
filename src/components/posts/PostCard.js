@@ -3,7 +3,7 @@ import React, { useState } from 'react'
 import PostDropdown from './PostDropdown'
 import PostActions from './PostActions'
 import PostCarousel from './PostCarousel'
-import styles from './PostCard.module.css'
+import styles from '../../../styles/modules/PostCard.module.css'
 
 const PostCard = ({ 
   post, 

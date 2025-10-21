@@ -1,7 +1,7 @@
 // UI Component - Reusable Modal
 import React, { useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import styles from './Modal.module.css'
+import styles from '../../../styles/modules/Modal.module.css'
 
 const Modal = ({ 
   isOpen, 

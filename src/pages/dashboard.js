@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/router'
 import Listings from './listings'
+import RequestListingHistory from './request-listing-history'
+import ListingHistory from './listing-history'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { 
@@ -33,6 +35,12 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [editingPost, setEditingPost] = useState(null)
   const [editText, setEditText] = useState('')
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editImageFiles, setEditImageFiles] = useState([])
+  const [editImagePreviews, setEditImagePreviews] = useState([])
+  const [editLoading, setEditLoading] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [postToDelete, setPostToDelete] = useState(null)
   const [showDropdown, setShowDropdown] = useState(null)
   const [conversations, setConversations] = useState([])
   const [imageFiles, setImageFiles] = useState([])
@@ -402,6 +410,9 @@ export default function Dashboard() {
         if (showMessageMenu) {
           setShowMessageMenu(null)
         }
+        if (showEditModal) {
+          closeEditModal()
+        }
       }
     }
 
@@ -485,7 +496,7 @@ export default function Dashboard() {
       document.removeEventListener('click', handleClickOutside)
       document.removeEventListener('scroll', handleScroll, true)
     }
-  }, [showCommentModal, showDropdown, showNotifications, showChat, showProfileMenu, showMobileSearch, showCommentMenu, editingComment, showMenuDropdown, showMessageMenu, menuButtonRef])
+  }, [showCommentModal, showDropdown, showNotifications, showChat, showProfileMenu, showMobileSearch, showCommentMenu, editingComment, showMenuDropdown, showMessageMenu, menuButtonRef, showEditModal])
 
   // Update selectedPost when posts change (for real-time comments)
   useEffect(() => {
@@ -555,16 +566,27 @@ export default function Dashboard() {
         console.log('🔐 User authenticated:', currentUser.uid)
         setUser(currentUser)
         
-        // Get user role from Firestore
+        // Get user role and data from Firestore
         try {
           const userDoc = await getDoc(doc(db, 'Users', currentUser.uid))
           if (userDoc.exists()) {
             const userData = userDoc.data()
             setUserRole(userData.role)
-            console.log('👤 User role:', userData.role)
+            
+            // Merge Firebase Auth user with Firestore user data
+            setUser({
+              ...currentUser,
+              firstName: userData.firstName || currentUser.displayName?.split(' ')[0] || 'User',
+              lastName: userData.lastName || currentUser.displayName?.split(' ')[1] || '',
+              email: currentUser.email,
+              uid: currentUser.uid,
+              role: userData.role
+            })
+            console.log('👤 User loaded:', userData.firstName, userData.lastName, 'Role:', userData.role)
           } else {
             console.log('User document does not exist')
             setUser({
+              ...currentUser,
               firstName: currentUser.displayName?.split(' ')[0] || 'User',
               lastName: currentUser.displayName?.split(' ')[1] || '',
               email: currentUser.email,
@@ -575,6 +597,7 @@ export default function Dashboard() {
         } catch (error) {
           console.error('Error loading user data:', error)
           setUser({
+            ...currentUser,
             firstName: currentUser.displayName?.split(' ')[0] || 'User',
             lastName: currentUser.displayName?.split(' ')[1] || '',
             email: currentUser.email,
@@ -933,7 +956,7 @@ export default function Dashboard() {
       const messageData = {
         text: newMessage.trim(),
         senderId: user.uid,
-        senderName: `${user.firstName} ${user.lastName}`.trim(),
+        senderName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
         createdAt: serverTimestamp(),
         read: false
       }
@@ -951,6 +974,66 @@ export default function Dashboard() {
       setNewMessage('')
     } catch (error) {
       console.error('Error sending message:', error)
+    }
+  }
+
+  // Handle listing request response (Accept/Decline)
+  const handleRequestResponse = async (message, status) => {
+    if (!user || !db || !message.listingId) return
+
+    try {
+      // Update the message status
+      const chatId = selectedChat.id
+      await updateDoc(doc(db, 'chats', chatId, 'messages', message.id), {
+        requestStatus: status
+      })
+
+      // Update the listing request in the database
+      const requestsQuery = query(
+        collection(db, 'listing_requests'),
+        where('listingId', '==', message.listingId),
+        where('requesterId', '==', message.senderId)
+      )
+      
+      const requestSnapshot = await getDocs(requestsQuery)
+      if (!requestSnapshot.empty) {
+        const requestDoc = requestSnapshot.docs[0]
+        await updateDoc(doc(db, 'listing_requests', requestDoc.id), {
+          status: status,
+          respondedAt: serverTimestamp(),
+          respondedBy: user.uid
+        })
+      }
+
+      // Send a response message
+      const responseMessage = status === 'approved' 
+        ? `I have accepted your request for the listing: ${message.text.split(': ')[1] || 'the listing'}`
+        : `I have declined your request for the listing: ${message.text.split(': ')[1] || 'the listing'}`
+
+      const responseData = {
+        text: responseMessage,
+        senderId: user.uid,
+        senderName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
+        createdAt: serverTimestamp(),
+        read: false,
+        isRequestResponse: true,
+        originalRequestId: message.id,
+        requestStatus: status
+      }
+
+      await addDoc(collection(db, 'chats', chatId, 'messages'), responseData)
+
+      // Update chat's last message
+      await updateDoc(doc(db, 'chats', chatId), {
+        lastMessage: responseMessage,
+        lastMessageTime: serverTimestamp(),
+        lastMessageSenderId: user.uid
+      })
+
+      alert(`Request ${status} successfully!`)
+    } catch (error) {
+      console.error('Error handling request response:', error)
+      alert('Failed to process request. Please try again.')
     }
   }
 
@@ -1186,7 +1269,7 @@ export default function Dashboard() {
       const postData = {
         text: postText.trim(),
         userId: user.uid,
-        userName: `${user.firstName} ${user.lastName}`.trim(),
+        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
         userEmail: user.email,
         imageUrls: imageUrls,
         imageUrl: imageUrls.length > 0 ? imageUrls[0] : null, // Keep backward compatibility
@@ -1358,7 +1441,7 @@ export default function Dashboard() {
       const newComment = {
         id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         text: currentCommentText,
-        userName: user.firstName + ' ' + (user.lastName || ''),
+        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
         userEmail: user.email,
         userId: user.uid,
         createdAt: new Date()
@@ -1482,7 +1565,7 @@ export default function Dashboard() {
       const newReply = {
         id: `reply-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         text: processedText,
-        userName: user.firstName + ' ' + (user.lastName || ''),
+        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
         userEmail: user.email,
         userId: user.uid,
         createdAt: new Date(),
@@ -1561,38 +1644,163 @@ export default function Dashboard() {
   }
 
   const handleEditPost = (post) => {
-    setEditingPost(post.id)
+    setEditingPost(post)
     setEditText(post.text)
+    
+    // Initialize existing images
+    const existingImages = post.imageUrls || (post.imageUrl ? [post.imageUrl] : [])
+    setEditImagePreviews(existingImages)
+    setEditImageFiles([]) // Start with no new files
+    
+    setShowEditModal(true)
     setShowDropdown(null)
   }
 
-  const handleSaveEdit = async (postId) => {
-    if (!editText || !db) return
+  const handleSaveEdit = async () => {
+    if ((!editText.trim() && editImagePreviews.length === 0) || !db || !editingPost) return
+
+    setEditLoading(true)
 
     try {
-      const postRef = doc(db, 'Posts', postId)
-      await updateDoc(postRef, {
-        text: editText,
-        editedAt: serverTimestamp()
+      // Upload new images to Cloudinary
+      const newImageUrls = []
+      if (editImageFiles.length > 0) {
+        console.log('Uploading new images for edit...')
+        for (const file of editImageFiles) {
+          const imageUrl = await uploadImageToCloudinary(file)
+          newImageUrls.push(imageUrl)
+          console.log('New image uploaded successfully:', imageUrl)
+        }
+      }
+
+      // Combine existing images (that weren't removed) with new uploaded images
+      const existingImages = editingPost.imageUrls || (editingPost.imageUrl ? [editingPost.imageUrl] : [])
+      const finalImageUrls = []
+      
+      // Add existing images that are still in previews
+      editImagePreviews.forEach(preview => {
+        if (existingImages.includes(preview)) {
+          finalImageUrls.push(preview)
+        }
       })
+      
+      // Add new uploaded images
+      finalImageUrls.push(...newImageUrls)
+
+      console.log('Updating post with new data...')
+      
+      const postRef = doc(db, 'Posts', editingPost.id)
+      const updateData = {
+        text: editText.trim(),
+        editedAt: serverTimestamp()
+      }
+
+      // Update image fields
+      if (finalImageUrls.length > 0) {
+        updateData.imageUrls = finalImageUrls
+        updateData.imageUrl = finalImageUrls[0] // Keep backward compatibility
+      } else {
+        // Remove image fields if no images
+        updateData.imageUrls = []
+        updateData.imageUrl = null
+      }
+
+      await updateDoc(postRef, updateData)
+      
       setEditingPost(null)
       setEditText('')
+      setEditImageFiles([])
+      setEditImagePreviews([])
+      setShowEditModal(false)
+      setEditLoading(false)
     } catch (error) {
       console.error('Error updating post:', error)
       alert('Failed to update post. Please try again.')
+      setEditLoading(false)
     }
   }
 
-  const handleDeletePost = async (postId) => {
-    if (!confirm('Are you sure you want to delete this post?') || !db) return
+  const closeEditModal = () => {
+    setShowEditModal(false)
+    setEditingPost(null)
+    setEditText('')
+    setEditImageFiles([])
+    setEditImagePreviews([])
+    setEditLoading(false)
+  }
+
+  const handleEditImageSelect = (e) => {
+    const files = Array.from(e.target.files)
+    if (files.length === 0) return
+
+    // Create preview URLs for new files
+    const newPreviews = files.map(file => URL.createObjectURL(file))
+    
+    // Add new files and previews to existing ones
+    setEditImageFiles(prev => [...prev, ...files])
+    setEditImagePreviews(prev => [...prev, ...newPreviews])
+  }
+
+  const removeEditImage = (index) => {
+    setEditImagePreviews(prev => {
+      const newPreviews = [...prev]
+      // If it's a blob URL (new file), revoke it to free memory
+      if (newPreviews[index].startsWith('blob:')) {
+        URL.revokeObjectURL(newPreviews[index])
+      }
+      newPreviews.splice(index, 1)
+      return newPreviews
+    })
+    
+    // Remove from files array if it's a new file
+    setEditImageFiles(prev => {
+      const existingImagesCount = (editingPost?.imageUrls || (editingPost?.imageUrl ? [editingPost.imageUrl] : [])).length
+      if (index >= existingImagesCount) {
+        const newFiles = [...prev]
+        newFiles.splice(index - existingImagesCount, 1)
+        return newFiles
+      }
+      return prev
+    })
+  }
+
+  const handleDeletePost = (postId) => {
+    setPostToDelete(postId)
+    setShowDeleteModal(true)
+    setShowDropdown(null)
+    // Prevent all scrolling
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.width = '100%'
+  }
+
+  const confirmDeletePost = async () => {
+    if (!postToDelete || !db) return
 
     try {
-      await deleteDoc(doc(db, 'Posts', postId))
-      setShowDropdown(null)
+      await deleteDoc(doc(db, 'Posts', postToDelete))
+      setShowDeleteModal(false)
+      setPostToDelete(null)
+      // Restore all scrolling
+      document.body.style.overflow = 'unset'
+      document.documentElement.style.overflow = 'unset'
+      document.body.style.position = 'unset'
+      document.body.style.width = 'unset'
     } catch (error) {
       console.error('Error deleting post:', error)
       alert('Failed to delete post. Please try again.')
     }
+  }
+
+  const cancelDeletePost = () => {
+    setShowDeleteModal(false)
+    setPostToDelete(null)
+    // Restore all scrolling
+    document.body.style.overflow = 'unset'
+    document.documentElement.style.overflow = 'unset'
+    document.body.style.position = 'unset'
+    document.body.style.width = 'unset'
   }
 
   // Comment management functions
@@ -2454,12 +2662,14 @@ export default function Dashboard() {
                 <span className={styles.leftMenuText}>Listings</span>
               </div>
               
-              <div className={styles.leftMenuItem} onClick={() => {
-                // Navigate to listing history when implemented
+              <div className={`${styles.leftMenuItem} ${activeMenuItem === 'listing-history' ? styles.active : ''}`} onClick={() => {
+                setActiveMenuItem('listing-history')
                 console.log('Listing History clicked')
               }}>
-                <img src="/assets/icons/time-past.png" alt="Listing History" className={styles.leftMenuIcon} />
-                <span className={styles.leftMenuText}>Listing History</span>
+                <img src={activeMenuItem === 'listing-history' ? "/assets/icons/time-past-white.png" : "/assets/icons/time-past.png"} alt="Listing History" className={styles.leftMenuIcon} />
+                <span className={styles.leftMenuText}>
+                  {userRole === 'crop_farmer' ? 'Request Listing History' : 'Listing History'}
+                </span>
               </div>
               
               
@@ -2632,6 +2842,33 @@ export default function Dashboard() {
                         <div className={styles.messageContent}>
                           <p className={styles.messageText}>{message.text}</p>
                           
+                          {/* Accept/Decline buttons for listing requests */}
+                          {message.isListingRequest && message.senderId !== user?.uid && message.requestStatus === 'pending' && (
+                            <div className={styles.requestActions}>
+                              <button 
+                                className={styles.acceptButton}
+                                onClick={() => handleRequestResponse(message, 'approved')}
+                              >
+                                Accept
+                              </button>
+                              <button 
+                                className={styles.declineButton}
+                                onClick={() => handleRequestResponse(message, 'declined')}
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          )}
+                          
+                          {/* Status indicator for processed requests */}
+                          {message.isListingRequest && message.requestStatus && message.requestStatus !== 'pending' && (
+                            <div className={styles.requestStatus}>
+                              <span className={`${styles.statusBadge} ${styles[message.requestStatus]}`}>
+                                {message.requestStatus.charAt(0).toUpperCase() + message.requestStatus.slice(1)}
+                              </span>
+                            </div>
+                          )}
+                          
                           {/* 3-dots menu for received messages only */}
                           {message.senderId !== user?.uid && (
                             <div className="message-menu-container">
@@ -2684,27 +2921,54 @@ export default function Dashboard() {
                     className={styles.chatInputContainer}
                     onWheel={(e) => e.stopPropagation()}
                   >
-                    <input
-                      type="text"
-                      placeholder="Type a message..."
-                      className={styles.chatInput}
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
-                          sendMessage()
-                        }
-                      }}
-                      onWheel={(e) => e.stopPropagation()}
-                    />
-                    <button 
-                      className={styles.sendButton}
-                      onClick={sendMessage}
-                      disabled={!newMessage.trim()}
-                      onWheel={(e) => e.stopPropagation()}
-                    >
-                      Send
-                    </button>
+                    {(() => {
+                      // Check if there's an approved request between these users
+                      const hasApprovedRequest = chatMessages.some(msg => 
+                        msg.isListingRequest && msg.requestStatus === 'approved'
+                      )
+                      
+                      // Check if current user is the listing owner (can always chat)
+                      const isListingOwner = userRole === 'livestock_owner'
+                      
+                      // Allow chat if: user is livestock owner OR there's an approved request
+                      const canChat = isListingOwner || hasApprovedRequest
+                      
+                      if (!canChat) {
+                        return (
+                          <div className={styles.chatRestricted}>
+                            <p className={styles.restrictedText}>
+                              💬 Chat will be available after the listing owner approves your request
+                            </p>
+                          </div>
+                        )
+                      }
+                      
+                      return (
+                        <>
+                          <input
+                            type="text"
+                            placeholder="Type a message..."
+                            className={styles.chatInput}
+                            value={newMessage}
+                            onChange={(e) => setNewMessage(e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                sendMessage()
+                              }
+                            }}
+                            onWheel={(e) => e.stopPropagation()}
+                          />
+                          <button 
+                            className={styles.sendButton}
+                            onClick={sendMessage}
+                            disabled={!newMessage.trim()}
+                            onWheel={(e) => e.stopPropagation()}
+                          >
+                            Send
+                          </button>
+                        </>
+                      )
+                    })()}
                   </div>
                 </>
               ) : (
@@ -2880,8 +3144,8 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Main Feed - Hide when listings is active */}
-        {activeMenuItem !== 'listings' && (
+        {/* Main Feed - Hide when listings or listing-history is active */}
+        {activeMenuItem !== 'listings' && activeMenuItem !== 'listing-history' && (
         <main className={styles.mainFeed}>
           {/* Post Creation Prompt - Only show when not viewing reports, listings, or profile */}
           {activeMenuItem !== 'reports' && activeMenuItem !== 'listings' && activeMenuItem !== 'profile' && (
@@ -2959,44 +3223,31 @@ export default function Dashboard() {
                             <button 
                               className={styles.optionsBtn}
                               onClick={() => toggleDropdown(post.id)}
+                              data-post-options={post.id}
                             >
                               <img src="/assets/icons/menu-dots.png" alt="Options" className={styles.optionsIcon} />
                             </button>
                             {showDropdown === post.id && (
                               <div className={styles.dropdown}>
-                                <button onClick={() => handleEditPost(post)} className={styles.dropdownItem}>
-                                  <img src="/assets/icons/settings.png" alt="Edit" className={styles.dropdownIcon} />
+                                <button onClick={() => handleEditPost(post)} className={`${styles.dropdownItem} ${styles.editDropdownItem}`}>
+                                  <img src="/assets/icons/pencil.png" alt="Edit" className={styles.dropdownIcon} />
                                   Edit Post
                                 </button>
-                                <button onClick={() => handleDeletePost(post.id)} className={styles.dropdownItem}>
-                                  <img src="/assets/icons/cross-small.png" alt="Delete" className={styles.dropdownIcon} />
-                                  Delete Post
+                                <button onClick={() => handleDeletePost(post.id)} className={`${styles.dropdownItem} ${styles.deleteDropdownItem}`}>
+                                  <img src="/assets/icons/delete-white.png" alt="Delete" className={styles.dropdownIcon} />
+                                  Delete
                                 </button>
                               </div>
                             )}
                           </div>
                         </div>
                         <div className={styles.postContent}>
-                          {editingPost === post.id ? (
-                            <div className={styles.editContainer}>
-                              <textarea
-                                value={editText}
-                                onChange={(e) => setEditText(e.target.value)}
-                                className={styles.editTextarea}
-                              />
-                              <div className={styles.editActions}>
-                                <button onClick={() => handleSaveEdit(post.id)} className={styles.saveBtn}>Save</button>
-                                <button onClick={() => setEditingPost(null)} className={styles.cancelBtn}>Cancel</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <p 
-                              style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
-                              onClick={() => openCommentModal(post)}
-                            >
-                              {post.text}
-                            </p>
-                          )}
+                          <p 
+                            style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
+                            onClick={() => openCommentModal(post)}
+                          >
+                            {post.text}
+                          </p>
                           {(post.imageUrls?.length > 0 || post.imageUrl) && (
                             <div className={styles.imageCarousel}>
                               {(() => {
@@ -3236,6 +3487,7 @@ export default function Dashboard() {
                     <button 
                       className={styles.optionsBtn}
                       onClick={() => toggleDropdown(post.id)}
+                      data-post-options={post.id}
                     >
                       <img src="/assets/icons/menu-dots.png" alt="Options" className={styles.optionsIcon} />
                     </button>
@@ -3243,13 +3495,13 @@ export default function Dashboard() {
                       <div className={styles.dropdown}>
                         {isUserPost(post) ? (
                           <>
-                            <button onClick={() => handleEditPost(post)} className={styles.dropdownItem}>
-                              <img src="/assets/icons/settings.png" alt="Edit" className={styles.dropdownIcon} />
+                            <button onClick={() => handleEditPost(post)} className={`${styles.dropdownItem} ${styles.editDropdownItem}`}>
+                              <img src="/assets/icons/pencil.png" alt="Edit" className={styles.dropdownIcon} />
                               Edit Post
                             </button>
-                            <button onClick={() => handleDeletePost(post.id)} className={styles.dropdownItem}>
-                              <img src="/assets/icons/cross-small.png" alt="Delete" className={styles.dropdownIcon} />
-                              Delete Post
+                            <button onClick={() => handleDeletePost(post.id)} className={`${styles.dropdownItem} ${styles.deleteDropdownItem}`}>
+                              <img src="/assets/icons/delete-white.png" alt="Delete" className={styles.dropdownIcon} />
+                              Delete
                             </button>
                           </>
                         ) : (
@@ -3263,26 +3515,12 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className={styles.postContent}>
-                  {editingPost === post.id ? (
-                    <div className={styles.editContainer}>
-                      <textarea
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        className={styles.editTextarea}
-                      />
-                      <div className={styles.editActions}>
-                        <button onClick={() => handleSaveEdit(post.id)} className={styles.saveBtn}>Save</button>
-                        <button onClick={() => setEditingPost(null)} className={styles.cancelBtn}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p 
-                      style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
-                      onClick={() => openCommentModal(post)}
-                    >
-                      {post.text}
-                    </p>
-                  )}
+                  <p 
+                    style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
+                    onClick={() => openCommentModal(post)}
+                  >
+                    {post.text}
+                  </p>
                   {(post.imageUrls?.length > 0 || post.imageUrl) && (
                     <div className={styles.imageCarousel}>
                       {(() => {
@@ -3394,6 +3632,20 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Listing History Screen - Separate from main feed */}
+        {activeMenuItem === 'listing-history' && (
+          <div style={{ 
+            width: '100%', 
+            height: '100vh', 
+            display: 'flex', 
+            flexDirection: 'column',
+            marginLeft: '0',
+            position: 'relative'
+          }}>
+            {userRole === 'crop_farmer' ? <RequestListingHistory /> : <ListingHistory />}
+          </div>
+        )}
+
         {/* Post Creation Modal */}
         {showPostModal && (
           <div className={styles.modalOverlay} onClick={closePostModal}>
@@ -3485,6 +3737,151 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Edit Post Modal */}
+        {showEditModal && editingPost && (
+          <div className={styles.modalOverlay} onClick={closeEditModal}>
+            <div className={styles.postModal} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h3>Edit Post</h3>
+                <button onClick={closeEditModal} className={styles.closeModalBtn}>×</button>
+              </div>
+              
+              <div className={styles.modalContent}>
+                <div className={styles.modalUserInfo}>
+                  <div className={styles.modalUserAvatar}>
+                    {editingPost.userName ? editingPost.userName[0].toUpperCase() : 'U'}
+                  </div>
+                  <span className={styles.modalUserName}>
+                    {editingPost.userName}
+                  </span>
+                </div>
+                
+                <div className={styles.modalBody}>
+                  <textarea
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    placeholder="What's on your mind?"
+                    className={styles.modalTextarea}
+                    rows={4}
+                    autoFocus
+                  />
+                </div>
+                
+                <div className={styles.modalFooter}>
+                  <div className={styles.modalActions}>
+                    {editImagePreviews.length > 0 ? (
+                      <div className={styles.multipleImagePreview}>
+                        {editImagePreviews.map((preview, index) => (
+                          <div key={index} className={styles.previewImageContainer}>
+                            <img src={preview} alt={`Preview ${index + 1}`} className={styles.buttonPreviewImage} />
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                removeEditImage(index)
+                              }}
+                              className={styles.removeImageBtn}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        
+                        <label className={styles.addMoreImagesBtn}>
+                          <img src="/assets/icons/image.png" alt="Photo" className={styles.modalActionIcon} />
+                          Add More
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleEditImageSelect}
+                            className={styles.hiddenInput}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className={styles.modalImageUpload}>
+                        <img src="/assets/icons/image.png" alt="Photo" className={styles.modalActionIcon} />
+                        Add Photos
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleEditImageSelect}
+                          className={styles.hiddenInput}
+                        />
+                      </label>
+                    )}
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={closeEditModal}
+                      className={styles.cancelBtn}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={editLoading || (!editText.trim() && editImagePreviews.length === 0)}
+                      className={styles.modalPostButton}
+                    >
+                      {editLoading ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && (
+          <div 
+            className={styles.modalOverlay} 
+            onClick={cancelDeletePost}
+            onWheel={(e) => e.preventDefault()}
+            onTouchMove={(e) => e.preventDefault()}
+            onKeyDown={(e) => {
+              // Prevent arrow keys, page up/down, home/end, space from scrolling
+              if ([32, 33, 34, 35, 36, 37, 38, 39, 40].includes(e.keyCode)) {
+                e.preventDefault()
+              }
+            }}
+          >
+            <div 
+              className={styles.deleteModal} 
+              onClick={(e) => e.stopPropagation()}
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <div className={styles.deleteModalHeader}>
+                <h3>Delete Post</h3>
+              </div>
+              
+              <div className={styles.deleteModalContent}>
+                <p>Are you sure you want to delete this post? This action cannot be undone.</p>
+              </div>
+              
+              <div className={styles.deleteModalFooter}>
+                <button
+                  onClick={cancelDeletePost}
+                  className={styles.cancelBtn}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeletePost}
+                  className={styles.deleteConfirmBtn}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Right Sidebar - Chats (Hidden by default) */}
         <aside className={styles.rightSidebar} style={{ display: 'none' }}>

@@ -404,12 +404,7 @@
 }
 
 .requestButton:hover {
-  background-color: #e68200;
-}
-
-.requestButton:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
+  background-color: #e8820e;
 }
 
 .requestedButton {
@@ -733,7 +728,7 @@
   background-color: #f8f9fa;
 }
 
-.cancelButton, .saveButton {
+.saveButton {
   padding: 12px 24px;
   border: none;
   border-radius: 6px;
@@ -745,12 +740,34 @@
 }
 
 .cancelButton {
-  background-color: #e4e6ea;
-  color: #1c1e21;
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
 .cancelButton:hover {
-  background-color: #dddfe2;
+  background-color: #c82333;
+}
+
+.approvedButton {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: not-allowed;
+  transition: background-color 0.2s;
+  opacity: 0.8;
+}
+
+.approvedButton:hover {
+  background-color: #28a745;
 }
 
 .saveButton {
@@ -988,5 +1005,203 @@
   .loadingContainer {
     top: 90px;
     left: 0;
+  }
+}
+
+/* Owner Buttons */
+.ownerButtons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.viewRequestsButton {
+  background: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #1976d2;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.viewRequestsButton:hover {
+  background: #1976d2;
+  color: white;
+}
+
+.hasNotifications {
+  animation: pulse 2s infinite;
+  position: relative;
+}
+
+.notificationBadge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #ff4444;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: bounce 1s infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(25, 118, 210, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(25, 118, 210, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(25, 118, 210, 0); }
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-3px); }
+  60% { transform: translateY(-1px); }
+}
+
+/* Requests Modal */
+.requestsList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.requestItem {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.requestInfo {
+  flex: 1;
+}
+
+.requestInfo h4 {
+  margin: 0 0 8px 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.requestInfo p {
+  margin: 4px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.requestActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 100px;
+}
+
+.approveButton {
+  background: #4caf50;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.approveButton:hover {
+  background: #45a049;
+}
+
+.rejectButton {
+  background: #f44336;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.rejectButton:hover {
+  background: #da190b;
+}
+
+.emptyRequests {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+/* Request Messages */
+.requestMessages {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e9ecef;
+}
+
+.messagesList {
+  margin-top: 8px;
+}
+
+.messageItem {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.messageText {
+  margin: 0 0 4px 0;
+  color: #333;
+  font-size: 14px;
+  font-style: italic;
+}
+
+.messageTime {
+  font-size: 12px;
+  color: #666;
+}
+
+@media (max-width: 768px) {
+  .ownerButtons {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+  
+  .viewRequestsButton,
+  .addListingButton {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .requestItem {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .requestActions {
+    flex-direction: row;
+    justify-content: space-between;
   }
 }

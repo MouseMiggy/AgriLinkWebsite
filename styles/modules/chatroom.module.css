@@ -273,9 +273,9 @@
 }
 
 .otherMessage .messageContent {
-  background-color: #fff;
+  background-color: rgba(250, 145, 0, 0.1);
   color: #333;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #fa9100;
   border-bottom-left-radius: 4px;
 }
 

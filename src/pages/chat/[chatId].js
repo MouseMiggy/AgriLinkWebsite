@@ -120,6 +120,43 @@ export default function ChatRoom() {
 
     setSending(true)
     try {
+      // Check if current user is livestock owner and if there are pending requests
+      const userDoc = await getDoc(doc(db, 'Users', user.uid))
+      const userRole = userDoc.exists() ? userDoc.data().role : null
+      
+      if (userRole === 'livestock_owner') {
+        // Check if there's an approved request between these users
+        const requestsQuery = query(
+          collection(db, 'listing_requests'),
+          where('requesterId', '==', otherUser.id),
+          where('listingOwnerId', '==', user.uid),
+          where('status', '==', 'approved')
+        )
+        
+        const requestsSnapshot = await getDocs(requestsQuery)
+        
+        if (requestsSnapshot.empty) {
+          alert('You can only chat with crop farmers who have approved requests for your listings.')
+          setSending(false)
+          return
+        }
+      } else if (userRole === 'crop_farmer') {
+        // Check if crop farmer has any active (pending or approved) requests with this livestock owner
+        const requestsQuery = query(
+          collection(db, 'listing_requests'),
+          where('requesterId', '==', user.uid),
+          where('listingOwnerId', '==', otherUser.id),
+          where('status', 'in', ['pending', 'approved'])
+        )
+        
+        const requestsSnapshot = await getDocs(requestsQuery)
+        
+        if (requestsSnapshot.empty) {
+          alert('You cannot chat with this livestock owner. You need an active request to communicate.')
+          setSending(false)
+          return
+        }
+      }
       const messageData = {
         text: newMessage.trim(),
         senderId: user.uid,

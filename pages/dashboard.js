@@ -1672,7 +1672,7 @@ export default function Dashboard() {
         commentAuthor: targetComment.userName || targetComment.userEmail || 'Unknown'
       }
 
-      const response = await fetch('http://192.168.1.15:3000/report-comment', {
+      const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/report-comment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(reportData)

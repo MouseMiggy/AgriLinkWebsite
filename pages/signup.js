@@ -183,7 +183,7 @@ export default function SignUp() {
       // Send registration data to backend (same as mobile app)
       console.log('Attempting to register user:', formData.email)
       
-      const response = await fetch('http://192.168.1.15:3000/send-code', {
+      const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

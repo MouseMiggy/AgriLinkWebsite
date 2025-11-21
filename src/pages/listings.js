@@ -1545,6 +1545,8 @@ export default function Listings() {
             alt="AgriLink" 
             className={styles.loadingLogo}
           />
+          <p className={styles.loadingText}>Loading listings...</p>
+          <div className={styles.loadingSpinner}></div>
         </div>
       </div>
     )

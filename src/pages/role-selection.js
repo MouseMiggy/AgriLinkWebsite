@@ -164,9 +164,9 @@ export default function RoleSelection() {
                 className={styles.logo}
               />
             </div>
-            <h1 className={styles.title}>Welcome to AgriLink!</h1>
+            <h1 className={styles.title}>Welcome to AgriLink</h1>
             <p className={styles.subtitle}>
-              Let's get started by selecting your role in the agricultural community
+              Select your role to continue
             </p>
           </div>
 
@@ -177,30 +177,13 @@ export default function RoleSelection() {
                 className={`${styles.roleCard} ${selectedRole === 'livestock_owner' ? styles.selected : ''}`}
                 onClick={() => handleRoleSelect('livestock_owner')}
               >
-                <div className={styles.roleIcon}>
-                  <i className="fas fa-cow"></i>
-                </div>
                 <h3 className={styles.roleTitle}>Livestock Owner</h3>
                 <p className={styles.roleDescription}>
-                  I raise livestock animals and have organic waste to share with crop farmers
+                  Raise livestock and share organic waste with crop farmers
                 </p>
-                <div className={styles.roleFeatures}>
-                  <div className={styles.feature}>
-                    <i className="fas fa-check"></i>
-                    <span>List livestock waste</span>
-                  </div>
-                  <div className={styles.feature}>
-                    <i className="fas fa-check"></i>
-                    <span>Connect with crop farmers</span>
-                  </div>
-                  <div className={styles.feature}>
-                    <i className="fas fa-check"></i>
-                    <span>Exchange waste for value</span>
-                  </div>
-                </div>
-                <div className={styles.selectIndicator}>
-                  <i className="fas fa-check-circle"></i>
-                </div>
+                {selectedRole === 'livestock_owner' && (
+                  <div className={styles.checkmark}>✓</div>
+                )}
               </div>
 
               {/* Crop Farmer Card */}
@@ -208,30 +191,13 @@ export default function RoleSelection() {
                 className={`${styles.roleCard} ${selectedRole === 'crop_farmer' ? styles.selected : ''}`}
                 onClick={() => handleRoleSelect('crop_farmer')}
               >
-                <div className={styles.roleIcon}>
-                  <i className="fas fa-seedling"></i>
-                </div>
                 <h3 className={styles.roleTitle}>Crop Farmer</h3>
                 <p className={styles.roleDescription}>
-                  I grow crops and need organic fertilizer from livestock waste
+                  Grow crops and source organic fertilizer from livestock waste
                 </p>
-                <div className={styles.roleFeatures}>
-                  <div className={styles.feature}>
-                    <i className="fas fa-check"></i>
-                    <span>Find organic fertilizer</span>
-                  </div>
-                  <div className={styles.feature}>
-                    <i className="fas fa-check"></i>
-                    <span>Connect with livestock owners</span>
-                  </div>
-                  <div className={styles.feature}>
-                    <i className="fas fa-check"></i>
-                    <span>Improve crop yields</span>
-                  </div>
-                </div>
-                <div className={styles.selectIndicator}>
-                  <i className="fas fa-check-circle"></i>
-                </div>
+                {selectedRole === 'crop_farmer' && (
+                  <div className={styles.checkmark}>✓</div>
+                )}
               </div>
             </div>
 
@@ -247,15 +213,12 @@ export default function RoleSelection() {
                     <span>Saving...</span>
                   </>
                 ) : (
-                  <>
-                    <span>Continue</span>
-                    <i className="fas fa-arrow-right"></i>
-                  </>
+                  <span>Continue</span>
                 )}
               </button>
               
               <p className={styles.helpText}>
-                Don't worry, you can change this later in your profile settings
+                You can change this later in settings
               </p>
             </div>
           </div>

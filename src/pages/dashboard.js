@@ -2449,8 +2449,12 @@ export default function Dashboard() {
 
       // Check if user already has onboarding data for target role
       let shouldSkipOnboarding = false
+      const bothCompleted = onboarding.livestockOnboardingCompleted && onboarding.cropOnboardingCompleted
       
-      if (newRole === 'livestock_owner' && onboarding.livestockOnboardingCompleted) {
+      if (bothCompleted) {
+        console.log('✅ User completed both onboardings, skipping all setup')
+        shouldSkipOnboarding = true
+      } else if (newRole === 'livestock_owner' && onboarding.livestockOnboardingCompleted) {
         console.log('✅ User already completed livestock onboarding, skipping to dashboard')
         shouldSkipOnboarding = true
       } else if (newRole === 'crop_farmer' && onboarding.cropOnboardingCompleted) {
@@ -2857,12 +2861,12 @@ export default function Dashboard() {
                 {showMenuDropdown && (
                   <div className={styles.menuDropdown}>
                     <div className={styles.menuDropdownItem} onClick={() => {
-                      console.log('Change Role clicked')
+                      console.log('Switch Role clicked')
                       setShowMenuDropdown(false)
                       handleSwitchRole()
                     }}>
-                      <img src="/assets/icons/rotate-reverse.png" alt="Change Role" className={styles.menuDropdownIcon} />
-                      <span>Change Role</span>
+                      <img src="/assets/icons/rotate-reverse.png" alt="Switch Role" className={styles.menuDropdownIcon} />
+                      <span>Switch Role</span>
                     </div>
                     
                     <div className={styles.menuDropdownItem} onClick={() => {

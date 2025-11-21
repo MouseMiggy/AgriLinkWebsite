@@ -1,25 +1,17 @@
 /* Role Selection Page Styles */
 .container {
-  min-height: 100vh;
-  background: #ffffff;
+  height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 0;
   position: relative;
   overflow: hidden;
 }
 
 .backgroundPattern {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image: 
-    radial-gradient(circle at 25% 25%, rgba(250, 145, 0, 0.03) 0%, transparent 50%),
-    radial-gradient(circle at 75% 75%, rgba(250, 145, 0, 0.02) 0%, transparent 50%);
-  animation: float 20s ease-in-out infinite;
+  display: none;
 }
 
 @keyframes float {
@@ -29,19 +21,22 @@
 
 .content {
   background: #ffffff;
-  border-radius: 16px;
-  padding: 30px;
-  max-width: 1000px;
-  width: 100%;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 50px 60px;
+  max-width: 900px;
+  width: 90%;
+  max-height: 90vh;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
   text-align: center;
   position: relative;
   z-index: 1;
-  border: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .header {
-  margin-bottom: 40px;
+  margin-bottom: 35px;
 }
 
 .logoContainer {
@@ -49,21 +44,21 @@
 }
 
 .logo {
-  height: 60px;
+  height: 50px;
   width: auto;
 }
 
 .title {
-  font-size: 2.2rem;
+  font-size: 2rem;
   font-weight: 700;
-  color: #fa9100;
-  margin-bottom: 10px;
-  font-family: 'Raleway', sans-serif;
+  color: #2d3748;
+  margin-bottom: 8px;
+  font-family: 'Poppins', sans-serif;
 }
 
 .subtitle {
-  font-size: 1.1rem;
-  color: #666;
+  font-size: 1rem;
+  color: #718096;
   margin-bottom: 0;
   font-weight: 400;
 }
@@ -71,41 +66,44 @@
 .roleContainer {
   display: flex;
   flex-direction: column;
-  gap: 25px;
+  gap: 30px;
 }
 
 .roleCards {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 25px;
+  gap: 20px;
 }
 
 .roleCard {
-  background: white;
-  border: 2px solid #f0f0f0;
-  border-radius: 12px;
-  padding: 25px 20px;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 35px 25px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
   position: relative;
   text-align: center;
-  min-height: 280px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
+  align-items: center;
+  min-height: 180px;
 }
 
 .roleCard:hover {
-  border-color: #fa9100;
-  transform: translateY(-3px);
-  box-shadow: 0 8px 25px rgba(250, 145, 0, 0.15);
+  border-color: #2d5a27;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(45, 90, 39, 0.12);
+  background: #ffffff;
 }
 
 .roleCard.selected {
-  border-color: #fa9100;
-  background: linear-gradient(135deg, #fff8f0 0%, #fef4e8 100%);
-  box-shadow: 0 8px 25px rgba(250, 145, 0, 0.2);
-  transform: translateY(-3px);
+  border-color: #2d5a27;
+  border-width: 3px;
+  background: #ffffff;
+  box-shadow: 0 8px 25px rgba(45, 90, 39, 0.15);
+  transform: translateY(-2px);
 }
 
 .roleIcon {
@@ -126,17 +124,43 @@
 }
 
 .roleTitle {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   font-weight: 600;
-  color: #fa9100;
-  margin-bottom: 8px;
+  color: #2d3748;
+  margin-bottom: 10px;
 }
 
 .roleDescription {
-  font-size: 0.95rem;
-  color: #666;
-  margin-bottom: 20px;
-  line-height: 1.5;
+  font-size: 0.9rem;
+  color: #718096;
+  margin-bottom: 0;
+  line-height: 1.6;
+}
+
+.checkmark {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  width: 30px;
+  height: 30px;
+  background: #2d5a27;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  animation: scaleIn 0.3s ease;
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
 }
 
 .roleFeatures {
@@ -184,22 +208,22 @@
 }
 
 .continueButton {
-  background: #fa9100;
+  background: #2d5a27;
   color: white;
   border: none;
-  border-radius: 10px;
-  padding: 14px 35px;
+  border-radius: 8px;
+  padding: 14px 50px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
   display: flex;
   align-items: center;
   gap: 10px;
   opacity: 0.5;
-  transform: scale(0.95);
-  min-width: 150px;
+  min-width: 180px;
   justify-content: center;
+  font-family: 'Poppins', sans-serif;
 }
 
 .continueButton.active {
@@ -209,8 +233,8 @@
 
 .continueButton.active:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(250, 145, 0, 0.3);
-  background: #e8820e;
+  box-shadow: 0 6px 20px rgba(45, 90, 39, 0.25);
+  background: #234a1f;
 }
 
 .continueButton:disabled {
@@ -233,10 +257,9 @@
 }
 
 .helpText {
-  font-size: 0.9rem;
-  color: #888;
+  font-size: 0.85rem;
+  color: #a0aec0;
   margin: 0;
-  font-style: italic;
 }
 
 .loadingContainer {

@@ -1,1 +1,17 @@
 node_modules
+
+# Large executable files
+*.exe
+*.msi
+*.dmg
+*.pkg
+
+# Large documents
+*.pdf
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp

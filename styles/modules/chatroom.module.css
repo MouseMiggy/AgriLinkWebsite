@@ -304,6 +304,22 @@
   border-top: 1px solid #e0e0e0;
 }
 
+.chatDisabledMessage {
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.chatDisabledMessage p {
+  margin: 0;
+  color: #856404;
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .inputWrapper {
   display: flex;
   align-items: flex-end;
@@ -439,4 +455,98 @@
   .messageText {
     font-size: 15px;
   }
+}
+
+/* Listing Request Styles */
+.listingPreview {
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.listingPreviewHeader {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.listingIcon {
+  font-size: 16px;
+  margin-right: 8px;
+}
+
+.listingPreviewTitle {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.listingPreviewSubtitle {
+  color: #666;
+  font-size: 12px;
+  margin: 0 0 12px 0;
+}
+
+.requestActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.requestActionButton {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.requestActionButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.approveButton {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.approveButton:hover:not(:disabled) {
+  background-color: #45a049;
+}
+
+.declineButton {
+  background-color: #f44336;
+  color: white;
+}
+
+.declineButton:hover:not(:disabled) {
+  background-color: #da190b;
+}
+
+.responseStatus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 8px;
+  background-color: #e9ecef;
+  border-radius: 4px;
+}
+
+.responseIcon {
+  font-size: 14px;
+}
+
+.responseStatusText {
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
 }

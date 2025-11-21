@@ -1,22 +1,34 @@
 import React, { useState, useEffect } from 'react'
 import { db, auth } from '../lib/firebase'
-import { collection, onSnapshot, query, orderBy, where, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { collection, onSnapshot, query, where, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { getRecommendedListings } from '../utils/recommendationAlgorithm'
 import { onAuthStateChanged } from 'firebase/auth'
+import { usePopup } from '../contexts/PopupContext'
 import styles from '../../styles/modules/listings.module.css'
 
 export default function Listings() {
+  const { showInfoPopup, showSuccessPopup, showErrorPopup, showConfirmPopup } = usePopup()
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('') // Temporary input value
   const [listings, setListings] = useState([])
   const [loading, setLoading] = useState(true)
   const [filteredListings, setFilteredListings] = useState([])
+  const [searchResults, setSearchResults] = useState([])
+  const [outsideSearchResults, setOutsideSearchResults] = useState([])
+  const [recentSearches, setRecentSearches] = useState([])
+  const [showRecentSearches, setShowRecentSearches] = useState(false)
   const [user, setUser] = useState(null)
   const [userRole, setUserRole] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
-  const [selectedListing, setSelectedListing] = useState(null)
+  const [requestedListings, setRequestedListings] = useState(new Set())
+  const [requestStatuses, setRequestStatuses] = useState({})
+  const [userLocation, setUserLocation] = useState(null)
   const [editingListing, setEditingListing] = useState(null)
+  const [selectedListing, setSelectedListing] = useState(null)
+  const [modalStep, setModalStep] = useState(1) // 1: Basic Info, 2: Measurements, 3: Pricing, 4: Image
   const [formData, setFormData] = useState({
     name: '',
     details: '',
@@ -26,12 +38,7 @@ export default function Listings() {
     isFree: false,
     image: null
   })
-  const [requestedListings, setRequestedListings] = useState(new Set())
-  const [listingRequests, setListingRequests] = useState([])
-  const [pendingRequests, setPendingRequests] = useState([])
-  const [showRequestsModal, setShowRequestsModal] = useState(false)
-  const [requestMessages, setRequestMessages] = useState({})
-  const [requestStatuses, setRequestStatuses] = useState({})
+  const [isCreatingListing, setIsCreatingListing] = useState(false)
 
   const measurementUnits = ['kg', 'ton', 'sack', 'bag', 'liter', 'cubic meter', 'pieces', 'bundle']
 
@@ -86,6 +93,7 @@ export default function Listings() {
   const closeModal = () => {
     setShowAddModal(false)
     setEditingListing(null)
+    setModalStep(1)
     setFormData({
       name: '',
       details: '',
@@ -95,6 +103,31 @@ export default function Listings() {
       isFree: false,
       image: null
     })
+  }
+
+  const nextStep = () => {
+    // Validation for each step
+    if (modalStep === 1) {
+      if (!formData.name.trim() || !formData.details.trim()) {
+        showErrorPopup('Required Fields', 'Please fill in listing title and description')
+        return
+      }
+    } else if (modalStep === 2) {
+      if (!formData.measurements || !formData.measurementUnit) {
+        showErrorPopup('Required Fields', 'Please fill in quantity and unit of measurement')
+        return
+      }
+    } else if (modalStep === 3) {
+      if (!formData.isFree && !formData.price) {
+        showErrorPopup('Required Fields', 'Please enter a price or mark as free')
+        return
+      }
+    }
+    setModalStep(prev => Math.min(prev + 1, 4))
+  }
+
+  const prevStep = () => {
+    setModalStep(prev => Math.max(prev - 1, 1))
   }
 
   const openEditModal = (listing) => {
@@ -112,13 +145,42 @@ export default function Listings() {
   }
 
   const deleteListing = async (listing) => {
-    if (window.confirm('Are you sure you want to delete this listing?')) {
+    const confirmed = await showConfirmPopup(
+      'Delete Listing',
+      'Are you sure you want to delete this listing? This action cannot be undone.'
+    )
+    
+    if (confirmed) {
       try {
-        await deleteDoc(doc(db, 'livestock_listings', listing.id))
-        alert('Listing deleted successfully')
+        // Update listing status to 'deleted' instead of deleting
+        await updateDoc(doc(db, 'livestock_listings', listing.id), {
+          status: 'deleted',
+          deletedAt: serverTimestamp()
+        })
+        showSuccessPopup('Success', 'Listing deleted successfully')
       } catch (error) {
         console.error('Error deleting listing:', error)
-        alert('Failed to delete listing')
+        showErrorPopup('Error', 'Failed to delete listing')
+      }
+    }
+  }
+
+  const markAsSold = async (listing) => {
+    const confirmed = await showConfirmPopup(
+      'Mark as Sold',
+      'Are you sure you want to mark this listing as sold? This will remove it from active listings.'
+    )
+    
+    if (confirmed) {
+      try {
+        await updateDoc(doc(db, 'livestock_listings', listing.id), {
+          status: 'sold',
+          soldAt: serverTimestamp()
+        })
+        showSuccessPopup('Success', 'Listing marked as sold')
+      } catch (error) {
+        console.error('Error marking listing as sold:', error)
+        showErrorPopup('Error', 'Failed to mark listing as sold')
       }
     }
   }
@@ -137,7 +199,15 @@ export default function Listings() {
     document.body.style.overflow = 'unset'
   }
 
-  // Handle escape key press
+  // Load recent searches from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('listingRecentSearches')
+    if (saved) {
+      setRecentSearches(JSON.parse(saved))
+    }
+  }, [])
+
+  // Handle escape key press and click outside
   useEffect(() => {
     const handleEscapeKey = (event) => {
       if (event.key === 'Escape') {
@@ -147,37 +217,80 @@ export default function Listings() {
         if (showAddModal) {
           closeModal()
         }
+        if (showRecentSearches) {
+          setShowRecentSearches(false)
+        }
+      }
+    }
+
+    const handleClickOutside = (event) => {
+      if (showRecentSearches && !event.target.closest(`.${styles.searchContainer}`)) {
+        setShowRecentSearches(false)
       }
     }
 
     document.addEventListener('keydown', handleEscapeKey)
+    document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('keydown', handleEscapeKey)
+      document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showDetailsModal, showAddModal])
+  }, [showDetailsModal, showAddModal, showRecentSearches])
 
   const saveListing = async () => {
     console.log('🚀 saveListing called with formData:', formData)
     console.log('👤 User data:', { uid: user?.uid, email: user?.email, role: userRole })
     console.log('🔥 Database initialized:', !!db)
 
+    // Show loading state
+    setIsCreatingListing(true)
+
+    // Validate all required fields
     if (!formData.name.trim()) {
-      alert('Please enter a product name')
+      setIsCreatingListing(false)
+      showErrorPopup('Validation Error', 'Please enter a listing title')
       return
     }
 
-    if (!formData.isFree && !formData.price.trim()) {
-      alert('Please enter a price or mark as free')
+    if (!formData.details.trim()) {
+      setIsCreatingListing(false)
+      showErrorPopup('Validation Error', 'Please enter a description')
+      return
+    }
+
+    if (!formData.measurements || formData.measurements <= 0) {
+      setIsCreatingListing(false)
+      showErrorPopup('Validation Error', 'Please enter a valid quantity')
+      return
+    }
+
+    if (!formData.measurementUnit) {
+      setIsCreatingListing(false)
+      showErrorPopup('Validation Error', 'Please select unit of measurement')
+      return
+    }
+
+    if (!formData.isFree && (!formData.price || formData.price <= 0)) {
+      setIsCreatingListing(false)
+      showErrorPopup('Validation Error', 'Please enter a valid price or mark as free')
+      return
+    }
+
+    if (!formData.image) {
+      setIsCreatingListing(false)
+      showErrorPopup('Validation Error', 'Please add an image')
       return
     }
 
     if (!user) {
-      alert('User not authenticated. Please sign in again.')
+      setIsCreatingListing(false)
+      showErrorPopup('Authentication Error', 'User not authenticated. Please sign in again.')
       return
     }
 
     if (!db) {
-      alert('Database not initialized. Please refresh the page.')
+      setIsCreatingListing(false)
+      showErrorPopup('Database Error', 'Database not initialized. Please refresh the page.')
       return
     }
 
@@ -203,16 +316,17 @@ export default function Listings() {
         console.log('🔄 Updating existing listing:', editingListing.id)
         await updateDoc(doc(db, 'livestock_listings', editingListing.id), listingData)
         console.log('✅ Listing updated successfully')
-        alert('Listing updated successfully')
+        showSuccessPopup('Success', 'Listing updated successfully')
       } else {
         // Create new listing
         listingData.createdAt = serverTimestamp()
         console.log('🆕 Creating new listing...')
         const docRef = await addDoc(collection(db, 'livestock_listings'), listingData)
         console.log('✅ New listing created with ID:', docRef.id)
-        alert('Listing created successfully')
+        showSuccessPopup('Success', 'Listing created successfully')
       }
       
+      setIsCreatingListing(false)
       closeModal()
     } catch (error) {
       console.error('❌ Error saving listing:', error)
@@ -232,132 +346,8 @@ export default function Listings() {
         errorMessage = 'Request timed out. Please check your internet connection and try again.'
       }
       
-      alert(errorMessage)
-    }
-  }
-
-  // Handle request approval by listing owner
-  const handleApproveRequest = async (requestId, requestData) => {
-    if (!user || !requestData) return
-
-    console.log('✅ Approving request:', requestId)
-    
-    try {
-      // Update request status to approved
-      await updateDoc(doc(db, 'listing_requests', requestId), {
-        status: 'approved',
-        approvedAt: serverTimestamp()
-      })
-
-      // Update chat status to approved
-      const participants = [requestData.requesterId, requestData.listingOwnerId].sort()
-      const chatId = participants.join('_')
-      const chatRef = doc(db, 'chats', chatId)
-      
-      // Update chat status
-      await updateDoc(chatRef, {
-        requestStatus: 'approved',
-        approvedAt: serverTimestamp(),
-        lastMessage: `Request approved for listing: ${requestData.listingName}`,
-        lastMessageTime: serverTimestamp(),
-        lastMessageSenderId: user.uid
-      })
-      
-      // Send approval message
-      const messageData = {
-        text: `I have approved your request for "${requestData.listingName}". You can now chat with me about the details.`,
-        senderId: user.uid,
-        senderName: user.displayName || user.email || 'Livestock Owner',
-        createdAt: serverTimestamp(),
-        read: false,
-        type: 'request_approval'
-      }
-      
-      await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
-
-      // Send notification to requester
-      const approvalNotificationData = {
-        recipientId: requestData.requesterId,
-        senderId: user.uid,
-        senderName: user.displayName || user.email || 'Livestock Owner',
-        type: 'request_approved',
-        title: 'Request Approved',
-        message: `Your request for "${requestData.listingName}" has been approved! You can now chat with the owner.`,
-        listingId: requestData.listingId,
-        listingName: requestData.listingName,
-        requestId: requestId,
-        read: false,
-        createdAt: serverTimestamp()
-      }
-
-      await addDoc(collection(db, 'notifications'), approvalNotificationData)
-      
-      alert('Request approved successfully! Chat has been enabled.')
-    } catch (error) {
-      console.error('Error approving request:', error)
-      alert('Failed to approve request. Please try again.')
-    }
-  }
-
-  // Handle request rejection by listing owner
-  const handleRejectRequest = async (requestId, requestData) => {
-    if (!user || !requestData) return
-
-    console.log('❌ Rejecting request:', requestId)
-    
-    try {
-      // Update request status to rejected
-      await updateDoc(doc(db, 'listing_requests', requestId), {
-        status: 'rejected',
-        rejectedAt: serverTimestamp()
-      })
-
-      // Update chat status to rejected
-      const participants = [requestData.requesterId, requestData.listingOwnerId].sort()
-      const chatId = participants.join('_')
-      const chatRef = doc(db, 'chats', chatId)
-      
-      await updateDoc(chatRef, {
-        requestStatus: 'rejected',
-        rejectedAt: serverTimestamp(),
-        lastMessage: `Request declined for listing: ${requestData.listingName}`,
-        lastMessageTime: serverTimestamp(),
-        lastMessageSenderId: user.uid
-      })
-      
-      // Send rejection message
-      const messageData = {
-        text: `I have declined your request for "${requestData.listingName}". Thank you for your interest.`,
-        senderId: user.uid,
-        senderName: user.displayName || user.email || 'Livestock Owner',
-        createdAt: serverTimestamp(),
-        read: false,
-        type: 'request_rejection'
-      }
-      
-      await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
-
-      // Send notification to requester
-      const rejectionNotificationData = {
-        recipientId: requestData.requesterId,
-        senderId: user.uid,
-        senderName: user.displayName || user.email || 'Livestock Owner',
-        type: 'request_rejected',
-        title: 'Request Declined',
-        message: `Your request for "${requestData.listingName}" has been declined.`,
-        listingId: requestData.listingId,
-        listingName: requestData.listingName,
-        requestId: requestId,
-        read: false,
-        createdAt: serverTimestamp()
-      }
-
-      await addDoc(collection(db, 'notifications'), rejectionNotificationData)
-      
-      alert('Request declined.')
-    } catch (error) {
-      console.error('Error rejecting request:', error)
-      alert('Failed to decline request. Please try again.')
+      setIsCreatingListing(false)
+      showErrorPopup('Error', errorMessage)
     }
   }
 
@@ -368,14 +358,16 @@ export default function Listings() {
     console.log('🔥 Database initialized:', !!db)
 
     if (!user) {
-      console.error('❌ No user authenticated')
-      alert('Please sign in to cancel requests.')
+      console.error('❌ No user found')
+      setIsCreatingListing(false)
+      showErrorPopup('Error', 'You must be logged in to create a listing')
       return
     }
 
     if (!db) {
       console.error('❌ Database not initialized')
-      alert('Database connection error. Please refresh the page.')
+      setIsCreatingListing(false)
+      showErrorPopup('Connection Error', 'Database connection error. Please refresh the page.')
       return
     }
 
@@ -418,7 +410,7 @@ export default function Listings() {
         
         // Send cancellation message to the chat between users
         const participants = [user.uid, requestData.listingOwnerId].sort()
-        const chatId = participants.join('_')
+        const chatId = `${user.uid}_crop_farmer_to_${requestData.listingOwnerId}_livestock_owner_listing_${requestData.listingId}`
         const chatRef = doc(db, 'chats', chatId)
         
         console.log('📝 Chat details:', {
@@ -427,15 +419,40 @@ export default function Listings() {
         })
         
         try {
-          // Update chat status to cancelled
-          await updateDoc(chatRef, {
-            requestStatus: 'cancelled',
-            cancelledAt: serverTimestamp(),
-            lastMessage: `Request cancelled for listing: ${requestData.listingName}`,
-            lastMessageTime: serverTimestamp(),
-            lastMessageSenderId: user.uid
-          })
-          console.log('✅ Chat status updated to cancelled')
+          // Check if chat exists first
+          const chatDoc = await getDoc(chatRef)
+          
+          if (chatDoc.exists()) {
+            // Update chat status to cancelled
+            await updateDoc(chatRef, {
+              requestStatus: 'cancelled',
+              cancelledAt: serverTimestamp(),
+              lastMessage: `Request cancelled for listing: ${requestData.listingName}`,
+              lastMessageTime: serverTimestamp(),
+              lastMessageSenderId: user.uid
+            })
+            console.log('✅ Chat status updated to cancelled')
+          } else {
+            console.log('⚠️ Chat document does not exist, trying fallback chat ID format...')
+            
+            // Try old chat ID format as fallback
+            const fallbackChatId = participants.join('_')
+            const fallbackChatRef = doc(db, 'chats', fallbackChatId)
+            const fallbackChatDoc = await getDoc(fallbackChatRef)
+            
+            if (fallbackChatDoc.exists()) {
+              await updateDoc(fallbackChatRef, {
+                requestStatus: 'cancelled',
+                cancelledAt: serverTimestamp(),
+                lastMessage: `Request cancelled for listing: ${requestData.listingName}`,
+                lastMessageTime: serverTimestamp(),
+                lastMessageSenderId: user.uid
+              })
+              console.log('✅ Fallback chat status updated to cancelled')
+            } else {
+              console.log('⚠️ No chat document found with either format, skipping chat update')
+            }
+          }
         } catch (chatUpdateError) {
           console.error('❌ Failed to update chat status:', chatUpdateError)
           // Continue with cancellation even if chat update fails
@@ -451,22 +468,77 @@ export default function Listings() {
             type: 'request_cancellation'
           }
 
-          // Add message to the chat
-          await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
-          console.log('✅ Cancellation message sent to chat')
+          // Try to add message to the chat (try both chat ID formats)
+          try {
+            await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
+            console.log('✅ Cancellation message sent to chat')
+          } catch (primaryMessageError) {
+            console.log('⚠️ Failed to send message with primary chat ID, trying fallback...')
+            const fallbackChatId = participants.join('_')
+            await addDoc(collection(db, 'chats', fallbackChatId, 'messages'), messageData)
+            console.log('✅ Cancellation message sent to fallback chat')
+          }
         } catch (messageError) {
           console.error('❌ Failed to send cancellation message:', messageError)
           // Continue with cancellation even if message fails
         }
 
-        console.log('🗑️ Step 3: Deleting request from database...')
+        console.log('🔄 Step 3: Updating original request message...')
         
-        // Delete the request
-        await deleteDoc(requestDoc.ref)
-        console.log('✅ Request document deleted successfully')
+        // Find and update the original request message to mark as cancelled
+        try {
+          // Try primary chat ID first
+          let messagesRef = collection(db, 'chats', chatId, 'messages')
+          let requestQuery = query(
+            messagesRef,
+            where('senderId', '==', user.uid),
+            where('listingId', '==', requestData.listingId),
+            where('isListingRequest', '==', true)
+          )
+          
+          let requestSnapshot = await getDocs(requestQuery)
+          
+          // If no messages found, try fallback chat ID
+          if (requestSnapshot.empty) {
+            console.log('⚠️ No messages found with primary chat ID, trying fallback...')
+            const fallbackChatId = participants.join('_')
+            messagesRef = collection(db, 'chats', fallbackChatId, 'messages')
+            requestQuery = query(
+              messagesRef,
+              where('senderId', '==', user.uid),
+              where('listingId', '==', requestData.listingId),
+              where('isListingRequest', '==', true)
+            )
+            requestSnapshot = await getDocs(requestQuery)
+          }
+          
+          // Update all matching request messages to mark as cancelled
+          const updatePromises = requestSnapshot.docs.map(requestDoc => 
+            updateDoc(requestDoc.ref, { 
+              isCancelled: true,
+              cancelledAt: serverTimestamp(),
+              requestStatus: 'cancelled'
+            })
+          )
+          
+          await Promise.all(updatePromises)
+          console.log(`✅ Marked ${updatePromises.length} request messages as cancelled`)
+        } catch (updateError) {
+          console.error('❌ Error updating original request message:', updateError)
+          // Continue with cancellation even if message update fails
+        }
+
+        console.log('🔄 Step 4: Updating request status to cancelled...')
+        
+        // Update request status to cancelled instead of deleting
+        await updateDoc(requestDoc.ref, {
+          status: 'cancelled',
+          cancelledAt: serverTimestamp()
+        })
+        console.log('✅ Request status updated to cancelled successfully')
         
         // The onSnapshot listener will automatically update requestedListings
-        // when the document is deleted from the database
+        // when the document status is updated
         console.log('✅ Request deleted from database, waiting for real-time update...')
         
         // Fallback: Force state update after a short delay if real-time doesn't work
@@ -482,7 +554,7 @@ export default function Listings() {
           })
         }, 1000) // Wait 1 second for real-time update, then fallback
         
-        alert('Request cancelled successfully and owner has been notified')
+        showSuccessPopup('Request Cancelled', 'Your request has been cancelled successfully and the owner has been notified.')
       } else {
         console.error('❌ No request found to cancel')
         console.log('🔍 Debugging info:', {
@@ -490,7 +562,7 @@ export default function Listings() {
           listingId: listingId,
           queryCollection: 'listing_requests'
         })
-        alert('No active request found for this listing. It may have already been cancelled or processed.')
+        showInfoPopup('No Active Request', 'No active request found for this listing. It may have already been cancelled or processed.')
       }
     } catch (error) {
       console.error('❌ Error cancelling request:', error)
@@ -516,80 +588,7 @@ export default function Listings() {
         errorMessage = 'Authentication error. Please sign out and sign in again.'
       }
       
-      alert(errorMessage)
-    }
-  }
-
-  // Load messages for a specific request
-  const loadRequestMessages = async (requestData) => {
-    if (!requestData.requesterId || !requestData.listingOwnerId) {
-      console.log('⚠️ Missing participant IDs for request:', requestData.id)
-      return
-    }
-
-    try {
-      const participants = [requestData.requesterId, requestData.listingOwnerId].sort()
-      const chatId = participants.join('_')
-      
-      console.log('📨 Loading messages for request:', {
-        requestId: requestData.id,
-        chatId: chatId,
-        participants: participants
-      })
-      
-      // Try with requestId filter first
-      let messagesQuery = query(
-        collection(db, 'chats', chatId, 'messages'),
-        where('requestId', '==', requestData.id)
-      )
-      
-      let messagesSnapshot = await getDocs(messagesQuery)
-      
-      // If no messages found with requestId, try with isListingRequest and listingId
-      if (messagesSnapshot.empty) {
-        console.log('🔍 No messages found with requestId, trying with listingId...')
-        messagesQuery = query(
-          collection(db, 'chats', chatId, 'messages'),
-          where('isListingRequest', '==', true),
-          where('listingId', '==', requestData.listingId)
-        )
-        messagesSnapshot = await getDocs(messagesQuery)
-      }
-      
-      // If still no messages, get all messages from this chat
-      if (messagesSnapshot.empty) {
-        console.log('🔍 No messages found with filters, getting all chat messages...')
-        messagesQuery = collection(db, 'chats', chatId, 'messages')
-        messagesSnapshot = await getDocs(messagesQuery)
-      }
-      
-      const messages = []
-      messagesSnapshot.forEach((doc) => {
-        const messageData = doc.data()
-        messages.push({
-          id: doc.id,
-          ...messageData
-        })
-      })
-      
-      // Sort messages by createdAt
-      messages.sort((a, b) => {
-        const aTime = a.createdAt?.toDate?.() || new Date(0)
-        const bTime = b.createdAt?.toDate?.() || new Date(0)
-        return aTime - bTime
-      })
-      
-      setRequestMessages(prev => ({
-        ...prev,
-        [requestData.id]: messages
-      }))
-      
-      console.log('📨 Loaded messages for request:', requestData.id, 'Messages:', messages.length)
-      if (messages.length > 0) {
-        console.log('📝 First message:', messages[0].text)
-      }
-    } catch (error) {
-      console.error('❌ Error loading request messages:', error)
+      showErrorPopup('Error', errorMessage)
     }
   }
 
@@ -598,7 +597,7 @@ export default function Listings() {
     console.log('🔄 Using simplified cancel request for listing:', listingId)
     
     if (!user || !db) {
-      alert('Please sign in and refresh the page.')
+      showErrorPopup('Authentication Required', 'Please sign in and refresh the page.')
       return
     }
 
@@ -616,7 +615,10 @@ export default function Listings() {
       
       if (!requestsSnapshot.empty) {
         const requestDoc = requestsSnapshot.docs[0]
-        await deleteDoc(requestDoc.ref)
+        await updateDoc(requestDoc.ref, {
+          status: 'cancelled',
+          cancelledAt: serverTimestamp()
+        })
         
         // Force immediate state update
         setRequestedListings(prev => {
@@ -626,13 +628,13 @@ export default function Listings() {
         })
         
         console.log('✅ Simplified cancellation successful')
-        alert('Request cancelled successfully!')
+        showSuccessPopup('Request Cancelled', 'Your request has been cancelled successfully!')
       } else {
-        alert('No active request found for this listing.')
+        showInfoPopup('No Active Request', 'No active request found for this listing.')
       }
     } catch (error) {
       console.error('❌ Simplified cancellation failed:', error)
-      alert('Failed to cancel request. Please try again.')
+      showErrorPopup('Error', 'Failed to cancel request. Please try again.')
     }
   }
 
@@ -651,45 +653,40 @@ export default function Listings() {
     // Basic validation
     if (!user) {
       console.error('❌ No user authenticated')
-      alert('Please sign in to send requests.')
+      showErrorPopup('Authentication Required', 'Please sign in to send requests.')
       return
     }
 
     if (!listing) {
       console.error('❌ No listing provided')
-      alert('Invalid listing. Please try again.')
+      showErrorPopup('Invalid Listing', 'Invalid listing data. Please try again.')
       return
     }
 
     if (!db) {
       console.error('❌ Database not initialized')
-      alert('Database connection error. Please refresh the page and try again.')
+      showErrorPopup('Connection Error', 'Database connection error. Please refresh the page and try again.')
       return
     }
 
     // Validate required listing fields
     if (!listing.id) {
       console.error('❌ Listing missing ID:', listing)
-      alert('Invalid listing data. Please refresh the page and try again.')
+      showErrorPopup('Invalid Data', 'Invalid listing data. Please refresh the page and try again.')
       return
     }
 
     if (!listing.ownerId) {
       console.error('❌ Listing missing owner ID:', listing)
-      alert('Unable to identify listing owner. Please try again.')
+      showErrorPopup('Owner Not Found', 'Unable to identify listing owner. Please try again.')
       return
     }
 
     if (listing.ownerId === user.uid) {
-      alert('You cannot request your own listing.')
+      showInfoPopup('Own Listing', 'You cannot request your own listing.')
       return
     }
 
-    // Check if already requested
-    if (requestedListings.has(listing.id)) {
-      alert('You have already requested this listing.')
-      return
-    }
 
     console.log('🚀 Starting request for listing:', listing.id, 'by user:', user.uid)
     console.log('📋 Full listing object:', listing)
@@ -745,7 +742,7 @@ export default function Listings() {
       // Step 3: Create chat and send initial message
       console.log('💬 Step 3: Creating chat and sending message...')
       const participants = [user.uid, listing.ownerId].sort()
-      const chatId = participants.join('_')
+      const chatId = `${user.uid}_crop_farmer_to_${listing.ownerId}_livestock_owner_listing_${listing.id}`
       const chatRef = doc(db, 'chats', chatId)
       
       try {
@@ -756,24 +753,39 @@ export default function Listings() {
           // Create new chat
           const chatData = {
             participants: participants,
+            participantRoles: {
+              [user.uid]: 'crop_farmer',
+              [listing.ownerId]: 'livestock_owner'
+            },
             participantNames: {
-              [user.uid]: user.displayName || user.email || 'Crop Farmer',
-              [listing.ownerId]: listing.ownerName
+              [user.uid]: `${user.firstName || 'Crop'} ${user.lastName || 'Farmer'}`,
+              [listing.ownerId]: listing.ownerName || 'Livestock Owner'
             },
             participantEmails: {
               [user.uid]: user.email || '',
               [listing.ownerId]: listing.ownerEmail || ''
             },
+            listingId: listing.id,
+            listingName: listing.name || 'Unnamed Listing',
+            chatType: 'crop_farmer_to_livestock_owner',
+            initiatorRole: 'crop_farmer',
+            receiverRole: 'livestock_owner',
             createdAt: serverTimestamp(),
-            lastMessage: `I am interested in your listing: ${listing.name || listing.title}`,
-            lastMessageTime: serverTimestamp(),
-            lastMessageSenderId: user.uid,
-            requestStatus: 'pending', // Add request status to chat
-            requestId: docRef.id
+            lastMessage: '',
+            lastMessageTime: serverTimestamp()
           }
           
+          console.log('🔍 WEB CHAT: Creating chat with data:', {
+            chatId: chatId,
+            participants: chatData.participants,
+            participantRoles: chatData.participantRoles,
+            chatType: chatData.chatType,
+            initiatorRole: chatData.initiatorRole,
+            receiverRole: chatData.receiverRole
+          })
+          
           await setDoc(chatRef, chatData)
-          console.log('✅ Chat created')
+          console.log('✅ Chat created successfully')
         }
 
         // Send initial message
@@ -785,9 +797,18 @@ export default function Listings() {
           read: false,
           isListingRequest: true,
           listingId: listing.id,
+          listingTitle: listing.name || listing.title,
           requestStatus: 'pending',
           requestId: docRef.id
         }
+
+        console.log('📤 WEB CHAT: Sending message with data:', {
+          chatId: chatId,
+          isListingRequest: messageData.isListingRequest,
+          listingId: messageData.listingId,
+          listingTitle: messageData.listingTitle,
+          requestStatus: messageData.requestStatus
+        })
 
         await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
         
@@ -808,9 +829,9 @@ export default function Listings() {
       // Step 4: Create notification for listing owner
       console.log('🔔 Step 4: Creating notification for listing owner...')
       const notificationData = {
-        recipientId: listing.ownerId,
-        senderId: user.uid,
-        senderName: user.displayName || user.email || 'Crop Farmer',
+        toUserId: listing.ownerId,
+        fromUserId: user.uid,
+        fromUserName: user.displayName || user.email || 'Crop Farmer',
         type: 'listing_request',
         title: 'New Listing Request',
         message: `${user.displayName || user.email || 'A crop farmer'} is interested in your listing: ${listing.name || listing.title}`,
@@ -823,8 +844,9 @@ export default function Listings() {
       }
 
       try {
-        await addDoc(collection(db, 'notifications'), notificationData)
-        console.log('✅ Notification sent to listing owner')
+        const notificationRef = await addDoc(collection(db, 'notifications'), notificationData)
+        console.log('✅ Notification sent to listing owner with ID:', notificationRef.id)
+        console.log('📋 Notification data:', notificationData)
       } catch (notificationError) {
         console.error('❌ Failed at Step 4 - Creating notification:', notificationError)
         // Don't throw error here, as the request was already created successfully
@@ -839,8 +861,14 @@ export default function Listings() {
         return newSet
       })
       
+      // Immediately update request status to show "Cancel Request" button
+      setRequestStatuses(prev => ({
+        ...prev,
+        [listing.id]: 'pending'
+      }))
+      
       console.log('🎉 Request process completed successfully for listing:', listing.id)
-      alert('Request sent successfully! The listing owner will be notified and can approve your request.')
+      showSuccessPopup('Request Sent!', 'Your request has been sent to the listing owner. They will be notified and can approve your request in their chat.')
     } catch (error) {
       console.error('❌ Error sending request:', error)
       console.error('Error details:', {
@@ -870,7 +898,7 @@ export default function Listings() {
         // Try to create chat and send message in fallback too
         try {
           const participants = [user.uid, listing.ownerId].sort()
-          const chatId = participants.join('_')
+          const chatId = `${user.uid}_crop_farmer_to_${listing.ownerId}_livestock_owner_listing_${listing.id}`
           const chatRef = doc(db, 'chats', chatId)
           
           // Check if chat exists
@@ -880,6 +908,10 @@ export default function Listings() {
             // Create new chat
             const chatData = {
               participants: participants,
+              participantRoles: {
+                [user.uid]: 'crop_farmer',
+                [listing.ownerId]: 'livestock_owner'
+              },
               participantNames: {
                 [user.uid]: user.displayName || user.email || 'Crop Farmer',
                 [listing.ownerId]: listing.ownerName
@@ -888,12 +920,18 @@ export default function Listings() {
                 [user.uid]: user.email || '',
                 [listing.ownerId]: listing.ownerEmail || ''
               },
+              listingId: listing.id,
+              listingName: listing.name || 'Unnamed Listing',
+              chatType: 'crop_farmer_to_livestock_owner',
+              initiatorRole: 'crop_farmer',
+              receiverRole: 'livestock_owner',
               createdAt: serverTimestamp(),
               lastMessage: `I am interested in your listing: ${listing.name || listing.title}`,
               lastMessageTime: serverTimestamp(),
               lastMessageSenderId: user.uid,
               requestStatus: 'pending',
-              requestId: fallbackDocRef.id
+              requestId: fallbackDocRef.id,
+              updatedAt: serverTimestamp()
             }
             
             await setDoc(chatRef, chatData)
@@ -908,6 +946,7 @@ export default function Listings() {
             read: false,
             isListingRequest: true,
             listingId: listing.id,
+            listingTitle: listing.name || listing.title,
             requestStatus: 'pending',
             requestId: fallbackDocRef.id
           }
@@ -929,9 +968,9 @@ export default function Listings() {
         // Try to send notification in fallback too
         try {
           const fallbackNotificationData = {
-            recipientId: listing.ownerId,
-            senderId: user.uid,
-            senderName: user.displayName || user.email || 'Crop Farmer',
+            toUserId: listing.ownerId,
+            fromUserId: user.uid,
+            fromUserName: user.displayName || user.email || 'Crop Farmer',
             type: 'listing_request',
             title: 'New Listing Request',
             message: `${user.displayName || user.email || 'A crop farmer'} is interested in your listing: ${listing.name || listing.title}`,
@@ -948,7 +987,14 @@ export default function Listings() {
         }
         
         setRequestedListings(prev => new Set([...prev, listing.id]))
-        alert('Request sent successfully! The listing owner will be notified.')
+        
+        // Immediately update request status for fallback too
+        setRequestStatuses(prev => ({
+          ...prev,
+          [listing.id]: 'pending'
+        }))
+        
+        showSuccessPopup('Request Sent!', 'Your request has been sent to the listing owner. They will be notified and can respond in their chat.')
         return
       } catch (fallbackError) {
         console.error('❌ Fallback request also failed:', fallbackError)
@@ -969,7 +1015,7 @@ export default function Listings() {
         errorMessage = 'Authentication error. Please sign out and sign in again.'
       }
       
-      alert(errorMessage)
+      showErrorPopup('Request Failed', errorMessage)
     }
   }
 
@@ -990,12 +1036,19 @@ export default function Listings() {
           if (userDoc.exists()) {
             const userData = userDoc.data()
             setUserRole(userData.role)
+            if (userData.location && typeof userData.location === 'object') {
+              setUserLocation(userData.location)
+            } else {
+              setUserLocation(null)
+            }
           } else {
             setUserRole('crop_farmer')
+            setUserLocation(null)
           }
         } catch (error) {
           setError('Failed to load user role')
-          setUserRole('crop_farmer') // Default fallback
+          setUserRole('crop_farmer')
+          setUserLocation(null)
         }
       } else {
         setUser(null)
@@ -1068,87 +1121,39 @@ export default function Listings() {
     return () => unsubscribe()
   }, [user, userRole])
 
-  // Load pending requests for livestock owners
+
+  // Fetch listings for livestock owners (real-time snapshot)
   useEffect(() => {
-    if (!user || !db || userRole !== 'livestock_owner') return
-
-    const q = query(
-      collection(db, 'listing_requests'),
-      where('listingOwnerId', '==', user.uid),
-      where('status', '==', 'pending')
-    )
-
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const requests = []
-      snapshot.forEach((doc) => {
-        requests.push({
-          id: doc.id,
-          ...doc.data()
-        })
-      })
-      setPendingRequests(requests)
-      console.log('📋 Pending requests loaded:', requests.length)
-      
-      // Load messages for each request
-      for (const request of requests) {
-        await loadRequestMessages(request)
-      }
-    }, (error) => {
-      console.error('Error loading pending requests:', error)
-    })
-
-    return () => unsubscribe()
-  }, [user, userRole])
-
-
-  // Fetch listings from Firebase based on user role
-  useEffect(() => {
-    if (!db || authLoading || !user || !userRole) return
+    if (!db || authLoading || !user || userRole !== 'livestock_owner') return
 
     setLoading(true)
     setError(null)
 
     const listingsRef = collection(db, 'livestock_listings')
-    let q
-    
-    if (userRole === 'livestock_owner') {
-      // Livestock owners see only their own listings
-      q = query(listingsRef, where('ownerId', '==', user.uid))
-    } else {
-      // Crop farmers see all listings - no filters
-      q = listingsRef
-    }
-    
+    const q = query(listingsRef, where('ownerId', '==', user.uid))
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      console.log('📊 Listings snapshot received:', {
-        userRole,
+      console.log('📊 Listings snapshot received (livestock_owner):', {
         userId: user.uid,
         snapshotSize: snapshot.size,
         isEmpty: snapshot.empty
       })
-      
+
       const listingsData = []
-      snapshot.forEach((doc) => {
-        const data = doc.data()
-        console.log('📋 Listing found:', {
-          id: doc.id,
-          name: data.name,
-          ownerId: data.ownerId,
-          ownerName: data.ownerName,
-          createdAt: data.createdAt
-        })
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data()
         listingsData.push({
-          id: doc.id,
+          id: docSnap.id,
           ...data
         })
       })
-      
-      console.log('✅ Total listings loaded:', listingsData.length)
+
+      console.log('✅ Total listings loaded (livestock_owner):', listingsData.length)
       setListings(listingsData)
       setFilteredListings(listingsData)
       setLoading(false)
     }, (error) => {
-      console.error('❌ Error loading listings:', error)
+      console.error('❌ Error loading listings for livestock owner:', error)
       setError('Failed to load listings')
       setLoading(false)
     })
@@ -1156,20 +1161,147 @@ export default function Listings() {
     return () => unsubscribe()
   }, [db, user, userRole, authLoading])
 
-  // Filter listings based on search query
+  // Fetch listings for crop farmers using context-based recommendation algorithm
   useEffect(() => {
+    if (!db || authLoading || !user || userRole !== 'crop_farmer') return
+
+    const loadRecommendedListings = async () => {
+      setLoading(true)
+      setError(null)
+
+      try {
+        console.log('🔄 Loading recommended listings for crop farmer...', {
+          userId: user.uid,
+          searchQuery: searchQuery || 'none'
+        })
+
+        const result = await getRecommendedListings(user.uid, {
+          limit: 100,
+          minScore: 0.0,
+          searchQuery: searchQuery.trim() || null
+        })
+
+        console.log('✅ Recommended listings loaded:', {
+          searchResults: result.searchResults?.length || 0,
+          outsideSearchResults: result.outsideSearchResults?.length || 0,
+          hasSearchQuery: result.hasSearchQuery
+        })
+
+        let combinedListings = []
+
+        if (result.hasSearchQuery && result.searchResults.length === 0) {
+          // No direct matches - show context-based outside search recommendations
+          combinedListings = result.outsideSearchResults || []
+        } else {
+          combinedListings = result.searchResults || []
+        }
+
+        setListings(combinedListings)
+        setFilteredListings(combinedListings)
+      } catch (err) {
+        console.error('❌ Error loading recommended listings for crop farmer:', err)
+        setError('Failed to load listings')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadRecommendedListings()
+  }, [db, user, userRole, authLoading, searchQuery])
+
+  // Search handling functions
+  const handleSearchInputChange = (e) => {
+    setSearchInput(e.target.value)
+  }
+
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter' && searchInput.trim()) {
+      performSearch(searchInput.trim())
+      setShowRecentSearches(false)
+    }
+  }
+
+  const performSearch = (query) => {
+    setSearchQuery(query)
+    
+    // Save to recent searches
+    const updated = [query, ...recentSearches.filter(s => s !== query)].slice(0, 10)
+    setRecentSearches(updated)
+    localStorage.setItem('listingRecentSearches', JSON.stringify(updated))
+
+    // Filter listings
+    if (userRole === 'crop_farmer') {
+      const searchLower = query.toLowerCase()
+      const matchingListings = listings.filter(listing =>
+        listing.name?.toLowerCase().includes(searchLower) ||
+        listing.details?.toLowerCase().includes(searchLower) ||
+        listing.ownerName?.toLowerCase().includes(searchLower)
+      )
+      
+      const nonMatchingListings = listings.filter(listing =>
+        !(listing.name?.toLowerCase().includes(searchLower) ||
+          listing.details?.toLowerCase().includes(searchLower) ||
+          listing.ownerName?.toLowerCase().includes(searchLower))
+      )
+      
+      // Sort both by distance (nearest first)
+      const sortByDistance = (a, b) => {
+        const distA = a.distanceKm ?? Infinity
+        const distB = b.distanceKm ?? Infinity
+        return distA - distB
+      }
+      
+      matchingListings.sort(sortByDistance)
+      nonMatchingListings.sort(sortByDistance)
+      
+      setSearchResults(matchingListings)
+      setOutsideSearchResults(nonMatchingListings)
+    }
+  }
+
+  const handleRecentSearchClick = (search) => {
+    setSearchInput(search)
+    performSearch(search)
+    setShowRecentSearches(false)
+  }
+
+  const clearRecentSearches = () => {
+    setRecentSearches([])
+    localStorage.removeItem('listingRecentSearches')
+  }
+
+  const clearSearch = () => {
+    setSearchQuery('')
+    setSearchInput('')
+    setSearchResults([])
+    setOutsideSearchResults([])
+  }
+
+  // Filter listings based on search query for livestock owners only
+  useEffect(() => {
+    // Filter out sold and deleted listings for all users
+    const activeListings = listings.filter(listing => 
+      listing.status !== 'sold' && listing.status !== 'deleted'
+    )
+    
+    if (userRole === 'crop_farmer') {
+      // For crop farmers, listings already come from the recommendation algorithm
+      setFilteredListings(activeListings)
+      return
+    }
+
     if (!searchQuery.trim()) {
-      setFilteredListings(listings)
+      setFilteredListings(activeListings)
     } else {
-      const filtered = listings.filter(listing => 
+      const filtered = activeListings.filter((listing) =>
         listing.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        listing.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        listing.details?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         listing.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         listing.ownerName?.toLowerCase().includes(searchQuery.toLowerCase())
       )
       setFilteredListings(filtered)
     }
-  }, [searchQuery, listings])
+  }, [searchQuery, listings, userRole])
 
   const formatPrice = (price, isFree) => {
     if (isFree || price === 'Free') return 'Free'
@@ -1189,6 +1321,65 @@ export default function Listings() {
     })
   }
 
+  const formatLocationValue = (location, address, city) => {
+    // If location is already a simple string, use it directly
+    if (typeof location === 'string' && location.trim()) {
+      return location.trim()
+    }
+
+    // If location is an object (e.g., { accuracy, latitude, longitude, timestamp })
+    if (location && typeof location === 'object') {
+      const { latitude, longitude } = location
+
+      if (typeof latitude === 'number' && typeof longitude === 'number') {
+        // Format to a short coordinate string
+        return `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`
+      }
+    }
+
+    // Fallbacks
+    if (address && typeof address === 'string') return address
+    if (city && typeof city === 'string') return city
+
+    return ''
+  }
+
+  const calculateDistanceKm = (fromLocation, toLocation) => {
+    if (!fromLocation || !toLocation) return null
+
+    const fromLat = typeof fromLocation.latitude === 'number' ? fromLocation.latitude : null
+    const fromLng = typeof fromLocation.longitude === 'number' ? fromLocation.longitude : null
+    const toLat = typeof toLocation.latitude === 'number' ? toLocation.latitude : null
+    const toLng = typeof toLocation.longitude === 'number' ? toLocation.longitude : null
+
+    if (fromLat == null || fromLng == null || toLat == null || toLng == null) return null
+
+    const toRad = (value) => (value * Math.PI) / 180
+
+    const R = 6371
+    const dLat = toRad(toLat - fromLat)
+    const dLon = toRad(toLng - fromLng)
+    const lat1 = toRad(fromLat)
+    const lat2 = toRad(toLat)
+
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2)
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    const distance = R * c
+
+    return distance
+  }
+
+  const formatDistanceKm = (distanceKm) => {
+    if (distanceKm == null) return ''
+    if (distanceKm < 1) {
+      return `${Math.round(distanceKm * 1000)} m away`
+    }
+    return `${distanceKm.toFixed(1)} km away`
+  }
+
   const limitWords = (text, wordLimit) => {
     if (!text) return ''
     const words = text.trim().split(/\s+/)
@@ -1204,6 +1395,133 @@ export default function Listings() {
     }
     return 'Listings'
   }
+
+  // Render listing card content
+  const renderListingCard = (listing) => (
+    <>
+      {/* Image Container */}
+      <div className={styles.imageContainer}>
+        {(() => {
+          const imageUrl = listing.images?.[0] || listing.imageUrls?.[0] || listing.imageUrl || listing.image || listing.photo || listing.photoUrl || listing.photos?.[0]
+          return imageUrl ? (
+            <img 
+              src={imageUrl} 
+              alt={listing.name || listing.title || 'Listing'}
+              className={styles.listingImage}
+              onError={(e) => {
+                e.target.style.display = 'none'
+                e.target.nextSibling.style.display = 'flex'
+              }}
+            />
+          ) : null
+        })()}
+        <div className={styles.placeholderImage} style={{
+          display: (listing.images?.[0] || listing.imageUrls?.[0] || listing.imageUrl || listing.image || listing.photo || listing.photoUrl || listing.photos?.[0]) ? 'none' : 'flex'
+        }}>
+          <p>No image</p>
+        </div>
+      </div>
+
+      {/* Card Content */}
+      <div className={styles.cardContent}>
+        <div className={styles.cardHeader}>
+          <h3 className={styles.listingName}>
+            {truncateTitle(listing.name || listing.title || listing.productName)}
+          </h3>
+          <div className={styles.price}>
+            {formatPrice(listing.price || listing.cost || listing.amount, listing.isFree)}
+          </div>
+        </div>
+        
+        <p className={styles.ownerName}>
+          by {listing.ownerName || listing.userName || listing.author || listing.seller || 'Unknown Owner'}
+        </p>
+        
+        {(listing.description || listing.details || listing.info) && (
+          <p className={styles.details}>
+            {listing.description || listing.details || listing.info}
+          </p>
+        )}
+        
+        {(listing.category || listing.type || listing.breed) && (
+          <div className={styles.measurements}>
+            {listing.category || listing.type || listing.breed}
+          </div>
+        )}
+        
+        <div className={styles.listingMeta}>
+          <span className={styles.listingDate}>
+            Posted {formatDate(listing.createdAt || listing.timestamp || listing.dateCreated)}
+          </span>
+          {userRole === 'crop_farmer' && listing.distanceKm != null && (
+            <span className={styles.listingLocation}>
+              📍 {formatDistanceKm(listing.distanceKm)}
+            </span>
+          )}
+        </div>
+        
+        <div className={styles.cardActions}>
+          {userRole === 'crop_farmer' ? (
+            (() => {
+              const buttonState = getButtonState(listing.id)
+              return (
+                <button 
+                  className={`${styles.requestButton} ${
+                    requestStatuses[listing.id] === 'pending' ? styles.cancelRequestButton : 
+                    requestStatuses[listing.id] === 'approved' ? styles.approvedButton : ''
+                  }`}
+                  disabled={buttonState.disabled}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (requestStatuses[listing.id] === 'pending') {
+                      handleCancelRequest(listing.id).catch((error) => {
+                        console.error('Main cancel failed, trying simplified version:', error)
+                        handleCancelRequestSimple(listing.id)
+                      })
+                    } else if (!requestStatuses[listing.id] || requestStatuses[listing.id] === 'rejected' || requestStatuses[listing.id] === 'cancelled') {
+                      handleListingRequest(listing)
+                    }
+                  }}
+                >
+                  {buttonState.text}
+                </button>
+              )
+            })()
+          ) : userRole === 'livestock_owner' ? (
+            <>
+              <button 
+                className={styles.editButton}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openEditModal(listing)
+                }}
+              >
+                Edit
+              </button>
+              <button 
+                className={styles.markSoldButton}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  markAsSold(listing)
+                }}
+              >
+                Mark as Sold
+              </button>
+              <button 
+                className={styles.deleteButton}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  deleteListing(listing)
+                }}
+              >
+                Delete
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </>
+  )
 
   if (authLoading || !user) {
     return null
@@ -1264,25 +1582,49 @@ export default function Listings() {
                 <img src="/assets/icons/search.png" alt="Search" className={styles.searchIcon} />
                 <input
                   type="text"
-                  placeholder="Search marketplace..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search marketplace... (Press Enter)"
+                  value={searchInput}
+                  onChange={handleSearchInputChange}
+                  onKeyPress={handleSearchKeyPress}
+                  onFocus={() => setShowRecentSearches(true)}
                   className={styles.searchInput}
                 />
+                {searchQuery && (
+                  <button onClick={clearSearch} className={styles.clearSearchButton}>
+                    ×
+                  </button>
+                )}
               </div>
+              
+              {/* Recent Searches Dropdown */}
+              {showRecentSearches && recentSearches.length > 0 && (
+                <div className={styles.recentSearchesDropdown}>
+                  <div className={styles.recentSearchesHeader}>
+                    <span>Recent Searches</span>
+                    <button onClick={clearRecentSearches} className={styles.clearAllButton}>
+                      Clear All
+                    </button>
+                  </div>
+                  <div className={styles.recentSearchesList}>
+                    {recentSearches.map((search, index) => (
+                      <div
+                        key={index}
+                        className={styles.recentSearchItem}
+                        onClick={() => handleRecentSearchClick(search)}
+                      >
+                        <img src="/assets/icons/search.png" alt="Search" className={styles.recentSearchIcon} />
+                        <span>{search}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           
           {/* Buttons for Livestock Owners */}
           {userRole === 'livestock_owner' && (
             <div className={styles.ownerButtons}>
-              <button 
-                className={`${styles.viewRequestsButton} ${pendingRequests.length > 0 ? styles.hasNotifications : ''}`}
-                onClick={() => setShowRequestsModal(true)}
-              >
-                📋 Requests ({pendingRequests.length})
-                {pendingRequests.length > 0 && <span className={styles.notificationBadge}>!</span>}
-              </button>
               <button 
                 className={styles.addListingButton}
                 onClick={openAddModal}
@@ -1296,163 +1638,107 @@ export default function Listings() {
 
       {/* Listings Content */}
       <div className={styles.listingsContent}>
-        {filteredListings.length === 0 ? (
-          <div className={styles.emptyState}>
-            <div className={styles.emptyIcon}>📦</div>
-            <h3>No listings found</h3>
-            <p>
-              {searchQuery ? 
-                `No listings match "${searchQuery}". Try a different search term.` :
-                userRole === 'livestock_owner' ?
-                  'You haven\'t created any listings yet. Click "Add Listing" to get started!' :
-                  'No listings available at the moment. Check back later for new listings.'
-              }
-            </p>
+        {/* Location Disabled Notification for Crop Farmers */}
+        {userRole === 'crop_farmer' && !userLocation && (
+          <div className={styles.locationNotification}>
+            <img src="/assets/icons/location.png" alt="Location" className={styles.notificationIcon} />
+            <div className={styles.notificationContent}>
+              <strong>Your location is disabled.</strong>
+              <span>Enable your location to see nearby listings and get personalized recommendations.</span>
+            </div>
+            <button 
+              onClick={() => window.location.href = '/account-settings'}
+              className={styles.enableLocationButton}
+            >
+              Enable Location
+            </button>
           </div>
-        ) : (
-          <div className={styles.listingsGrid}>
-            {filteredListings.map((listing) => (
-              <div 
-                key={listing.id} 
-                className={styles.listingCard}
-                onClick={() => openDetailsModal(listing)}
-                style={{ cursor: 'pointer' }}
-              >
-                {/* Image Container */}
-                <div className={styles.imageContainer}>
-                  {(() => {
-                    // Try different possible image field names
-                    const imageUrl = listing.images?.[0] || 
-                                   listing.imageUrls?.[0] || 
-                                   listing.imageUrl || 
-                                   listing.image || 
-                                   listing.photo || 
-                                   listing.photoUrl ||
-                                   listing.photos?.[0]
-                    
-                    return imageUrl ? (
-                      <img 
-                        src={imageUrl} 
-                        alt={listing.name || listing.title || 'Listing'}
-                        className={styles.listingImage}
-                        onError={(e) => {
-                          console.log('Image failed to load:', imageUrl)
-                          e.target.style.display = 'none'
-                          e.target.nextSibling.style.display = 'flex'
-                        }}
-                      />
-                    ) : null
-                  })()}
-                  <div className={styles.placeholderImage} style={{
-                    display: (listing.images?.[0] || listing.imageUrls?.[0] || listing.imageUrl || listing.image || listing.photo || listing.photoUrl || listing.photos?.[0]) ? 'none' : 'flex'
-                  }}>
-                    <p>No image</p>
-                  </div>
-                </div>
-
-                {/* Card Content */}
-                <div className={styles.cardContent}>
-                  <div className={styles.cardHeader}>
-                    <h3 className={styles.listingName}>
-                      {truncateTitle(listing.name || listing.title || listing.productName)}
-                    </h3>
-                    <div className={styles.price}>
-                      {formatPrice(listing.price || listing.cost || listing.amount, listing.isFree)}
+        )}
+        {/* Search Results Section */}
+        {searchQuery && userRole === 'crop_farmer' ? (
+          <>
+            {/* Matching Search Results */}
+            {searchResults.length > 0 && (
+              <div className={styles.searchSection}>
+                <h3 className={styles.sectionTitle}>
+                  Search Results for "{searchQuery}"
+                </h3>
+                <div className={styles.listingsGrid}>
+                  {searchResults.map((listing) => (
+                    <div 
+                      key={listing.id} 
+                      className={styles.listingCard}
+                      onClick={() => openDetailsModal(listing)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {renderListingCard(listing)}
                     </div>
-                  </div>
-                  
-                  <p className={styles.ownerName}>
-                    by {listing.ownerName || listing.userName || listing.author || listing.seller || 'Unknown Owner'}
-                  </p>
-                  
-                  {(listing.description || listing.details || listing.info) && (
-                    <p className={styles.details}>
-                      {listing.description || listing.details || listing.info}
-                    </p>
-                  )}
-                  
-                  {(listing.category || listing.type || listing.breed) && (
-                    <div className={styles.measurements}>
-                      {listing.category || listing.type || listing.breed}
-                    </div>
-                  )}
-                  
-                  <div className={styles.listingMeta}>
-                    <span className={styles.listingDate}>
-                      Posted {formatDate(listing.createdAt || listing.timestamp || listing.dateCreated)}
-                    </span>
-                    {(listing.location || listing.address || listing.city) && (
-                      <span className={styles.listingLocation}>
-                        📍 {listing.location || listing.address || listing.city}
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className={styles.cardActions}>
-                    {userRole === 'crop_farmer' ? (
-                      (() => {
-                        const buttonState = getButtonState(listing.id)
-                        return (
-                          <button 
-                            className={`${styles.requestButton} ${
-                              requestStatuses[listing.id] === 'pending' ? styles.cancelButton : 
-                              requestStatuses[listing.id] === 'approved' ? styles.approvedButton : ''
-                            }`}
-                            disabled={buttonState.disabled}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              console.log('🔘 Button clicked for listing:', {
-                                listingId: listing.id,
-                                status: requestStatuses[listing.id],
-                                buttonText: buttonState.text
-                              })
-                              
-                              if (requestStatuses[listing.id] === 'pending') {
-                                // Try main cancel function first, with fallback to simplified version
-                                handleCancelRequest(listing.id).catch((error) => {
-                                  console.error('Main cancel failed, trying simplified version:', error)
-                                  handleCancelRequestSimple(listing.id)
-                                })
-                              } else if (!requestStatuses[listing.id] || requestStatuses[listing.id] === 'rejected' || requestStatuses[listing.id] === 'cancelled') {
-                                handleListingRequest(listing)
-                              }
-                            }}
-                          >
-                            {buttonState.text}
-                          </button>
-                        )
-                      })()
-                    ) : userRole === 'livestock_owner' ? (
-                      <>
-                        <button 
-                          className={styles.editButton}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            openEditModal(listing)
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          className={styles.deleteButton}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            deleteListing(listing)
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+
+            {/* Outside Search Results */}
+            {outsideSearchResults.length > 0 && (
+              <div className={styles.searchSection}>
+                <h3 className={styles.sectionTitle}>
+                  Other Listings You May Like
+                </h3>
+                <div className={styles.listingsGrid}>
+                  {outsideSearchResults.map((listing) => (
+                    <div 
+                      key={listing.id} 
+                      className={styles.listingCard}
+                      onClick={() => openDetailsModal(listing)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {renderListingCard(listing)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* No Results */}
+            {searchResults.length === 0 && outsideSearchResults.length === 0 && (
+              <div className={styles.emptyState}>
+                <div className={styles.emptyIcon}>🔍</div>
+                <h3>No results found</h3>
+                <p>No listings match "{searchQuery}". Try a different search term.</p>
+              </div>
+            )}
+          </>
+        ) : (
+          /* Regular Listings Display */
+          filteredListings.length === 0 ? (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyIcon}>📦</div>
+              <h3>No listings found</h3>
+              <p>
+                {userRole === 'livestock_owner' ?
+                  'You haven\'t created any listings yet. Click "Add Listing" to get started!' :
+                  'No listings available at the moment. Check back later for new listings.'
+                }
+              </p>
+            </div>
+          ) : (
+            <div className={styles.listingsGrid}>
+              {filteredListings.map((listing) => (
+                <div 
+                  key={listing.id} 
+                  className={styles.listingCard}
+                  onClick={() => openDetailsModal(listing)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {renderListingCard(listing)}
+                </div>
+              ))}
+            </div>
+          )
         )}
       </div>
 
-      {/* Add Listing Modal */}
+      {/* Add Listing Modal - Multi-Step */}
       {showAddModal && (
         <div className={styles.modalOverlay}>
           <div className={styles.modal}>
@@ -1462,128 +1748,196 @@ export default function Listings() {
                 ×
               </button>
             </div>
+
+            {/* Step Indicator */}
+            <div className={styles.stepIndicator}>
+              <div className={`${styles.step} ${modalStep >= 1 ? styles.active : ''} ${modalStep > 1 ? styles.completed : ''}`}>
+                <div className={styles.stepNumber}>1</div>
+                <div className={styles.stepLabel}>Basic Info</div>
+              </div>
+              <div className={styles.stepLine}></div>
+              <div className={`${styles.step} ${modalStep >= 2 ? styles.active : ''} ${modalStep > 2 ? styles.completed : ''}`}>
+                <div className={styles.stepNumber}>2</div>
+                <div className={styles.stepLabel}>Measurements</div>
+              </div>
+              <div className={styles.stepLine}></div>
+              <div className={`${styles.step} ${modalStep >= 3 ? styles.active : ''} ${modalStep > 3 ? styles.completed : ''}`}>
+                <div className={styles.stepNumber}>3</div>
+                <div className={styles.stepLabel}>Pricing</div>
+              </div>
+              <div className={styles.stepLine}></div>
+              <div className={`${styles.step} ${modalStep >= 4 ? styles.active : ''} ${modalStep > 4 ? styles.completed : ''}`}>
+                <div className={styles.stepNumber}>4</div>
+                <div className={styles.stepLabel}>Image</div>
+              </div>
+            </div>
             
             <div className={styles.modalContent}>
-              <div className={styles.formRow}>
-                <div className={styles.formGroup}>
-                  <label>Product Name *</label>
-                  <input
-                    type="text"
-                    className={styles.input}
-                    placeholder="e.g., Cattle Manure, Compost"
-                    value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  />
+              {/* Step 1: Basic Information */}
+              {modalStep === 1 && (
+                <div className={styles.stepContent}>
+                  <h3 className={styles.stepTitle}>Basic Information</h3>
+                  <div className={styles.formGroup}>
+                    <label>Listing Title *</label>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      placeholder="e.g., Cattle Manure, Compost, Chicken Manure"
+                      value={formData.name}
+                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    />
+                  </div>
+                  
+                  <div className={styles.formGroup}>
+                    <label>Listing Description *</label>
+                    <textarea
+                      className={styles.textarea}
+                      placeholder="Describe your product: nutrient content, condition, storage method, etc."
+                      value={formData.details}
+                      onChange={(e) => setFormData({...formData, details: e.target.value})}
+                      rows={5}
+                    />
+                  </div>
                 </div>
-                
-                <div className={styles.formGroup}>
-                  <label>Quantity</label>
-                  <input
-                    type="number"
-                    className={styles.input}
-                    placeholder="e.g., 50, 100"
-                    value={formData.measurements}
-                    onChange={(e) => setFormData({...formData, measurements: e.target.value})}
-                  />
-                </div>
-              </div>
+              )}
 
-              <div className={styles.formRow}>
-                <div className={styles.formGroup}>
-                  <label>Unit of Measurement</label>
-                  <select
-                    className={styles.select}
-                    value={formData.measurementUnit}
-                    onChange={(e) => setFormData({...formData, measurementUnit: e.target.value})}
-                  >
-                    {measurementUnits.map((unit) => (
-                      <option key={unit} value={unit}>{unit}</option>
-                    ))}
-                  </select>
+              {/* Step 2: Measurements & Quantity */}
+              {modalStep === 2 && (
+                <div className={styles.stepContent}>
+                  <h3 className={styles.stepTitle}>Measurements & Quantity</h3>
+                  <div className={styles.formGroup}>
+                    <label>Quantity *</label>
+                    <input
+                      type="number"
+                      className={styles.input}
+                      placeholder="e.g., 50, 100, 500"
+                      value={formData.measurements}
+                      onChange={(e) => setFormData({...formData, measurements: e.target.value})}
+                    />
+                  </div>
+                  
+                  <div className={styles.formGroup}>
+                    <label>Unit of Measurement *</label>
+                    <select
+                      className={styles.select}
+                      value={formData.measurementUnit}
+                      onChange={(e) => setFormData({...formData, measurementUnit: e.target.value})}
+                    >
+                      {measurementUnits.map((unit) => (
+                        <option key={unit} value={unit}>{unit}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                
-                <div className={styles.formGroup}>
-                  <label>Price</label>
-                  <div className={styles.priceContainer}>
-                    <label className={styles.checkbox}>
-                      <input
-                        type="checkbox"
-                        checked={formData.isFree}
-                        onChange={(e) => setFormData({...formData, isFree: e.target.checked})}
-                      />
-                      Free
-                    </label>
-                    
-                    {!formData.isFree && (
-                      <input
-                        type="number"
-                        className={styles.input}
-                        placeholder="Price (₱)"
-                        value={formData.price}
-                        onChange={(e) => setFormData({...formData, price: e.target.value})}
-                      />
+              )}
+
+              {/* Step 3: Pricing */}
+              {modalStep === 3 && (
+                <div className={styles.stepContent}>
+                  <h3 className={styles.stepTitle}>Pricing</h3>
+                  <div className={styles.formGroup}>
+                    <label>Set Price</label>
+                    <div className={styles.pricingOptions}>
+                      <button
+                        type="button"
+                        className={`${styles.freeButton} ${formData.isFree ? styles.active : ''}`}
+                        onClick={() => setFormData({...formData, isFree: true, price: ''})}
+                      >
+                        Free
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className={styles.formGroup}>
+                    <label>Price (₱) {!formData.isFree && '*'}</label>
+                    <input
+                      type="number"
+                      className={styles.input}
+                      placeholder="Enter price in Philippine Peso"
+                      value={formData.price}
+                      onChange={(e) => setFormData({...formData, price: e.target.value})}
+                      onFocus={() => setFormData({...formData, isFree: false})}
+                      disabled={formData.isFree}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4: Image */}
+              {modalStep === 4 && (
+                <div className={styles.stepContent}>
+                  <h3 className={styles.stepTitle}>Add Image</h3>
+                  <div className={styles.formGroup}>
+                    <label>Product Image *</label>
+                    {formData.image ? (
+                      <div className={styles.imagePreview}>
+                        <img src={formData.image} alt="Preview" />
+                        <button 
+                          className={styles.removeImageButton}
+                          onClick={() => setFormData({...formData, image: null})}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : (
+                      <div className={styles.imageUploadContainer}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className={styles.fileInput}
+                          id="imageUpload"
+                          onChange={(e) => {
+                            const file = e.target.files[0]
+                            if (file) {
+                              const reader = new FileReader()
+                              reader.onload = (event) => {
+                                setFormData({...formData, image: event.target.result})
+                              }
+                              reader.readAsDataURL(file)
+                            }
+                          }}
+                        />
+                        <label htmlFor="imageUpload" className={styles.uploadLabel}>
+                          <div className={styles.uploadIcon}>📷</div>
+                          <div className={styles.uploadText}>
+                            <span className={styles.uploadTitle}>Click to upload image</span>
+                            <span className={styles.uploadSubtitle}>PNG, JPG up to 10MB</span>
+                          </div>
+                        </label>
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
-
-              <div className={styles.formGroup}>
-                <label>Product Details</label>
-                <textarea
-                  className={styles.textarea}
-                  placeholder="Nutrient content, condition, storage method, etc."
-                  value={formData.details}
-                  onChange={(e) => setFormData({...formData, details: e.target.value})}
-                  rows={3}
-                />
-              </div>
-
-              <div className={styles.formGroup}>
-                <label>Image (Optional)</label>
-                {formData.image ? (
-                  <div className={styles.imagePreview}>
-                    <img src={formData.image} alt="Preview" />
-                    <button 
-                      className={styles.removeImageButton}
-                      onClick={() => setFormData({...formData, image: null})}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ) : (
-                  <div className={styles.imageUpload}>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className={styles.fileInput}
-                      id="imageUpload"
-                      onChange={(e) => {
-                        const file = e.target.files[0]
-                        if (file) {
-                          const reader = new FileReader()
-                          reader.onload = (event) => {
-                            setFormData({...formData, image: event.target.result})
-                          }
-                          reader.readAsDataURL(file)
-                        }
-                      }}
-                    />
-                    <label htmlFor="imageUpload" className={styles.uploadLabel}>
-                      📷 Add Photo
-                    </label>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
             
             <div className={styles.modalFooter}>
-              <button className={styles.cancelButton} onClick={closeModal}>
-                Cancel
+              <button 
+                className={styles.cancelButton} 
+                onClick={modalStep === 1 ? closeModal : prevStep}
+              >
+                {modalStep === 1 ? 'Cancel' : 'Back'}
               </button>
-              <button className={styles.saveButton} onClick={saveListing}>
-                {editingListing ? 'Update Listing' : 'Save Listing'}
-              </button>
+              {modalStep < 4 ? (
+                <button className={styles.nextButton} onClick={nextStep}>
+                  Next
+                </button>
+              ) : (
+                <button className={styles.saveButton} onClick={saveListing}>
+                  {editingListing ? 'Update Listing' : 'Create Listing'}
+                </button>
+              )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading Modal */}
+      {isCreatingListing && (
+        <div className={styles.loadingOverlay}>
+          <div className={styles.loadingModal}>
+            <div className={styles.loadingSpinner}></div>
+            <p className={styles.loadingText}>Processing...</p>
           </div>
         </div>
       )}
@@ -1643,7 +1997,7 @@ export default function Listings() {
                     </div>
                   )}
                   
-                  {/* Quantity and Location */}
+                  {/* Quantity and Distance/Location */}
                   <div className={styles.detailsRow}>
                     {selectedListing.measurements && (
                       <div className={styles.detailsSection}>
@@ -1652,10 +2006,10 @@ export default function Listings() {
                       </div>
                     )}
                     
-                    {(selectedListing.location || selectedListing.address || selectedListing.city) && (
+                    {userRole === 'crop_farmer' && selectedListing.distanceKm != null && (
                       <div className={styles.detailsSection}>
-                        <h4>Location</h4>
-                        <p>📍 {selectedListing.location || selectedListing.address || selectedListing.city}</p>
+                        <h4>Distance</h4>
+                        <p>📍 {formatDistanceKm(selectedListing.distanceKm)}</p>
                       </div>
                     )}
                   </div>
@@ -1718,78 +2072,6 @@ export default function Listings() {
                   </button>
                 </div>
               ) : null}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Requests Modal for Livestock Owners */}
-      {showRequestsModal && userRole === 'livestock_owner' && (
-        <div className={styles.modalOverlay}>
-          <div className={styles.modal}>
-            <div className={styles.modalHeader}>
-              <h2>Pending Requests ({pendingRequests.length})</h2>
-              <button className={styles.closeButton} onClick={() => setShowRequestsModal(false)}>
-                ×
-              </button>
-            </div>
-            
-            <div className={styles.modalContent}>
-              {pendingRequests.length === 0 ? (
-                <div className={styles.emptyRequests}>
-                  <p>No pending requests at the moment.</p>
-                </div>
-              ) : (
-                <div className={styles.requestsList}>
-                  {pendingRequests.map((request) => (
-                    <div key={request.id} className={styles.requestItem}>
-                      <div className={styles.requestInfo}>
-                        <h4>{request.listingName}</h4>
-                        <p><strong>From:</strong> {request.requesterName}</p>
-                        <p><strong>Email:</strong> {request.requesterEmail}</p>
-                        <p><strong>Requested:</strong> {request.createdAt?.toDate?.()?.toLocaleDateString() || 'Recently'}</p>
-                        
-                        {/* Display messages from the crop farmer */}
-                        {requestMessages[request.id] && requestMessages[request.id].length > 0 && (
-                          <div className={styles.requestMessages}>
-                            <p><strong>Message:</strong></p>
-                            <div className={styles.messagesList}>
-                              {requestMessages[request.id].map((message) => (
-                                <div key={message.id} className={styles.messageItem}>
-                                  <p className={styles.messageText}>"{message.text}"</p>
-                                  <span className={styles.messageTime}>
-                                    {message.createdAt?.toDate?.()?.toLocaleString() || 'Recently'}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div className={styles.requestActions}>
-                        <button 
-                          className={styles.approveButton}
-                          onClick={() => {
-                            handleApproveRequest(request.id, request)
-                            setShowRequestsModal(false)
-                          }}
-                        >
-                          ✅ Approve
-                        </button>
-                        <button 
-                          className={styles.rejectButton}
-                          onClick={() => {
-                            handleRejectRequest(request.id, request)
-                            setShowRequestsModal(false)
-                          }}
-                        >
-                          ❌ Decline
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>

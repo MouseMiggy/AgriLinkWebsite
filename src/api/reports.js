@@ -69,27 +69,8 @@ export class ReportsAPI {
   }
 
   static async sendToWebhook(reportData, webhookUrl) {
-    try {
-      if (!webhookUrl || webhookUrl === 'https://your-n8n-instance.com/webhook/report-validation') {
-        console.log('No webhook URL configured, skipping webhook')
-        return
-      }
-
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reportData)
-      })
-
-      if (!response.ok) {
-        throw new Error(`Webhook request failed: ${response.statusText}`)
-      }
-
-      console.log('Report sent to webhook successfully')
-    } catch (error) {
-      console.error('Webhook error:', error)
-      // Don't throw here - webhook failure shouldn't prevent report submission
-    }
+    console.log('sendToWebhook is disabled; skipping external webhook call.')
+    return
   }
 
   static async getReportStats(userId) {

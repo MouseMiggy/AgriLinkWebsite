@@ -1,0 +1,328 @@
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  padding: 20px;
+}
+
+.modalContainer {
+  background: white;
+  border-radius: 12px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e4e6ea;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1c1e21;
+  margin: 0;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  font-size: 32px;
+  color: #65676b;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+.closeButton:hover {
+  background-color: #f0f2f5;
+}
+
+.contentInfo {
+  padding: 20px 24px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e4e6ea;
+}
+
+.contentLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: #65676b;
+  margin: 0 0 8px 0;
+}
+
+.contentText {
+  font-size: 14px;
+  color: #1c1e21;
+  margin: 0;
+  max-height: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.section {
+  padding: 20px 24px;
+}
+
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c1e21;
+  margin: 0 0 16px 0;
+}
+
+.reportTypes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reportTypeItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 2px solid #e4e6ea;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.reportTypeItem:hover {
+  border-color: #fa9100;
+  background-color: #fff8f0;
+}
+
+.reportTypeItem.selected {
+  border-color: #fa9100;
+  background-color: #fff8f0;
+}
+
+.reportIcon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.reportTypeText {
+  flex: 1;
+}
+
+.reportTypeLabel {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c1e21;
+  margin: 0 0 4px 0;
+}
+
+.reportTypeDescription {
+  font-size: 14px;
+  color: #65676b;
+  margin: 0;
+}
+
+.textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e4e6ea;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: 'Poppins', sans-serif;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: #fa9100;
+}
+
+.footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid #e4e6ea;
+}
+
+.cancelButton {
+  flex: 1;
+  padding: 12px 24px;
+  background: white;
+  border: 1px solid #e4e6ea;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #65676b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancelButton:hover {
+  background-color: #f0f2f5;
+}
+
+.submitButton {
+  flex: 1;
+  padding: 12px 24px;
+  background: #fa9100;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.submitButton:hover:not(:disabled) {
+  background: #e68200;
+}
+
+.submitButton:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Confirmation Modal */
+.confirmModal {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+}
+
+.confirmTitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1c1e21;
+  margin: 0 0 12px 0;
+}
+
+.confirmText {
+  font-size: 16px;
+  color: #65676b;
+  margin: 0 0 24px 0;
+}
+
+.confirmButtons {
+  display: flex;
+  gap: 12px;
+}
+
+.confirmButton {
+  flex: 1;
+  padding: 12px 24px;
+  background: #fa9100;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.confirmButton:hover {
+  background: #e68200;
+}
+
+/* Loading Modal */
+.loadingModal {
+  background: white;
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #f0f2f5;
+  border-top-color: #fa9100;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loadingText {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c1e21;
+  margin: 0;
+}
+
+/* Success Modal */
+.successModal {
+  background: white;
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+  max-width: 400px;
+}
+
+.successIcon {
+  width: 60px;
+  height: 60px;
+  background: #42b883;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  color: white;
+  margin: 0 auto 20px;
+}
+
+.successTitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1c1e21;
+  margin: 0 0 12px 0;
+}
+
+.successMessage {
+  font-size: 16px;
+  color: #65676b;
+  margin: 0 0 24px 0;
+  line-height: 1.5;
+}
+
+.okButton {
+  padding: 12px 40px;
+  background: #fa9100;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.okButton:hover {
+  background: #e68200;
+}

@@ -1,283 +1,315 @@
-/* Reports Page Styles */
 .container {
   min-height: 100vh;
-  background: #f0f2f5;
-  padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #f0f0f0;
+  padding: 0;
+  padding-top: 90px;
+  padding-bottom: 120px;
+  font-family: 'Poppins', sans-serif;
 }
 
 .header {
-  max-width: 800px;
-  margin: 0 auto 30px;
-  text-align: center;
+  background: white;
+  padding: 20px 20px;
+  border-bottom: 1px solid #e4e6ea;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-left: 260px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding-left: 40px;
 }
 
-.backBtn {
-  background: #fa9100;
+.headerContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.headerLeft {
+  display: flex;
+  flex-direction: column;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+}
+
+.deleteAllButton {
+  background-color: #dc3545;
   color: white;
   border: none;
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  margin-bottom: 20px;
   transition: background-color 0.2s;
+  font-family: 'Poppins', sans-serif;
 }
 
-.backBtn:hover {
-  background: #e8820e;
+.deleteAllButton:hover {
+  background-color: #c82333;
 }
 
 .title {
-  margin: 0 0 8px 0;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   color: #1c1e21;
-}
-
-.subtitle {
-  margin: 0;
-  font-size: 16px;
-  color: #65676b;
+  margin: 0 0 8px 0;
 }
 
 .loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 50vh;
+  text-align: center;
+  padding: 40px;
   font-size: 18px;
   color: #65676b;
 }
 
-.filters {
-  max-width: 800px;
-  margin: 0 auto 30px;
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.filterBtn {
-  background: white;
-  border: 1px solid #e4e6ea;
-  padding: 12px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #65676b;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.filterBtn:hover {
-  background: #f8f9fa;
-  border-color: #fa9100;
-}
-
-.filterBtn.active {
-  background: #fa9100;
-  color: white;
-  border-color: #fa9100;
-}
-
-.reportsList {
-  max-width: 800px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
 .emptyState {
+  margin-left: 260px;
+  margin-right: 40px;
+  margin-top: 24px;
+  padding: 60px 40px;
   text-align: center;
-  padding: 60px 20px;
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .emptyIcon {
-  font-size: 48px;
-  margin-bottom: 16px;
+  width: 64px;
+  height: 64px;
+  opacity: 0.5;
+  margin-bottom: 20px;
 }
 
-.emptyState h3 {
-  margin: 0 0 8px 0;
-  font-size: 20px;
+.emptyTitle {
+  font-size: 24px;
+  font-weight: 600;
   color: #1c1e21;
+  margin: 0 0 12px 0;
 }
 
-.emptyState p {
-  margin: 0;
-  color: #65676b;
+.emptyText {
   font-size: 16px;
+  color: #65676b;
+  margin: 0;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.5;
+}
+
+.tableContainer {
+  margin-left: 260px;
+  padding: 20px 40px;
+  margin-bottom: 40px;
+  background-color: #f0f0f0;
+}
+
+.tableHeader {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  background-color: #f8f9fa;
+  border: 1px solid #e4e6ea;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  font-weight: 600;
+  color: #1c1e21;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.headerReportType {
+  width: 150px;
+  flex-shrink: 0;
+  margin-right: 20px;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.headerReportedUser {
+  width: 200px;
+  flex-shrink: 0;
+  margin-right: 20px;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.headerPostContent {
+  flex: 1;
+  margin-right: 20px;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.headerStatus {
+  width: 120px;
+  text-align: center;
+  margin-right: 20px;
+}
+
+.headerDate {
+  width: 180px;
+  text-align: center;
+}
+
+.reportsList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 40px;
 }
 
 .reportCard {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  border: 1px solid #e4e6ea;
+  border-top: none;
   transition: box-shadow 0.2s;
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  min-height: 60px;
+  flex-wrap: nowrap;
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.reportCard:last-child {
+  border-radius: 0 0 8px 8px;
 }
 
 .reportCard:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.reportHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 20px 0;
-  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .reportType {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  font-size: 14px;
+  font-weight: 550;
+  color: #1c1e21;
+  width: 150px;
+  margin-right: 20px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  box-sizing: border-box;
 }
 
-.typeLabel {
-  background: #f0f2f5;
+.reportedUser {
+  font-size: 14px;
+  font-weight: 500;
   color: #1c1e21;
-  padding: 6px 12px;
-  border-radius: 16px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
+  width: 200px;
+  margin-right: 20px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.postContent {
+  font-size: 14px;
+  font-weight: 400;
+  color: #65676b;
+  flex: 1;
+  margin-right: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  box-sizing: border-box;
 }
 
 .statusBadge {
-  color: white;
-  padding: 4px 8px;
+  padding: 6px 12px;
   border-radius: 12px;
+  color: white;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-}
-
-.reportDate {
-  font-size: 12px;
-  color: #65676b;
-}
-
-.reportContent {
-  padding: 0 20px;
-}
-
-.reportContent h4 {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #1c1e21;
-}
-
-.reportedPost {
-  margin-bottom: 20px;
-}
-
-.postPreview {
-  background: #f8f9fa;
-  border: 1px solid #e4e6ea;
-  border-radius: 8px;
-  padding: 12px;
-}
-
-.postAuthor {
-  font-size: 12px;
-  color: #65676b;
-  margin-bottom: 6px;
-  font-weight: 500;
-}
-
-.postText {
-  font-size: 14px;
-  color: #1c1e21;
-  line-height: 1.4;
-  font-style: italic;
-}
-
-.reportDescription {
-  margin-bottom: 20px;
-}
-
-.reportDescription p {
-  background: #f0f2f5;
-  padding: 12px;
-  border-radius: 8px;
-  margin: 0;
-  font-size: 14px;
-  color: #1c1e21;
-  font-style: italic;
-}
-
-.aiDecision {
-  margin-bottom: 20px;
-  background: #f8f9fa;
-  border: 1px solid #e4e6ea;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.decisionDetails {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.decisionRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #65676b;
-  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  width: 120px;
+  text-align: center;
   flex-shrink: 0;
-  min-width: 80px;
+  margin-right: 20px;
 }
 
-.value {
-  font-size: 13px;
-  color: #1c1e21;
-  text-align: right;
-  flex: 1;
-}
-
-.reportFooter {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  background: #f8f9fa;
-  border-top: 1px solid #e4e6ea;
-  font-size: 11px;
+.dateTime {
+  font-size: 12px;
   color: #65676b;
-}
-
-.reportId {
-  font-family: monospace;
-  background: #e4e6ea;
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-
-.processedAt {
-  font-style: italic;
+  width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  text-align: center;
 }
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .container {
+  .header {
+    margin-left: 0;
+    padding: 20px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+  
+  .tableContainer {
+    margin-left: 0;
+    padding: 20px;
+  }
+  
+  .emptyState {
+    margin-left: 20px;
+    margin-right: 20px;
+  }
+  
+  .reportCard {
+    padding: 12px 16px;
+    overflow-x: auto;
+  }
+  
+  .reportType {
+    min-width: 100px;
+  }
+  
+  .reportedUser {
+    min-width: 120px;
+  }
+  
+  .postContent {
+    min-width: 150px;
+  }
+  
+  .statusBadge {
+    min-width: 80px;
+  }
+  
+  .dateTime {
+    min-width: 140px;
+  }
+  
+  .confidence {
+    min-width: 80px;
+  }
+}
+
+@media (max-width: 600px) {
+  .header {
     padding: 16px;
   }
   
@@ -285,38 +317,164 @@
     font-size: 24px;
   }
   
-  .filters {
-    gap: 8px;
+  .tableContainer {
+    padding: 16px;
   }
-  
-  .filterBtn {
-    padding: 10px 16px;
-    font-size: 13px;
-  }
-  
-  .reportHeader {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-  
-  .reportType {
-    flex-wrap: wrap;
-  }
-  
-  .decisionRow {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-  
-  .value {
-    text-align: left;
-  }
-  
-  .reportFooter {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
+}
+
+/* Report Details Modal */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.modal {
+  background: white;
+  border-radius: 0;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e4e6ea;
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 10;
+}
+
+.modalHeader h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1c1e21;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  font-size: 32px;
+  color: #65676b;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+.closeButton:hover {
+  background-color: #f0f2f5;
+}
+
+.modalContent {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.infoSection {
+  background-color: #f8f9fa;
+  padding: 16px 24px;
+  margin: 0 -24px 16px -24px;
+}
+
+.infoItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.infoLabel {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c1e21;
+}
+
+.infoValue {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c1e21;
+}
+
+.modalSection {
+  margin-bottom: 24px;
+}
+
+.modalSection h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c1e21;
+  margin: 0 0 12px 0;
+}
+
+.modalRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.modalLabel {
+  font-weight: 600;
+  color: #65676b;
+  min-width: 120px;
+}
+
+.modalValue {
+  color: #1c1e21;
+}
+
+.postContentBox,
+.descriptionBox {
+  background-color: #f0f2f5;
+  padding: 16px;
+  border-radius: 8px;
+  color: #1c1e21;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.postImageContainer {
+  margin-top: 12px;
+}
+
+.postImage {
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.analysisBox {
+  background-color: #f8f9fa;
+  padding: 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border-left: 3px solid #2196f3;
+  color: #333;
+  line-height: 1.6;
+  font-size: 14px;
 }

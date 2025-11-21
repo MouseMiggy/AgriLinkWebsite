@@ -108,6 +108,45 @@ export default function SignIn() {
       const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password)
       const user = userCredential.user
 
+      // Check user onboarding status and redirect appropriately
+      const { doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('../lib/firebase')
+      
+      const userDocRef = doc(db, 'Users', user.uid)
+      const userDoc = await getDoc(userDocRef)
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data()
+        const onboarding = userData.onboarding || {}
+
+        // Role not selected yet
+        if (!userData.roleSelected) {
+          router.push('/role-selection')
+          return
+        }
+
+        const hasLocation = userData.locationPermissionGranted || userData.locationSkipped
+
+        // Check per-role onboarding status for current role
+        if (userData.role === 'livestock_owner' && !onboarding.livestockOnboardingCompleted) {
+          if (!hasLocation) {
+            router.push('/location-permission')
+          } else {
+            router.push('/livestock-onboarding')
+          }
+          return
+        }
+
+        if (userData.role === 'crop_farmer' && !onboarding.cropOnboardingCompleted) {
+          if (!hasLocation) {
+            router.push('/location-permission')
+          } else {
+            router.push('/crop-onboarding')
+          }
+          return
+        }
+      }
+
       // Redirect to dashboard after successful signin
       router.push('/dashboard')
     } catch (err) {
@@ -150,15 +189,48 @@ export default function SignIn() {
       const userDoc = await getDoc(userDocRef)
       
       if (!userDoc.exists()) {
-        // Create user profile in Firestore
+        // Create user profile in Firestore for new Google users
         await setDoc(userDocRef, {
           firstName: user.displayName?.split(' ')[0] || 'User',
           lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
           email: user.email,
-          role: 'crop_farmer', // Default role
           createdAt: new Date(),
-          photoURL: user.photoURL || null
+          photoURL: user.photoURL || null,
+          verified: true
         })
+        
+        // New Google user - redirect to role selection
+        router.push('/role-selection')
+        return
+      } else {
+        // Existing user - check onboarding status
+        const userData = userDoc.data()
+        const onboarding = userData.onboarding || {}
+
+        if (!userData.roleSelected) {
+          router.push('/role-selection')
+          return
+        }
+
+        const hasLocation = userData.locationPermissionGranted || userData.locationSkipped
+
+        if (userData.role === 'livestock_owner' && !onboarding.livestockOnboardingCompleted) {
+          if (!hasLocation) {
+            router.push('/location-permission')
+          } else {
+            router.push('/livestock-onboarding')
+          }
+          return
+        }
+
+        if (userData.role === 'crop_farmer' && !onboarding.cropOnboardingCompleted) {
+          if (!hasLocation) {
+            router.push('/location-permission')
+          } else {
+            router.push('/crop-onboarding')
+          }
+          return
+        }
       }
 
       // Redirect to dashboard after successful signin

@@ -1,0 +1,380 @@
+/* Role Selection Page Styles */
+.container {
+  min-height: 100vh;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.backgroundPattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 25% 25%, rgba(250, 145, 0, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(250, 145, 0, 0.02) 0%, transparent 50%);
+  animation: float 20s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(2deg); }
+}
+
+.content {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 30px;
+  max-width: 1000px;
+  width: 100%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  border: 1px solid #f0f0f0;
+}
+
+.header {
+  margin-bottom: 40px;
+}
+
+.logoContainer {
+  margin-bottom: 20px;
+}
+
+.logo {
+  height: 60px;
+  width: auto;
+}
+
+.title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #fa9100;
+  margin-bottom: 10px;
+  font-family: 'Raleway', sans-serif;
+}
+
+.subtitle {
+  font-size: 1.1rem;
+  color: #666;
+  margin-bottom: 0;
+  font-weight: 400;
+}
+
+.roleContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.roleCards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 25px;
+}
+
+.roleCard {
+  background: white;
+  border: 2px solid #f0f0f0;
+  border-radius: 12px;
+  padding: 25px 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  text-align: center;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.roleCard:hover {
+  border-color: #fa9100;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(250, 145, 0, 0.15);
+}
+
+.roleCard.selected {
+  border-color: #fa9100;
+  background: linear-gradient(135deg, #fff8f0 0%, #fef4e8 100%);
+  box-shadow: 0 8px 25px rgba(250, 145, 0, 0.2);
+  transform: translateY(-3px);
+}
+
+.roleIcon {
+  font-size: 2.8rem;
+  color: #fa9100;
+  margin-bottom: 18px;
+}
+
+.roleCard.selected .roleIcon {
+  color: #fa9100;
+  animation: bounce 0.6s ease;
+}
+
+@keyframes bounce {
+  0%, 20%, 60%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-10px); }
+  80% { transform: translateY(-5px); }
+}
+
+.roleTitle {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #fa9100;
+  margin-bottom: 8px;
+}
+
+.roleDescription {
+  font-size: 0.95rem;
+  color: #666;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.roleFeatures {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.feature {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.feature i {
+  color: #fa9100;
+  font-size: 0.8rem;
+}
+
+.selectIndicator {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 1.3rem;
+  color: #fa9100;
+  opacity: 0;
+  transform: scale(0);
+  transition: all 0.3s ease;
+}
+
+.roleCard.selected .selectIndicator {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.actionContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.continueButton {
+  background: #fa9100;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 35px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0.5;
+  transform: scale(0.95);
+  min-width: 150px;
+  justify-content: center;
+}
+
+.continueButton.active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.continueButton.active:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(250, 145, 0, 0.3);
+  background: #e8820e;
+}
+
+.continueButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.buttonSpinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.helpText {
+  font-size: 0.9rem;
+  color: #888;
+  margin: 0;
+  font-style: italic;
+}
+
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  color: white;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Toast Notification */
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #ff4757;
+  color: white;
+  padding: 15px 20px;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(255, 71, 87, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 1000;
+  transform: translateX(400px);
+  opacity: 0;
+  transition: all 0.3s ease;
+  max-width: 350px;
+}
+
+.toast.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toastIcon {
+  font-size: 1.2rem;
+}
+
+.toastMessage {
+  flex: 1;
+  font-weight: 500;
+}
+
+.toastClose {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 50%;
+  transition: background-color 0.2s ease;
+}
+
+.toastClose:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .container {
+    padding: 15px;
+  }
+
+  .content {
+    padding: 30px 20px;
+  }
+
+  .title {
+    font-size: 2rem;
+  }
+
+  .subtitle {
+    font-size: 1rem;
+  }
+
+  .roleCards {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .roleCard {
+    padding: 25px 15px;
+    min-height: 280px;
+  }
+
+  .roleIcon {
+    font-size: 2.5rem;
+  }
+
+  .roleTitle {
+    font-size: 1.3rem;
+  }
+
+  .roleDescription {
+    font-size: 0.9rem;
+  }
+
+  .continueButton {
+    padding: 12px 30px;
+    font-size: 1rem;
+  }
+
+  .toast {
+    right: 15px;
+    left: 15px;
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .content {
+    padding: 25px 15px;
+  }
+
+  .title {
+    font-size: 1.8rem;
+  }
+
+  .roleCard {
+    padding: 20px 12px;
+    min-height: 260px;
+  }
+
+  .roleIcon {
+    font-size: 2rem;
+  }
+
+  .roleTitle {
+    font-size: 1.2rem;
+  }
+}

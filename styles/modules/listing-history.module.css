@@ -121,12 +121,23 @@
 .statusBadge {
   padding: 6px 12px;
   border-radius: 20px;
-  background-color: #28a745;
   color: white;
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.activeBadge {
+  background-color: #28a745;
+}
+
+.soldBadge {
+  background-color: #17a2b8;
+}
+
+.deletedBadge {
+  background-color: #dc3545;
 }
 
 .listingDetails {

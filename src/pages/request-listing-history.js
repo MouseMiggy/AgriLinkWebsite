@@ -9,6 +9,14 @@ export default function RequestListingHistory() {
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState(null)
   const [userRole, setUserRole] = useState(null)
+  const [showPopup, setShowPopup] = useState(false)
+  const [popupConfig, setPopupConfig] = useState({
+    title: '',
+    message: '',
+    type: 'info', // 'info', 'success', 'error', 'confirm'
+    onConfirm: null,
+    onCancel: null
+  })
 
   // Auth state listener
   useEffect(() => {
@@ -87,26 +95,86 @@ export default function RequestListingHistory() {
     return () => unsubscribe()
   }, [user, db])
 
+  // Popup helper functions
+  const showInfoPopup = (title, message) => {
+    setPopupConfig({
+      title,
+      message,
+      type: 'info',
+      onConfirm: () => setShowPopup(false),
+      onCancel: null
+    })
+    setShowPopup(true)
+  }
+
+  const showSuccessPopup = (title, message) => {
+    setPopupConfig({
+      title,
+      message,
+      type: 'success',
+      onConfirm: () => setShowPopup(false),
+      onCancel: null
+    })
+    setShowPopup(true)
+  }
+
+  const showErrorPopup = (title, message) => {
+    setPopupConfig({
+      title,
+      message,
+      type: 'error',
+      onConfirm: () => setShowPopup(false),
+      onCancel: null
+    })
+    setShowPopup(true)
+  }
+
+  const showConfirmPopup = (title, message, onConfirm) => {
+    setPopupConfig({
+      title,
+      message,
+      type: 'confirm',
+      onConfirm: () => {
+        setShowPopup(false)
+        onConfirm()
+      },
+      onCancel: () => setShowPopup(false)
+    })
+    setShowPopup(true)
+  }
+
   const cancelRequest = async (requestId) => {
     console.log('🚀 Cancel request called for ID:', requestId)
     
-    if (!confirm('Are you sure you want to cancel this request?')) return
+    // Find the request to get owner information
+    const requestToCancel = requests.find(req => req.id === requestId)
+    console.log('📋 Request to cancel:', requestToCancel)
+    
+    if (!requestToCancel) {
+      console.error('❌ Request not found in local state')
+      showErrorPopup('Error', 'Request not found')
+      return
+    }
 
-    try {
-      // Find the request to get owner information
-      const requestToCancel = requests.find(req => req.id === requestId)
-      console.log('📋 Request to cancel:', requestToCancel)
-      
-      if (!requestToCancel) {
-        console.error('❌ Request not found in local state')
-        alert('Request not found')
-        return
+    // Show confirmation popup
+    showConfirmPopup(
+      'Cancel Request',
+      `Are you sure you want to cancel your request for "${requestToCancel.listingName}"?`,
+      async () => {
+        await performCancelRequest(requestId, requestToCancel)
       }
+    )
+  }
+
+  const performCancelRequest = async (requestId, requestToCancel) => {
+    try {
 
       // Send notification message to the chat between users
       const participants = [user.uid, requestToCancel.listingOwnerId].sort()
-      const chatId = participants.join('_')
-      console.log('💬 Chat ID:', chatId)
+      const chatId = `${user.uid}_crop_farmer_to_${requestToCancel.listingOwnerId}_livestock_owner`
+      const fallbackChatId = participants.join('_')
+      console.log('💬 Primary Chat ID:', chatId)
+      console.log('💬 Fallback Chat ID:', fallbackChatId)
       
       const messageData = {
         text: `I have cancelled my request for "${requestToCancel.listingName}". Thank you for your time.`,
@@ -120,26 +188,48 @@ export default function RequestListingHistory() {
 
       console.log('📤 Sending message to chat:', messageData)
 
-      // Add message to the chat
-      await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
+      // Try to add message to the chat (try both chat ID formats)
+      try {
+        await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
+        console.log('✅ Message sent with primary chat ID')
+      } catch (primaryError) {
+        console.log('⚠️ Primary chat ID failed, trying fallback...')
+        await addDoc(collection(db, 'chats', fallbackChatId, 'messages'), messageData)
+        console.log('✅ Message sent with fallback chat ID')
+      }
       
-      // Update chat's last message
-      const chatRef = doc(db, 'chats', chatId)
-      await updateDoc(chatRef, {
-        lastMessage: messageData.text,
-        lastMessageTime: serverTimestamp(),
-        lastMessageSenderId: user.uid
-      })
+      // Update chat's last message (try both formats)
+      try {
+        const chatRef = doc(db, 'chats', chatId)
+        await updateDoc(chatRef, {
+          lastMessage: messageData.text,
+          lastMessageTime: serverTimestamp(),
+          lastMessageSenderId: user.uid
+        })
+        console.log('✅ Chat updated with primary chat ID')
+      } catch (primaryUpdateError) {
+        console.log('⚠️ Primary chat update failed, trying fallback...')
+        const fallbackChatRef = doc(db, 'chats', fallbackChatId)
+        await updateDoc(fallbackChatRef, {
+          lastMessage: messageData.text,
+          lastMessageTime: serverTimestamp(),
+          lastMessageSenderId: user.uid
+        })
+        console.log('✅ Chat updated with fallback chat ID')
+      }
 
-      console.log('🗑️ Deleting request document:', requestId)
-      // Delete the request
-      await deleteDoc(doc(db, 'listing_requests', requestId))
+      console.log('🔄 Updating request status to cancelled:', requestId)
+      // Update request status to cancelled instead of deleting
+      await updateDoc(doc(db, 'listing_requests', requestId), {
+        status: 'cancelled',
+        cancelledAt: serverTimestamp()
+      })
       
       console.log('✅ Request cancelled successfully')
-      alert('Request cancelled successfully and owner has been notified')
+      showSuccessPopup('Success', 'Request cancelled successfully and owner has been notified')
     } catch (error) {
       console.error('❌ Error cancelling request:', error)
-      alert('Failed to cancel request: ' + error.message)
+      showErrorPopup('Error', 'Failed to cancel request: ' + error.message)
     }
   }
 
@@ -177,6 +267,8 @@ export default function RequestListingHistory() {
         return '#28a745'
       case 'declined':
         return '#dc3545'
+      case 'cancelled':
+        return '#6c757d'
       default:
         return '#6c757d'
     }
@@ -287,6 +379,45 @@ export default function RequestListingHistory() {
               </div>
             </div>
           ))}
+          </div>
+        </div>
+      )}
+
+      {/* Custom AgriLink Popup */}
+      {showPopup && (
+        <div className={styles.popupOverlay}>
+          <div className={styles.popup}>
+            <div className={styles.popupHeader}>
+              <h3 className={styles.popupTitle}>{popupConfig.title}</h3>
+            </div>
+            <div className={styles.popupContent}>
+              <p className={styles.popupMessage}>{popupConfig.message}</p>
+            </div>
+            <div className={styles.popupActions}>
+              {popupConfig.type === 'confirm' ? (
+                <>
+                  <button 
+                    className={styles.popupButtonCancel}
+                    onClick={popupConfig.onCancel}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className={styles.popupButtonConfirm}
+                    onClick={popupConfig.onConfirm}
+                  >
+                    Confirm
+                  </button>
+                </>
+              ) : (
+                <button 
+                  className={`${styles.popupButton} ${styles[popupConfig.type]}`}
+                  onClick={popupConfig.onConfirm}
+                >
+                  OK
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

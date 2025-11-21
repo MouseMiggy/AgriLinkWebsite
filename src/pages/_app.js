@@ -1,6 +1,7 @@
 import '../../styles/globals.css'
 import '../../styles/error-boundary.css'
 import AuthGuard from '../components/AuthGuard'
+import { PopupProvider } from '../contexts/PopupContext'
 import { useRouter } from 'next/router'
 
 export default function App({ Component, pageProps }) {
@@ -11,12 +12,18 @@ export default function App({ Component, pageProps }) {
   const isPublicPage = publicPages.includes(router.pathname)
   
   if (isPublicPage) {
-    return <Component {...pageProps} />
+    return (
+      <PopupProvider>
+        <Component {...pageProps} />
+      </PopupProvider>
+    )
   }
   
   return (
-    <AuthGuard>
-      <Component {...pageProps} />
-    </AuthGuard>
+    <PopupProvider>
+      <AuthGuard>
+        <Component {...pageProps} />
+      </AuthGuard>
+    </PopupProvider>
   )
 }

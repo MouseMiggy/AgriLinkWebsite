@@ -61,9 +61,11 @@ export default function ListingHistory() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const listingsData = []
       snapshot.forEach((doc) => {
+        const data = doc.data()
+        // Include all listings (active, sold, and deleted)
         listingsData.push({
           id: doc.id,
-          ...doc.data()
+          ...data
         })
       })
       setListings(listingsData)
@@ -139,8 +141,14 @@ export default function ListingHistory() {
                   <h3 className={styles.listingName}>{listing.name || listing.title || 'Unnamed Listing'}</h3>
                   <p className={styles.listingPrice}>{formatPrice(listing.price, listing.isFree)}</p>
                 </div>
-                <div className={styles.statusBadge}>
-                  Active
+                <div className={`${styles.statusBadge} ${
+                  listing.status === 'sold' ? styles.soldBadge : 
+                  listing.status === 'deleted' ? styles.deletedBadge : 
+                  styles.activeBadge
+                }`}>
+                  {listing.status === 'sold' ? 'Sold' : 
+                   listing.status === 'deleted' ? 'Deleted' : 
+                   'Active'}
                 </div>
               </div>
 

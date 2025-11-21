@@ -41,7 +41,7 @@ export default function VerifyCode() {
     setShowSuccessToast(true)
     setTimeout(() => {
       setShowSuccessToast(false)
-      router.push('/signin')
+      router.push('/role-selection')
     }, 3000)
   }
 
@@ -149,8 +149,8 @@ export default function VerifyCode() {
               photoURL: null
             })
 
-            // Success - show toast and redirect to signin
-            showSuccessMessage('Account verified successfully! Redirecting to sign in...')
+            // Success - show toast and redirect to role selection for new users
+            showSuccessMessage('Account verified successfully! Setting up your profile...')
           } catch (firebaseError) {
             console.error('Firebase user creation error:', firebaseError)
             showErrorToast('Failed to create account. Please try again.')

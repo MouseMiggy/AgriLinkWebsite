@@ -4,6 +4,8 @@ import { useRouter } from 'next/router'
 import Listings from './listings'
 import RequestListingHistory from './request-listing-history'
 import ListingHistory from './listing-history'
+import Reports from './reports'
+import ReportModal from '../components/ReportModal'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { 
@@ -85,6 +87,10 @@ export default function Dashboard() {
   const [userReports, setUserReports] = useState([])
   const [reportsLoading, setReportsLoading] = useState(false)
   const [reportsFilter, setReportsFilter] = useState('all')
+  const [showSearchPanel, setShowSearchPanel] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [recentSearches, setRecentSearches] = useState([])
+  const [searchResults, setSearchResults] = useState([])
   const dropdownRef = useRef(null)
   const markAsReadTimeoutRef = useRef(null)
   const router = useRouter()
@@ -710,9 +716,10 @@ export default function Dashboard() {
     // Listen to notifications when user is authenticated
     let unsubscribeNotifications = null
     if (user) {
-      console.log('Starting notification listener for user:', user.uid)
+      console.log('🔔 Starting notification listener for user:', user.uid, 'role:', userRole)
       unsubscribeNotifications = listenToNotifications(user.uid, (notificationsList) => {
-        console.log('Dashboard received notifications update:', notificationsList.length, 'notifications')
+        console.log('🔔 Dashboard received notifications update:', notificationsList.length, 'notifications')
+        console.log('🔔 Notification types:', notificationsList.map(n => ({ type: n.type, from: n.fromUserName, listingName: n.listingName })))
         setNotifications(notificationsList)
         const unreadNotifications = notificationsList.filter(n => !n.read)
         const newUnreadCount = unreadNotifications.length
@@ -742,16 +749,18 @@ export default function Dashboard() {
 
   // Load conversations with real-time listener
   useEffect(() => {
-    if (!auth || !db || !user) return
+    if (!auth || !db || !user || !userRole) return
 
     const unsubscribe = loadConversations()
     return () => {
       if (unsubscribe) unsubscribe()
     }
-  }, [user])
+  }, [user, userRole])
 
   const loadConversations = () => {
-    if (!user || !db) return
+    if (!user || !db || !userRole) return
+
+    console.log('🔍 WEB CHAT: Loading conversations for user role:', userRole)
 
     // Set up real-time listener for chats
     const chatsQuery = query(
@@ -763,15 +772,86 @@ export default function Dashboard() {
     const conversationsMap = new Map() // Use Map to prevent duplicate conversations
     
     const unsubscribe = onSnapshot(chatsQuery, (chatsSnapshot) => {
+      console.log('🔄 WEB CHAT: Received chats snapshot with', chatsSnapshot.size, 'documents')
+      
       // Process each chat
       chatsSnapshot.docs.forEach(chatDoc => {
         const chatId = chatDoc.id
         const chatData = chatDoc.data()
+        
+        console.log('📋 WEB CHAT: Processing chat', chatId, {
+          chatType: chatData.chatType,
+          participantRoles: chatData.participantRoles,
+          currentUserRole: userRole
+        })
+        
+        // ROLE-BASED FILTERING (matching mobile app logic)
+        const currentUserRoleInChat = chatData.participantRoles?.[user.uid]
+        
+        // Skip if this chat doesn't have role information
+        if (!chatData.chatType || !chatData.participantRoles || !currentUserRoleInChat) {
+          console.log('⚠️ WEB CHAT: Skipping chat - missing role info', chatId)
+          return
+        }
+        
+        // Skip if current user's role in this chat doesn't match their current role
+        if (currentUserRoleInChat !== userRole) {
+          console.log('⚠️ WEB CHAT: Skipping chat - role mismatch', chatId, {
+            currentUserRoleInChat,
+            userRole
+          })
+          return
+        }
+        
+        // Additional filtering based on role
+        if (userRole === 'crop_farmer') {
+          // Crop farmers only see chats where they are the crop farmer initiator
+          if (chatData.chatType !== 'crop_farmer_to_livestock_owner' || 
+              chatData.initiatorRole !== 'crop_farmer' ||
+              !chatData.participants?.includes(user.uid)) {
+            return
+          }
+        } else if (userRole === 'livestock_owner') {
+          // Livestock owners only see chats where they are the livestock owner receiver
+          if (chatData.chatType !== 'crop_farmer_to_livestock_owner' || 
+              chatData.receiverRole !== 'livestock_owner' ||
+              !chatData.participants?.includes(user.uid)) {
+            console.log('⚠️ WEB CHAT: Livestock owner filtering out chat', chatId)
+            return
+          }
+          console.log('✅ WEB CHAT: Livestock owner accepting chat', chatId)
+        } else {
+          // If user has no defined role or unknown role, skip all role-based chats
+          return
+        }
+        
         const otherUserId = chatData.participants?.find(id => id !== user.uid)
         
         if (otherUserId && chatData.participantNames) {
-          const otherUserName = chatData.participantNames[otherUserId] || 'User'
+          let otherUserName = chatData.participantNames[otherUserId] || 'User'
           const otherUserEmail = chatData.participantEmails?.[otherUserId] || ''
+          const listingName = chatData.listingName || ''
+          
+          // Truncate name if > 15 characters, use first name only
+          if (otherUserName.length > 15) {
+            const firstName = otherUserName.split(' ')[0]
+            otherUserName = firstName.length > 15 ? firstName.substring(0, 15) + '...' : firstName
+          }
+          
+          // Create display name with listing
+          let displayName = otherUserName
+          if (listingName) {
+            const maxTotalLength = 35
+            const separator = ' • '
+            const availableForListing = maxTotalLength - otherUserName.length - separator.length
+            
+            let truncatedListing = listingName
+            if (truncatedListing.length > availableForListing) {
+              truncatedListing = truncatedListing.substring(0, availableForListing - 3) + '...'
+            }
+            
+            displayName = `${otherUserName}${separator}${truncatedListing}`
+          }
           
           // Clean up existing listener for this chat if it exists
           if (messageListeners.has(chatId)) {
@@ -783,8 +863,9 @@ export default function Dashboard() {
           conversationsMap.set(chatId, {
             id: chatId,
             otherUserId,
-            otherUserName,
+            otherUserName: displayName,
             otherUserEmail,
+            listingName,
             lastMessage: chatData.lastMessage || 'No messages yet',
             lastMessageTime: chatData.lastMessageTime,
             lastMessageSenderId: chatData.lastMessageSenderId,
@@ -2107,10 +2188,6 @@ export default function Dashboard() {
     setReportedPost(targetPost)
     setShowReportModal(true)
     setShowDropdown(null)
-    // Prevent all scrolling when modal is open
-    document.body.style.overflow = 'hidden'
-    document.body.style.position = 'fixed'
-    document.body.style.width = '100%'
   }
 
   // Handle ESC key to close report modal
@@ -2132,15 +2209,7 @@ export default function Dashboard() {
 
   const closeReportModal = () => {
     setShowReportModal(false)
-    setReportType('')
-    setReportDescription('')
     setReportedPost(null)
-    setReportEvidence(null)
-    setReportImageIndex(0)
-    // Re-enable body scroll
-    document.body.style.overflow = 'unset'
-    document.body.style.position = 'unset'
-    document.body.style.width = 'unset'
   }
 
   // Load user's reports
@@ -2282,7 +2351,7 @@ export default function Dashboard() {
       })
 
       console.log('Report saved to Firebase with ID:', docRef.id)
-      console.log('📋 Auto-captured data:', {
+      console.log('Auto-captured data:', {
         userID: reportData.reporterId,
         reportedUserID: reportData.reportedUserId,
         postID: reportData.postId,
@@ -2292,28 +2361,6 @@ export default function Dashboard() {
         reportType: reportData.reportType,
         description: reportData.description
       })
-
-      // Send to n8n webhook
-      const webhookUrl = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL
-      
-      if (webhookUrl && webhookUrl !== 'https://your-n8n-instance.com/webhook/report-validation') {
-        try {
-          const response = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(reportData)
-          })
-
-          if (!response.ok) {
-            console.warn('n8n webhook failed, but report saved to Firebase')
-          }
-        } catch (webhookError) {
-          console.warn('n8n webhook error:', webhookError)
-          // Continue anyway since report is saved to Firebase
-        }
-      } else {
-        console.log('No n8n webhook URL configured, report saved to Firebase only')
-      }
 
       // Show success message and add to notifications
       alert('Report submitted successfully! Your report is being processed.')
@@ -2366,62 +2413,98 @@ export default function Dashboard() {
 
   const handleSwitchRole = async () => {
     console.log('Switch role button clicked!')
-    console.log('Current user:', user)
-    console.log('Current userRole:', userRole)
-    
-    if (!user) {
+
+    const currentUser = auth?.currentUser
+    console.log('auth.currentUser:', currentUser)
+    console.log('React user state:', user)
+    console.log('Current userRole state:', userRole)
+
+    if (!currentUser) {
       alert('Please log in first')
       return
     }
-    
-    // If no role is set, default to crop_farmer
+
     const currentRole = userRole || 'crop_farmer'
     const newRole = currentRole === 'livestock_owner' ? 'crop_farmer' : 'livestock_owner'
     const roleNames = {
       livestock_owner: 'Livestock Owner',
       crop_farmer: 'Crop Farmer'
     }
-    
+
     console.log('Switching from:', currentRole, 'to:', newRole)
-    
+
     const confirmed = confirm(`Are you sure you want to switch ${userRole ? `from ${roleNames[currentRole]} ` : ''}to ${roleNames[newRole]}?`)
-    
-    if (confirmed) {
-      try {
-        console.log('Updating Firestore...')
-        
-        // Create user document if it doesn't exist
-        await updateDoc(doc(db, 'Users', user.uid), {
-          role: newRole,
-          roleUpdatedAt: serverTimestamp(),
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email
-        }).catch(async (error) => {
-          if (error.code === 'not-found') {
-            // Document doesn't exist, create it
-            console.log('Creating new user document...')
-            await setDoc(doc(db, 'Users', user.uid), {
-              role: newRole,
-              roleUpdatedAt: serverTimestamp(),
-              firstName: user.firstName,
-              lastName: user.lastName,
-              email: user.email,
-              uid: user.uid
-            })
-          } else {
-            throw error
-          }
-        })
-        
-        // Force state update
-        setUserRole(newRole)
-        console.log('Role successfully updated to:', newRole)
-        alert(`Successfully switched to ${roleNames[newRole]}!`)
-      } catch (error) {
-        console.error('Error switching role:', error)
-        alert('Failed to switch role. Please try again.')
+
+    if (!confirmed) return
+
+    try {
+      console.log('Updating Firestore role...')
+
+      const userRef = doc(db, 'Users', currentUser.uid)
+
+      // Get current user data to check onboarding status BEFORE updating role
+      const userDoc = await getDoc(userRef)
+      const userData = userDoc.exists() ? userDoc.data() : {}
+      const onboarding = userData.onboarding || {}
+
+      // Check if user already has onboarding data for target role
+      let shouldSkipOnboarding = false
+      
+      if (newRole === 'livestock_owner' && onboarding.livestockOnboardingCompleted) {
+        console.log('✅ User already completed livestock onboarding, skipping to dashboard')
+        shouldSkipOnboarding = true
+      } else if (newRole === 'crop_farmer' && onboarding.cropOnboardingCompleted) {
+        console.log('✅ User already completed crop farmer onboarding, skipping to dashboard')
+        shouldSkipOnboarding = true
       }
+
+      await updateDoc(userRef, {
+        role: newRole,
+        previousRole: currentRole,
+        roleUpdatedAt: serverTimestamp()
+      }).catch(async (error) => {
+        if (error.code === 'not-found') {
+          console.log('Creating new user document while switching role...')
+          await setDoc(userRef, {
+            uid: currentUser.uid,
+            email: currentUser.email,
+            firstName: user?.firstName || currentUser.displayName?.split(' ')[0] || 'User',
+            lastName: user?.lastName || currentUser.displayName?.split(' ')[1] || '',
+            role: newRole,
+            previousRole: currentRole,
+            roleUpdatedAt: serverTimestamp()
+          })
+        } else {
+          throw error
+        }
+      })
+
+      // Refresh local role state
+      setUserRole(newRole)
+      console.log('Role successfully updated to:', newRole)
+
+      // If user already completed onboarding for target role, stay on dashboard
+      if (shouldSkipOnboarding) {
+        console.log('Target role onboarding already completed, staying on dashboard')
+        alert(`Successfully switched to ${roleNames[newRole]}!`)
+        return
+      }
+
+      // User needs to complete onboarding for new role
+      console.log('Target role onboarding not completed yet, redirecting to onboarding flow...')
+      
+      // Skip location permission and role selection for role switchers
+      // They already have an account and just need to complete the other role's onboarding
+      if (newRole === 'livestock_owner') {
+        router.push('/livestock-onboarding')
+      } else if (newRole === 'crop_farmer') {
+        router.push('/crop-onboarding')
+      }
+
+      alert(`Successfully switched to ${roleNames[newRole]}! Please complete the setup process.`)
+    } catch (error) {
+      console.error('Error switching role:', error)
+      alert('Failed to switch role. Please try again.')
     }
   }
 
@@ -2509,8 +2592,21 @@ export default function Dashboard() {
         // Could navigate to friends/profile page when implemented
         break
       case 'listing_request':
-        // Navigate to listings page
-        router.push('/listings')
+        // Open chat with the crop farmer who made the request
+        if (notification.chatId) {
+          // Open the chat directly
+          setShowChat(true)
+          setShowNotifications(false)
+          // Find the conversation and select it
+          const conversation = conversations.find(conv => conv.id === notification.chatId)
+          if (conversation) {
+            setSelectedChat(conversation)
+            loadChatMessages(notification.chatId)
+          }
+        } else {
+          // Fallback to listings page
+          router.push('/listings')
+        }
         break
       default:
         // Default behavior - stay on current page
@@ -2524,6 +2620,67 @@ export default function Dashboard() {
     { icon: '/assets/icons/settings.png', label: 'Settings and Privacy' },
     { icon: '/assets/icons/triangle-warning.png', label: 'Reports' }
   ]
+
+  // Load recent searches from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('recentSearches')
+    if (saved) {
+      setRecentSearches(JSON.parse(saved))
+    }
+  }, [])
+
+  // Search functionality
+  const handleSearch = (query) => {
+    if (!query.trim()) {
+      setSearchResults([])
+      setSearchQuery('')
+      return
+    }
+
+    // Search through posts
+    const results = posts.filter(post => {
+      const searchLower = query.toLowerCase()
+      return (
+        post.text?.toLowerCase().includes(searchLower) ||
+        post.content?.toLowerCase().includes(searchLower) ||
+        post.userName?.toLowerCase().includes(searchLower)
+      )
+    })
+
+    setSearchResults(results)
+
+    // Save to recent searches
+    if (query.trim()) {
+      const updated = [query, ...recentSearches.filter(s => s !== query)].slice(0, 10)
+      setRecentSearches(updated)
+      localStorage.setItem('recentSearches', JSON.stringify(updated))
+    }
+
+    // Close search panel after search
+    setShowSearchPanel(false)
+  }
+
+  const handleSearchInputChange = (e) => {
+    const value = e.target.value
+    setSearchQuery(value)
+    // Don't auto-search, wait for Enter key
+  }
+
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      handleSearch(searchQuery)
+    }
+  }
+
+  const handleRecentSearchClick = (search) => {
+    setSearchQuery(search)
+    handleSearch(search)
+  }
+
+  const clearRecentSearches = () => {
+    setRecentSearches([])
+    localStorage.removeItem('recentSearches')
+  }
 
   // Show dashboard even while loading user data
   // Authentication will redirect to login if needed via AuthGuard
@@ -2638,16 +2795,18 @@ export default function Dashboard() {
             {/* Menu Items */}
             <div className={styles.leftMenuList}>
               <div className={`${styles.leftMenuItem} ${activeMenuItem === 'home' ? styles.active : ''}`} onClick={() => {
-                // Navigate to home/dashboard
+                // Navigate to home/dashboard and clear search
                 setActiveMenuItem('home')
-                console.log('Home clicked')
+                setSearchResults([])
+                setSearchQuery('')
+                console.log('Home clicked - Feed reloaded')
               }}>
                 <img src={activeMenuItem === 'home' ? "/assets/icons/home-white.png" : "/assets/icons/home.png"} alt="Home" className={styles.leftMenuIcon} />
                 <span className={styles.leftMenuText}>Home</span>
               </div>
               
               <div className={styles.leftMenuItem} onClick={() => {
-                // Handle search functionality when implemented
+                setShowSearchPanel(true)
                 console.log('Search clicked')
               }}>
                 <img src="/assets/icons/search.png" alt="Search" className={styles.leftMenuIcon} />
@@ -2700,23 +2859,24 @@ export default function Dashboard() {
                     <div className={styles.menuDropdownItem} onClick={() => {
                       console.log('Change Role clicked')
                       setShowMenuDropdown(false)
+                      handleSwitchRole()
                     }}>
                       <img src="/assets/icons/rotate-reverse.png" alt="Change Role" className={styles.menuDropdownIcon} />
                       <span>Change Role</span>
                     </div>
                     
                     <div className={styles.menuDropdownItem} onClick={() => {
-                      console.log('Settings clicked')
+                      console.log('Account Settings clicked')
                       setShowMenuDropdown(false)
+                      router.push('/account-settings')
                     }}>
-                      <img src="/assets/icons/settings.png" alt="Settings" className={styles.menuDropdownIcon} />
-                      <span>Settings</span>
+                      <img src="/assets/icons/settings.png" alt="Account Settings" className={styles.menuDropdownIcon} />
+                      <span>Account Settings</span>
                     </div>
                     
                     <div className={styles.menuDropdownItem} onClick={() => {
                       console.log('My Reports clicked')
                       setActiveMenuItem('reports')
-                      loadUserReports()
                       setShowMenuDropdown(false)
                     }}>
                       <img src="/assets/icons/triangle-warning.png" alt="My Reports" className={styles.menuDropdownIcon} />
@@ -2724,11 +2884,21 @@ export default function Dashboard() {
                     </div>
                     
                     <div className={styles.menuDropdownItem} onClick={() => {
-                      console.log('Appearance clicked')
+                      console.log('Privacy Policy clicked')
                       setShowMenuDropdown(false)
+                      router.push('/privacy-policy')
                     }}>
-                      <img src="/assets/icons/appearance.png" alt="Appearance" className={styles.menuDropdownIcon} />
-                      <span>Switch Appearance</span>
+                      <img src="/assets/icons/shield.png" alt="Privacy Policy" className={styles.menuDropdownIcon} />
+                      <span>Privacy Policy</span>
+                    </div>
+                    
+                    <div className={styles.menuDropdownItem} onClick={() => {
+                      console.log('About clicked')
+                      setShowMenuDropdown(false)
+                      router.push('/about')
+                    }}>
+                      <img src="/assets/icons/info.png" alt="About" className={styles.menuDropdownIcon} />
+                      <span>About</span>
                     </div>
                     
                     <div className={`${styles.menuDropdownItem} ${styles.logout}`} onClick={() => {
@@ -2744,6 +2914,59 @@ export default function Dashboard() {
             </div>
           </div>
         </aside>
+
+        {/* Search Panel */}
+        {showSearchPanel && (
+          <div className={styles.searchPanel}>
+            <div className={styles.searchPanelHeader}>
+              <button onClick={() => {
+                setShowSearchPanel(false)
+                setSearchQuery('')
+              }} className={styles.searchBackButton}>
+                <img src="/assets/icons/back.png" alt="Back" className={styles.backIcon} />
+              </button>
+              <input
+                type="text"
+                placeholder="Search posts... (Press Enter)"
+                value={searchQuery}
+                onChange={handleSearchInputChange}
+                onKeyPress={handleSearchKeyPress}
+                className={styles.searchInput}
+                autoFocus
+              />
+            </div>
+
+            <div className={styles.searchPanelContent}>
+              {/* Show recent searches */}
+              <div className={styles.recentSearches}>
+                <div className={styles.recentSearchesHeader}>
+                  <h3>Recent Searches</h3>
+                  {recentSearches.length > 0 && (
+                    <button onClick={clearRecentSearches} className={styles.clearButton}>
+                      Clear All
+                    </button>
+                  )}
+                </div>
+                {recentSearches.length === 0 ? (
+                  <p className={styles.emptyMessage}>No recent searches</p>
+                ) : (
+                  <div className={styles.recentSearchList}>
+                    {recentSearches.map((search, index) => (
+                      <div
+                        key={index}
+                        className={styles.recentSearchItem}
+                        onClick={() => handleRecentSearchClick(search)}
+                      >
+                        <img src="/assets/icons/search.png" alt="Search" className={styles.searchItemIcon} />
+                        <span>{search}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Floating Messages Button */}
         <div className={styles.floatingMessages}>
@@ -2843,7 +3066,7 @@ export default function Dashboard() {
                           <p className={styles.messageText}>{message.text}</p>
                           
                           {/* Accept/Decline buttons for listing requests */}
-                          {message.isListingRequest && message.senderId !== user?.uid && message.requestStatus === 'pending' && (
+                          {message.isListingRequest && message.senderId !== user?.uid && message.requestStatus === 'pending' && !message.isCancelled && (
                             <div className={styles.requestActions}>
                               <button 
                                 className={styles.acceptButton}
@@ -3119,7 +3342,11 @@ export default function Dashboard() {
                       <div className={styles.notificationContent}>
                         <div className={styles.notificationMainText}>
                           <span>
-                            {notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName : 'AgriLink User'} {notification.actionText || (notification.actionType === 'like' ? 'liked your post' : 'commented on your post')}
+                            {notification.type === 'listing_request' ? (
+                              `${notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName : 'A crop farmer'} is interested in your listing: ${notification.listingName || 'your listing'}`
+                            ) : (
+                              `${notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName : 'AgriLink User'} ${notification.actionText || (notification.actionType === 'like' ? 'liked your post' : 'commented on your post')}`
+                            )}
                           </span>
                         </div>
                         <div className={styles.notificationTimeLine}>
@@ -3129,7 +3356,9 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div className={styles.notificationIcon}>
-                        {notification.actionType === 'like' ? (
+                        {notification.type === 'listing_request' ? (
+                          <img src="/assets/icons/marketplace.png" alt="Listing Request" style={{width: '28px', height: '28px', pointerEvents: 'none'}} />
+                        ) : notification.actionType === 'like' ? (
                           <img src="/assets/icons/red-heart.png" alt="Like" style={{width: '28px', height: '28px', pointerEvents: 'none'}} />
                         ) : (
                           <img src="/assets/icons/comment-all-dots.png" alt="Comment" style={{width: '28px', height: '28px', pointerEvents: 'none'}} />
@@ -3144,11 +3373,11 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Main Feed - Hide when listings or listing-history is active */}
-        {activeMenuItem !== 'listings' && activeMenuItem !== 'listing-history' && (
+        {/* Main Feed - Hide when listings, listing-history, or reports is active */}
+        {activeMenuItem !== 'listings' && activeMenuItem !== 'listing-history' && activeMenuItem !== 'reports' && (
         <main className={styles.mainFeed}>
-          {/* Post Creation Prompt - Only show when not viewing reports, listings, or profile */}
-          {activeMenuItem !== 'reports' && activeMenuItem !== 'listings' && activeMenuItem !== 'profile' && (
+          {/* Post Creation Prompt - Only show when not viewing reports, listings, profile, or search results */}
+          {activeMenuItem !== 'reports' && activeMenuItem !== 'listings' && activeMenuItem !== 'profile' && searchResults.length === 0 && (
             <div className={styles.postPromptContainer}>
               <div className={styles.postPrompt}>
                 <div className={styles.userAvatar}>
@@ -3164,6 +3393,20 @@ export default function Dashboard() {
 
           {/* News Feed / Reports / Listings */}
           <div className={styles.newsFeed}>
+            {/* Search Results Banner */}
+            {searchQuery.trim() !== '' && (
+              <div className={styles.searchResultsBanner}>
+                <div className={styles.searchResultsHeader}>
+                  <h3>Search Results for "{searchQuery}"</h3>
+                </div>
+                <p className={styles.searchResultsCount}>
+                  {searchResults.length > 0 
+                    ? `${searchResults.length} post(s) found` 
+                    : `No results for "${searchQuery}"`}
+                </p>
+              </div>
+            )}
+
             {activeMenuItem === 'listings' ? (
               // Direct Listings Component Integration
               <Listings />
@@ -3345,134 +3588,11 @@ export default function Dashboard() {
                   )}
                 </div>
               </>
-            ) : activeMenuItem === 'reports' ? (
-              // Reports Content
-              <div className={styles.reportsContent}>
-                <div className={styles.reportsHeader}>
-                  <h2>My Reports</h2>
-                  <p>Track the status of your submitted reports</p>
-                </div>
-                
-                <div className={styles.reportsFilters}>
-                  <button 
-                    className={`${styles.filterBtn} ${reportsFilter === 'all' ? styles.active : ''}`}
-                    onClick={() => setReportsFilter('all')}
-                  >
-                    All ({userReports.length})
-                  </button>
-                  <button 
-                    className={`${styles.filterBtn} ${reportsFilter === 'processing' ? styles.active : ''}`}
-                    onClick={() => setReportsFilter('processing')}
-                  >
-                    Processing ({userReports.filter(r => r.status === 'processing').length})
-                  </button>
-                  <button 
-                    className={`${styles.filterBtn} ${reportsFilter === 'valid' ? styles.active : ''}`}
-                    onClick={() => setReportsFilter('valid')}
-                  >
-                    Valid ({userReports.filter(r => r.status === 'valid').length})
-                  </button>
-                  <button 
-                    className={`${styles.filterBtn} ${reportsFilter === 'invalid' ? styles.active : ''}`}
-                    onClick={() => setReportsFilter('invalid')}
-                  >
-                    Invalid ({userReports.filter(r => r.status === 'invalid').length})
-                  </button>
-                </div>
-
-                {reportsLoading ? (
-                  <div className={styles.loadingReports}>
-                    <p>Loading your reports...</p>
-                  </div>
-                ) : userReports.length === 0 ? (
-                  <div className={styles.emptyReports}>
-                    <div className={styles.emptyIcon}>📋</div>
-                    <h3>No Reports Yet</h3>
-                    <p>You haven't submitted any reports yet. When you report a post, it will appear here with its status and details.</p>
-                  </div>
-                ) : (
-                  <div className={styles.reportsList}>
-                    {userReports.filter(report => reportsFilter === 'all' || report.status === reportsFilter).map(report => (
-                      <div key={report.id} className={styles.reportCard}>
-                        <div className={styles.reportHeader}>
-                          <span className={styles.reportType}>{report.reportType}</span>
-                          <span className={`${styles.reportStatus} ${styles[report.status]}`}>
-                            {report.status}
-                          </span>
-                        </div>
-                        <div className={styles.reportContent}>
-                          {/* Report Details */}
-                          <div className={styles.reportDetails}>
-                            <p><strong>Report ID:</strong> {report.id}</p>
-                            <p><strong>Submitted:</strong> {new Date(report.createdAt?.seconds * 1000 || report.createdAt).toLocaleString()}</p>
-                            {report.processedAt && (
-                              <p><strong>Processed:</strong> {new Date(report.processedAt?.seconds * 1000 || report.processedAt).toLocaleString()}</p>
-                            )}
-                          </div>
-
-                          {/* Reported Post Content */}
-                          <div className={styles.reportedPost}>
-                            <h4>Reported Post:</h4>
-                            <div className={styles.postPreview}>
-                              <div className={styles.postAuthor}>
-                                <strong>By:</strong> {report.reportedUserName || 'Unknown User'}
-                              </div>
-                              <div className={styles.postContent}>
-                                {report.postContent || 'No text content'}
-                              </div>
-                              {report.postImageUrl && (
-                                <div className={styles.postImage}>
-                                  <img src={report.postImageUrl} alt="Reported post" />
-                                </div>
-                              )}
-                              {report.postVideoUrl && (
-                                <div className={styles.postVideo}>
-                                  <video controls>
-                                    <source src={report.postVideoUrl} type="video/mp4" />
-                                    Your browser does not support the video tag.
-                                  </video>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* User's Report Description */}
-                          {report.description && (
-                            <div className={styles.userDescription}>
-                              <h4>Your Report:</h4>
-                              <p>{report.description}</p>
-                            </div>
-                          )}
-
-                          {/* AI Decision */}
-                          {report.aiDecision && (
-                            <div className={styles.aiDecision}>
-                              <h4>AI Analysis:</h4>
-                              <p><strong>Decision:</strong> {report.aiDecision.decision}</p>
-                              <p><strong>Reasoning:</strong> {report.aiDecision.reasoning}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {userReports.filter(report => reportsFilter === 'all' || report.status === reportsFilter).length === 0 && (
-                      <div className={styles.emptyReports}>
-                        <div className={styles.emptyIcon}>🔍</div>
-                        <h3>No {reportsFilter === 'all' ? '' : reportsFilter} Reports Found</h3>
-                        <p>
-                          {reportsFilter === 'all' 
-                            ? "You haven't submitted any reports yet."
-                            : `No reports with status "${reportsFilter}" found. Try a different filter.`
-                          }
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
             ) : (
-              // Regular Posts Feed
-              posts.map((post) => (
+              // Regular Posts Feed or Search Results - only show search results if query exists
+              (searchQuery.trim() !== '' && searchResults.length > 0 ? searchResults : 
+               searchQuery.trim() !== '' && searchResults.length === 0 ? [] : 
+               posts).map((post) => (
               <div key={post.id} className={styles.post}>
                 <div className={styles.postHeader}>
                   <div className={styles.postAvatar}>{post.userName ? post.userName[0].toUpperCase() : 'U'}</div>
@@ -3643,6 +3763,20 @@ export default function Dashboard() {
             position: 'relative'
           }}>
             {userRole === 'crop_farmer' ? <RequestListingHistory /> : <ListingHistory />}
+          </div>
+        )}
+
+        {/* Reports Screen - Separate from main feed */}
+        {activeMenuItem === 'reports' && (
+          <div style={{ 
+            width: '100%', 
+            height: '100vh', 
+            display: 'flex', 
+            flexDirection: 'column',
+            marginLeft: '0',
+            position: 'relative'
+          }}>
+            <Reports />
           </div>
         )}
 
@@ -4312,7 +4446,28 @@ export default function Dashboard() {
       )}
 
       {/* Report Modal */}
-      {showReportModal && reportedPost && (
+      <ReportModal
+        visible={showReportModal}
+        onClose={closeReportModal}
+        targetUser={{
+          id: reportedPost?.userId,
+          displayName: reportedPost?.userName,
+          firstName: reportedPost?.userName?.split(' ')[0],
+          lastName: reportedPost?.userName?.split(' ')[1]
+        }}
+        content={{
+          id: reportedPost?.id,
+          caption: reportedPost?.text || reportedPost?.content,
+          text: reportedPost?.text || reportedPost?.content,
+          imageUrl: reportedPost?.imageUrl || reportedPost?.image,
+          imageUrls: reportedPost?.imageUrls || reportedPost?.images || []
+        }}
+        contentType="post"
+        reporterId={user?.uid}
+      />
+
+      {/* Old Report Modal - Remove this entire block */}
+      {false && showReportModal && reportedPost && (
         <div className={styles.modalOverlay} onClick={closeReportModal}>
           <div 
             className={styles.reportModal} 

@@ -196,6 +196,21 @@
   font-size: 18px;
   font-weight: 600;
   color: #333;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.listingSeparator {
+  color: #999;
+  font-weight: 400;
+}
+
+.listingName {
+  color: #fa9100;
+  font-weight: 500;
+  font-size: 16px;
 }
 
 .userStatus {
@@ -549,4 +564,82 @@
   font-size: 12px;
   font-weight: 500;
   color: #666;
+}
+
+/* Image Button */
+.imageButton {
+  background: none;
+  border: none;
+  padding: 8px;
+  margin-right: 8px;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.imageButton:hover:not(:disabled) {
+  background-color: rgba(250, 145, 0, 0.1);
+}
+
+.imageButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.imageIcon {
+  width: 22px;
+  height: 22px;
+  color: #65676b;
+}
+
+/* Image Preview Container */
+.imagePreviewContainer {
+  position: relative;
+  margin: 10px 16px;
+  display: inline-block;
+}
+
+.imagePreview {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 2px solid #e0e0e0;
+}
+
+.removeImageButton {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fa9100;
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: background-color 0.2s;
+}
+
+.removeImageButton:hover {
+  background: #e08000;
+}
+
+/* Message Image */
+.messageImage {
+  max-width: 300px;
+  max-height: 300px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  object-fit: cover;
 }

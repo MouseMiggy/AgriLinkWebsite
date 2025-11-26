@@ -353,12 +353,15 @@ export default function Reports() {
                             {aiResult.reason}
                           </div>
                         )}
-                        <div className={styles.modalRow}>
-                          <span className={styles.modalLabel}>Category:</span>
-                          <span className={styles.modalValue}>
-                            {aiResult.category?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'N/A'}
-                          </span>
-                        </div>
+                        {/* Only show category if report is valid */}
+                        {aiResult.verdict === 'VALID' && (
+                          <div className={styles.modalRow}>
+                            <span className={styles.modalLabel}>Category:</span>
+                            <span className={styles.modalValue}>
+                              {aiResult.category?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'N/A'}
+                            </span>
+                          </div>
+                        )}
                       </>
                     )
                   } else {

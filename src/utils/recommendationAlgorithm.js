@@ -252,15 +252,17 @@ export const getEnhancedLivestockListings = async () => {
     }
 
     try {
-      // Get owner data to include location
+      // Get owner data to include location and rating
       let ownerLocation = null
       let livestockTypes = []
+      let ownerRating = null
       
       if (listingData.ownerId) {
         const ownerDoc = await getDoc(doc(db, 'Users', listingData.ownerId))
         if (ownerDoc.exists()) {
           const ownerData = ownerDoc.data()
           ownerLocation = ownerData.location || null
+          ownerRating = ownerData.rating ?? ownerData.averageRating ?? null
           
           // Get livestock types from owner profile
           if (ownerData.livestock?.animals) {
@@ -277,6 +279,7 @@ export const getEnhancedLivestockListings = async () => {
         ...listingData,
         ownerLocation: ownerLocation,
         livestockTypes: livestockTypes,
+        ownerRating: ownerRating,
         location: ownerLocation // Also add as location for compatibility
       })
     } catch (e) {
@@ -302,8 +305,11 @@ export const getRecommendedListings = async (cropFarmerId, options = {}) => {
     // Get all enhanced listings with owner location
     const allListings = await getEnhancedLivestockListings()
     
+    // Filter out listings owned by the current user (in case they switched roles)
+    const filteredListings = allListings.filter(listing => listing.ownerId !== cropFarmerId)
+    
     // Calculate recommendation scores and distances for each listing
-    const listingsWithScores = allListings.map(listing => {
+    const listingsWithScores = filteredListings.map(listing => {
       const scoreData = calculateRecommendationScore(listing, cropFarmer)
       
       // Calculate distance

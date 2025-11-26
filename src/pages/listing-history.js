@@ -104,7 +104,14 @@ export default function ListingHistory() {
   if (loading) {
     return (
       <div className={styles.container}>
-        <div className={styles.loading}>Loading your listings...</div>
+        <div className={styles.header}>
+          <h1 className={styles.title}>Listing History</h1>
+          <p className={styles.subtitle}>Your livestock listings from the past week</p>
+        </div>
+        <div className={styles.loadingContainer}>
+          <div className={styles.loadingSpinner}></div>
+          <p className={styles.loadingText}>Loading history...</p>
+        </div>
       </div>
     )
   }

@@ -6,7 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { usePopup } from '../contexts/PopupContext'
 import styles from '../../styles/modules/listings.module.css'
 
-export default function Listings() {
+export default function Listings({ initialSelectedListing = null, onClearSelectedListing = null }) {
   const { showInfoPopup, showSuccessPopup, showErrorPopup, showConfirmPopup } = usePopup()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('') // Temporary input value
@@ -22,12 +22,12 @@ export default function Listings() {
   const [authLoading, setAuthLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [showDetailsModal, setShowDetailsModal] = useState(!!initialSelectedListing)
   const [requestedListings, setRequestedListings] = useState(new Set())
   const [requestStatuses, setRequestStatuses] = useState({})
   const [userLocation, setUserLocation] = useState(null)
   const [editingListing, setEditingListing] = useState(null)
-  const [selectedListing, setSelectedListing] = useState(null)
+  const [selectedListing, setSelectedListing] = useState(initialSelectedListing)
   const [modalStep, setModalStep] = useState(1) // 1: Basic Info, 2: Measurements, 3: Pricing, 4: Image
   const [formData, setFormData] = useState({
     name: '',
@@ -39,8 +39,18 @@ export default function Listings() {
     image: null
   })
   const [isCreatingListing, setIsCreatingListing] = useState(false)
+  const [isRequestingListing, setIsRequestingListing] = useState(false)
 
   const measurementUnits = ['kg', 'ton', 'sack', 'bag', 'liter', 'cubic meter', 'pieces', 'bundle']
+
+  // Handle initial selected listing from props
+  useEffect(() => {
+    if (initialSelectedListing) {
+      setSelectedListing(initialSelectedListing)
+      setShowDetailsModal(true)
+      document.body.style.overflow = 'hidden'
+    }
+  }, [initialSelectedListing])
 
   // Function to truncate title to 20 characters
   const truncateTitle = (title, maxLength = 20) => {
@@ -195,6 +205,10 @@ export default function Listings() {
   const closeDetailsModal = () => {
     setShowDetailsModal(false)
     setSelectedListing(null)
+    // Clear the initial selected listing in parent component
+    if (onClearSelectedListing) {
+      onClearSelectedListing()
+    }
     // Restore background scrolling
     document.body.style.overflow = 'unset'
   }
@@ -634,7 +648,10 @@ export default function Listings() {
       }
     } catch (error) {
       console.error('❌ Simplified cancellation failed:', error)
-      showErrorPopup('Error', 'Failed to cancel request. Please try again.')
+      showErrorPopup('Request Failed', 'Failed to send request. Please try again.')
+    } finally {
+      // Ensure loading state is hidden
+      setIsRequestingListing(false)
     }
   }
 
@@ -705,6 +722,9 @@ export default function Listings() {
       displayName: user.displayName,
       email: user.email
     })
+
+    // Show loading state
+    setIsRequestingListing(true)
 
     try {
       // Step 1: Create request record
@@ -868,8 +888,14 @@ export default function Listings() {
       }))
       
       console.log('🎉 Request process completed successfully for listing:', listing.id)
+      
+      // Hide loading state
+      setIsRequestingListing(false)
+      
       showSuccessPopup('Request Sent!', 'Your request has been sent to the listing owner. They will be notified and can approve your request in their chat.')
     } catch (error) {
+      // Hide loading state on error
+      setIsRequestingListing(false)
       console.error('❌ Error sending request:', error)
       console.error('Error details:', {
         code: error.code,
@@ -993,6 +1019,9 @@ export default function Listings() {
           ...prev,
           [listing.id]: 'pending'
         }))
+        
+        // Hide loading state before showing success popup
+        setIsRequestingListing(false)
         
         showSuccessPopup('Request Sent!', 'Your request has been sent to the listing owner. They will be notified and can respond in their chat.')
         return
@@ -1223,6 +1252,7 @@ export default function Listings() {
 
   const performSearch = (query) => {
     setSearchQuery(query)
+    setSearchInput(query) // Keep the input value
     
     // Save to recent searches
     const updated = [query, ...recentSearches.filter(s => s !== query)].slice(0, 10)
@@ -1435,6 +1465,9 @@ export default function Listings() {
         
         <p className={styles.ownerName}>
           by {listing.ownerName || listing.userName || listing.author || listing.seller || 'Unknown Owner'}
+          <span className={styles.ownerRating}>
+            ⭐ {typeof listing.ownerRating === 'number' ? listing.ownerRating.toFixed(1) : '0.0'}
+          </span>
         </p>
         
         {(listing.description || listing.details || listing.info) && (
@@ -1455,7 +1488,10 @@ export default function Listings() {
           </span>
           {userRole === 'crop_farmer' && listing.distanceKm != null && (
             <span className={styles.listingLocation}>
-              📍 {formatDistanceKm(listing.distanceKm)}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#fa9100" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '4px' }}>
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+              </svg>
+              <span style={{ color: '#fa9100' }}>{formatDistanceKm(listing.distanceKm)}</span>
             </span>
           )}
         </div>
@@ -1536,15 +1572,42 @@ export default function Listings() {
           <div className={styles.headerLeft}>
             <h1 className={styles.title}>{getRoleDisplayTitle()}</h1>
           </div>
+          
+          <div className={styles.headerRight}>
+            {/* Search Bar for Crop Farmers - Always Visible */}
+            {userRole === 'crop_farmer' && (
+              <div className={styles.searchContainer}>
+                <div className={styles.searchInputWrapper}>
+                  <img src="/assets/icons/search.png" alt="Search" className={styles.searchIcon} />
+                  <input
+                    type="text"
+                    placeholder="Search marketplace... (Press Enter)"
+                    value={searchInput}
+                    onChange={handleSearchInputChange}
+                    onKeyPress={handleSearchKeyPress}
+                    className={styles.searchInput}
+                    disabled
+                  />
+                </div>
+              </div>
+            )}
+            
+            {/* Buttons for Livestock Owners */}
+            {userRole === 'livestock_owner' && (
+              <div className={styles.ownerButtons}>
+                <button 
+                  className={styles.addListingButton}
+                  disabled
+                >
+                  + Add Listings
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         
         {/* Loading Content */}
         <div className={styles.loadingContent}>
-          <img 
-            src="/assets/images/agrilink-logo.png" 
-            alt="AgriLink" 
-            className={styles.loadingLogo}
-          />
           <p className={styles.loadingText}>Loading listings...</p>
           <div className={styles.loadingSpinner}></div>
         </div>
@@ -1659,12 +1722,19 @@ export default function Listings() {
         {/* Search Results Section */}
         {searchQuery && userRole === 'crop_farmer' ? (
           <>
+            {/* Search Results Header */}
+            <div className={styles.searchResultsHeader}>
+              <h3 className={styles.sectionTitle}>
+                Search Results for "{searchQuery}"
+              </h3>
+              <p className={styles.searchResultsCount}>
+                {searchResults.length} {searchResults.length === 1 ? 'result' : 'results'} found
+              </p>
+            </div>
+
             {/* Matching Search Results */}
-            {searchResults.length > 0 && (
+            {searchResults.length > 0 ? (
               <div className={styles.searchSection}>
-                <h3 className={styles.sectionTitle}>
-                  Search Results for "{searchQuery}"
-                </h3>
                 <div className={styles.listingsGrid}>
                   {searchResults.map((listing) => (
                     <div 
@@ -1678,9 +1748,15 @@ export default function Listings() {
                   ))}
                 </div>
               </div>
+            ) : (
+              <div className={styles.noSearchResults}>
+                <div className={styles.noResultsIcon}>🔍</div>
+                <h4>No matching listings found</h4>
+                <p>We couldn't find any listings matching "{searchQuery}"</p>
+              </div>
             )}
 
-            {/* Outside Search Results */}
+            {/* Other Listings You May Like - Always show if available */}
             {outsideSearchResults.length > 0 && (
               <div className={styles.searchSection}>
                 <h3 className={styles.sectionTitle}>
@@ -1700,21 +1776,11 @@ export default function Listings() {
                 </div>
               </div>
             )}
-
-            {/* No Results */}
-            {searchResults.length === 0 && outsideSearchResults.length === 0 && (
-              <div className={styles.emptyState}>
-                <div className={styles.emptyIcon}>🔍</div>
-                <h3>No results found</h3>
-                <p>No listings match "{searchQuery}". Try a different search term.</p>
-              </div>
-            )}
           </>
         ) : (
           /* Regular Listings Display */
           filteredListings.length === 0 ? (
             <div className={styles.emptyState}>
-              <div className={styles.emptyIcon}>📦</div>
               <h3>No listings found</h3>
               <p>
                 {userRole === 'livestock_owner' ?
@@ -1859,7 +1925,6 @@ export default function Listings() {
                       value={formData.price}
                       onChange={(e) => setFormData({...formData, price: e.target.value})}
                       onFocus={() => setFormData({...formData, isFree: false})}
-                      disabled={formData.isFree}
                     />
                   </div>
                 </div>
@@ -1900,7 +1965,6 @@ export default function Listings() {
                           }}
                         />
                         <label htmlFor="imageUpload" className={styles.uploadLabel}>
-                          <div className={styles.uploadIcon}>📷</div>
                           <div className={styles.uploadText}>
                             <span className={styles.uploadTitle}>Click to upload image</span>
                             <span className={styles.uploadSubtitle}>PNG, JPG up to 10MB</span>
@@ -1934,12 +1998,22 @@ export default function Listings() {
         </div>
       )}
 
-      {/* Loading Modal */}
+      {/* Loading Modal for Creating Listing */}
       {isCreatingListing && (
         <div className={styles.loadingOverlay}>
           <div className={styles.loadingModal}>
             <div className={styles.loadingSpinner}></div>
             <p className={styles.loadingText}>Processing...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Loading Modal for Requesting Listing */}
+      {isRequestingListing && (
+        <div className={styles.loadingOverlay}>
+          <div className={styles.loadingModal}>
+            <div className={styles.loadingSpinner}></div>
+            <p className={styles.loadingText}>Requesting...</p>
           </div>
         </div>
       )}
@@ -1988,6 +2062,9 @@ export default function Listings() {
                     </div>
                     <p className={styles.detailsOwner}>
                       by {selectedListing.ownerName || 'Unknown Owner'}
+                      <span className={styles.detailsRating}>
+                        ⭐ {typeof selectedListing.ownerRating === 'number' ? selectedListing.ownerRating.toFixed(1) : '0.0'}
+                      </span>
                     </p>
                   </div>
                   
@@ -2011,7 +2088,12 @@ export default function Listings() {
                     {userRole === 'crop_farmer' && selectedListing.distanceKm != null && (
                       <div className={styles.detailsSection}>
                         <h4>Distance</h4>
-                        <p>📍 {formatDistanceKm(selectedListing.distanceKm)}</p>
+                        <p style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="#fa9100" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                          </svg>
+                          <span style={{ color: '#fa9100', fontWeight: '500' }}>{formatDistanceKm(selectedListing.distanceKm)}</span>
+                        </p>
                       </div>
                     )}
                   </div>

@@ -75,13 +75,16 @@
 
 .emptyState {
   margin-left: 260px;
-  margin-right: 40px;
-  margin-top: 24px;
+  margin-right: 0;
+  margin-top: 0;
   padding: 60px 40px;
   text-align: center;
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin: 20px 40px;
+  margin-left: 300px;
+  margin-right: 40px;
 }
 
 .emptyIcon {

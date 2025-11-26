@@ -53,12 +53,13 @@ export const PopupProvider = ({ children }) => {
     setShowPopup(true)
   }
 
-  const showConfirmPopup = (title, message, onConfirm) => {
+  const showConfirmPopup = (title, message, onConfirm, options = {}) => {
     return new Promise((resolve) => {
       setPopupConfig({
         title,
         message,
         type: 'confirm',
+        danger: options.danger || false,
         onConfirm: () => {
           setShowPopup(false)
           resolve(true)
@@ -106,10 +107,10 @@ export const PopupProvider = ({ children }) => {
                     Cancel
                   </button>
                   <button 
-                    className="popup-button-confirm"
+                    className={`popup-button-confirm ${popupConfig.danger ? 'popup-button-danger' : ''}`}
                     onClick={popupConfig.onConfirm}
                   >
-                    Confirm
+                    {popupConfig.danger ? 'Logout' : 'Confirm'}
                   </button>
                 </>
               ) : (

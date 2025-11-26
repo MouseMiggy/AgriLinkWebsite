@@ -5,7 +5,9 @@ import Listings from './listings'
 import RequestListingHistory from './request-listing-history'
 import ListingHistory from './listing-history'
 import Reports from './reports'
+import UserProfile from './user-profile'
 import ReportModal from '../components/ReportModal'
+import { usePopup } from '../contexts/PopupContext'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { 
@@ -26,10 +28,11 @@ import {
   setDoc
 } from 'firebase/firestore'
 import { uploadImageToCloudinary } from '../lib/cloudinary'
-import { listenToNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadNotificationCount, sendPostLikeNotification, sendCommentNotification, debugNotifications } from '../lib/notificationService'
+import { listenToNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadNotificationCount, sendPostLikeNotification, sendCommentNotification, sendCommentReplyNotification, debugNotifications } from '../lib/notificationService'
 import styles from '../../styles/modules/dashboard.module.css'
 
 export default function Dashboard() {
+  const { showInfoPopup, showSuccessPopup, showErrorPopup, showConfirmPopup } = usePopup()
   const [user, setUser] = useState(null)
   const [userRole, setUserRole] = useState(null)
   const [postText, setPostText] = useState('')
@@ -89,11 +92,30 @@ export default function Dashboard() {
   const [reportsFilter, setReportsFilter] = useState('all')
   const [showSearchPanel, setShowSearchPanel] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchSubmitted, setSearchSubmitted] = useState(false)
   const [recentSearches, setRecentSearches] = useState([])
   const [searchResults, setSearchResults] = useState([])
+  const [showSwitchingRolePopup, setShowSwitchingRolePopup] = useState(false)
+  const [switchingRoleStep, setSwitchingRoleStep] = useState(0)
+  const [featuredListings, setFeaturedListings] = useState([])
+  const [featuredListingsLoading, setFeaturedListingsLoading] = useState(true)
+  const [selectedFeaturedListing, setSelectedFeaturedListing] = useState(null)
   const dropdownRef = useRef(null)
   const markAsReadTimeoutRef = useRef(null)
   const router = useRouter()
+
+  // Control body scroll based on active menu item
+  useEffect(() => {
+    if (activeMenuItem === 'listings' || activeMenuItem === 'listing-history' || activeMenuItem === 'reports' || activeMenuItem === 'profile') {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'auto'
+    }
+    
+    return () => {
+      document.body.style.overflow = 'auto'
+    }
+  }, [activeMenuItem])
 
   // Play notification sound for new notifications
   const playNotificationSound = () => {
@@ -747,6 +769,87 @@ export default function Dashboard() {
     }
   }, [router])
 
+  // Load featured listings for right sidebar (using recommendation algorithm for crop farmers)
+  useEffect(() => {
+    if (!db || !user) return
+
+    const loadFeaturedListings = async () => {
+      setFeaturedListingsLoading(true)
+      
+      try {
+        // For crop farmers, use recommendation algorithm to get best matches
+        if (userRole === 'crop_farmer') {
+          const { getRecommendedListings } = await import('../utils/recommendationAlgorithm')
+          const result = await getRecommendedListings(user.uid, { limit: 4 })
+          
+          // Fetch owner ratings for each listing
+          const listingsWithRatings = await Promise.all(
+            result.searchResults.map(async (listing) => {
+              if (listing.ownerId) {
+                try {
+                  const ownerDoc = await getDoc(doc(db, 'Users', listing.ownerId))
+                  if (ownerDoc.exists()) {
+                    const ownerData = ownerDoc.data()
+                    return {
+                      ...listing,
+                      ownerRating: ownerData.rating ?? ownerData.averageRating ?? null
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error fetching owner rating:', error)
+                }
+              }
+              return { ...listing, ownerRating: null }
+            })
+          )
+          
+          setFeaturedListings(listingsWithRatings)
+        } else {
+          // For livestock owners, show latest listings
+          const listingsQuery = query(
+            collection(db, 'livestock_listings'),
+            orderBy('createdAt', 'desc')
+          )
+          
+          const snapshot = await getDocs(listingsQuery)
+          const listingsData = snapshot.docs.map(docSnap => ({
+            id: docSnap.id,
+            ...docSnap.data()
+          })).slice(0, 4)
+          
+          // Fetch owner ratings for each listing
+          const listingsWithRatings = await Promise.all(
+            listingsData.map(async (listing) => {
+              if (listing.ownerId) {
+                try {
+                  const ownerDoc = await getDoc(doc(db, 'Users', listing.ownerId))
+                  if (ownerDoc.exists()) {
+                    const ownerData = ownerDoc.data()
+                    return {
+                      ...listing,
+                      ownerRating: ownerData.rating ?? ownerData.averageRating ?? null
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error fetching owner rating:', error)
+                }
+              }
+              return { ...listing, ownerRating: null }
+            })
+          )
+          
+          setFeaturedListings(listingsWithRatings)
+        }
+      } catch (error) {
+        console.error('Error fetching featured listings:', error)
+      } finally {
+        setFeaturedListingsLoading(false)
+      }
+    }
+
+    loadFeaturedListings()
+  }, [user, userRole])
+
   // Load conversations with real-time listener
   useEffect(() => {
     if (!auth || !db || !user || !userRole) return
@@ -1154,14 +1257,21 @@ export default function Dashboard() {
   }
 
   const handleLogout = async () => {
-    try {
-      const { signOut } = await import('firebase/auth')
-      await signOut(auth)
-      router.push('/signin')
-    } catch (error) {
-      console.error('Logout error:', error)
-      router.push('/signin')
-    }
+    showConfirmPopup(
+      'Logout',
+      'Are you sure you want to logout?',
+      async () => {
+        try {
+          const { signOut } = await import('firebase/auth')
+          await signOut(auth)
+          router.push('/signin')
+        } catch (error) {
+          console.error('Logout error:', error)
+          showErrorPopup('Logout Failed', 'An error occurred while logging out. Please try again.')
+        }
+      },
+      { danger: true }
+    )
   }
 
   const handleImageSelect = (e) => {
@@ -1467,6 +1577,36 @@ export default function Dashboard() {
     return postTime.toLocaleDateString()
   }
 
+  // Format listing time for featured listings
+  const formatListingTime = (timestamp) => {
+    if (!timestamp) return "New"
+    
+    const now = new Date()
+    let listingTime
+    
+    if (timestamp.toDate) {
+      listingTime = timestamp.toDate()
+    } else if (timestamp instanceof Date) {
+      listingTime = timestamp
+    } else if (timestamp.seconds) {
+      listingTime = new Date(timestamp.seconds * 1000)
+    } else {
+      listingTime = new Date(timestamp)
+    }
+    
+    if (isNaN(listingTime.getTime())) {
+      return "New"
+    }
+    
+    const diffInMinutes = Math.floor((now - listingTime) / (1000 * 60))
+    
+    if (diffInMinutes < 10) return "New"
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`
+    if (diffInMinutes < 43200) return `${Math.floor(diffInMinutes / 1440)}d ago`
+    return listingTime.toLocaleDateString()
+  }
+
   const hasUserLiked = (post) => {
     return post.likedBy && post.likedBy.includes(user?.uid)
   }
@@ -1643,15 +1783,32 @@ export default function Dashboard() {
       // Find @mentions at the beginning or after a space, followed by a space or end of string
       processedText = processedText.replace(/(^|[\s])@([A-Za-z]+(?:\s+[A-Za-z]+)*)([\s]|$)/g, '$1<strong>$2</strong>$3')
       
+      const replierName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User'
+      
       const newReply = {
         id: `reply-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         text: processedText,
-        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
+        userName: replierName,
         userEmail: user.email,
         userId: user.uid,
         createdAt: new Date(),
         parentId: parentCommentId,
         replyToReplyId: replyToReplyId // Track if this is a reply to another reply
+      }
+
+      // Find the original comment to get the commenter's userId
+      const parentComment = selectedPost.comments?.find(c => (c.id || c.commentId) === parentCommentId)
+      let notifyUserId = null
+      
+      if (replyToReplyId && parentComment?.replies) {
+        // Replying to a reply - notify the reply author
+        const targetReply = parentComment.replies.find(r => r.id === replyToReplyId)
+        if (targetReply?.userId && targetReply.userId !== user.uid) {
+          notifyUserId = targetReply.userId
+        }
+      } else if (parentComment?.userId && parentComment.userId !== user.uid) {
+        // Replying to a comment - notify the comment author
+        notifyUserId = parentComment.userId
       }
 
       const updatedComments = (selectedPost.comments || []).map(c => {
@@ -1664,6 +1821,18 @@ export default function Dashboard() {
       })
 
       await updateDoc(postRef, { comments: updatedComments })
+
+      // Send notification to the comment/reply author
+      if (notifyUserId) {
+        console.log('Sending reply notification to:', notifyUserId)
+        await sendCommentReplyNotification(
+          selectedPost.id,
+          notifyUserId,
+          user.uid,
+          replierName,
+          text
+        )
+      }
 
       setSelectedPost(prev => ({ ...prev, comments: updatedComments }))
       setReplyTextMap(prev => ({ ...prev, [targetId]: '' }))
@@ -2212,6 +2381,43 @@ export default function Dashboard() {
     setReportedPost(null)
   }
 
+  // Handle ESC key and click outside to close search panel
+  useEffect(() => {
+    const handleEscapeKey = (event) => {
+      if (event.key === 'Escape' && showSearchPanel) {
+        setShowSearchPanel(false)
+        setSearchQuery('')
+        setSearchSubmitted(false)
+        setSearchResults([])
+      }
+    }
+
+    const handleClickOutside = (event) => {
+      if (showSearchPanel) {
+        const searchPanel = document.querySelector(`.${styles.searchPanel}`)
+        const searchMenuItem = event.target.closest(`.${styles.leftMenuItem}`)
+        
+        // Close if clicked outside search panel and not on the search menu item
+        if (searchPanel && !searchPanel.contains(event.target) && !searchMenuItem) {
+          setShowSearchPanel(false)
+          setSearchQuery('')
+          setSearchSubmitted(false)
+          setSearchResults([])
+        }
+      }
+    }
+
+    if (showSearchPanel) {
+      document.addEventListener('keydown', handleEscapeKey)
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscapeKey)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showSearchPanel])
+
   // Load user's reports
   const loadUserReports = async () => {
     if (!user) {
@@ -2420,7 +2626,7 @@ export default function Dashboard() {
     console.log('Current userRole state:', userRole)
 
     if (!currentUser) {
-      alert('Please log in first')
+      showErrorPopup('Please log in first')
       return
     }
 
@@ -2433,7 +2639,10 @@ export default function Dashboard() {
 
     console.log('Switching from:', currentRole, 'to:', newRole)
 
-    const confirmed = confirm(`Are you sure you want to switch ${userRole ? `from ${roleNames[currentRole]} ` : ''}to ${roleNames[newRole]}?`)
+    const confirmed = await showConfirmPopup(
+      'Switch Role',
+      `Are you sure you want to switch ${userRole ? `from ${roleNames[currentRole]} ` : ''}to ${roleNames[newRole]}?`
+    )
 
     if (!confirmed) return
 
@@ -2483,14 +2692,30 @@ export default function Dashboard() {
         }
       })
 
+      // Show loading popup with steps
+      setShowSwitchingRolePopup(true)
+      
+      // Simulate loading steps
+      const steps = ['feed', 'listing', 'chats', 'profile']
+      for (let i = 0; i < steps.length; i++) {
+        setSwitchingRoleStep(i)
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+      
       // Refresh local role state
       setUserRole(newRole)
       console.log('Role successfully updated to:', newRole)
+      
+      // Hide loading popup
+      setShowSwitchingRolePopup(false)
+      setSwitchingRoleStep(0)
 
       // If user already completed onboarding for target role, stay on dashboard
       if (shouldSkipOnboarding) {
         console.log('Target role onboarding already completed, staying on dashboard')
-        alert(`Successfully switched to ${roleNames[newRole]}!`)
+        setActiveMenuItem('home')
+        const action = newRole === 'crop_farmer' ? 'search for listings' : 'add listings'
+        showSuccessPopup('Role Changed', `You are now a ${roleNames[newRole]}!\nYou can now ${action}.`)
         return
       }
 
@@ -2505,10 +2730,12 @@ export default function Dashboard() {
         router.push('/crop-onboarding')
       }
 
-      alert(`Successfully switched to ${roleNames[newRole]}! Please complete the setup process.`)
+      showInfoPopup(`Successfully switched to ${roleNames[newRole]}! Please complete the setup process.`)
     } catch (error) {
       console.error('Error switching role:', error)
-      alert('Failed to switch role. Please try again.')
+      setShowSwitchingRolePopup(false)
+      setSwitchingRoleStep(0)
+      showErrorPopup('Failed to switch role. Please try again.')
     }
   }
 
@@ -2562,9 +2789,13 @@ export default function Dashboard() {
     switch (notification.type) {
       case 'post_like':
       case 'post_comment':
+      case 'comment_reply':
         // Find and open the post in comment modal
         if (notification.postId) {
           console.log('Looking for post with ID:', notification.postId)
+          // First, make sure we're on the feed
+          setActiveMenuItem('home')
+          
           const post = posts.find(p => p.id === notification.postId)
           if (post) {
             console.log('Found post in current posts, opening modal')
@@ -2582,6 +2813,7 @@ export default function Dashboard() {
                 setShowCommentModal(true)
               } else {
                 console.log('Post not found in database')
+                alert('This post may have been deleted.')
               }
             } catch (error) {
               console.error('Error fetching post:', error)
@@ -2606,11 +2838,33 @@ export default function Dashboard() {
           if (conversation) {
             setSelectedChat(conversation)
             loadChatMessages(notification.chatId)
+          } else {
+            // If conversation not found, try to load it
+            try {
+              const chatDoc = await getDoc(doc(db, 'chats', notification.chatId))
+              if (chatDoc.exists()) {
+                const chatData = { id: chatDoc.id, ...chatDoc.data() }
+                setSelectedChat(chatData)
+                loadChatMessages(notification.chatId)
+              }
+            } catch (error) {
+              console.error('Error loading chat:', error)
+            }
           }
+        } else if (notification.fromUserId) {
+          // Open chat popup and try to find/create conversation with this user
+          setShowChat(true)
+          setSelectedChat(null)
+          setChatMessages([])
         } else {
           // Fallback to listings page
-          router.push('/listings')
+          setActiveMenuItem('listings')
         }
+        break
+      case 'report_status':
+        // Show report details in an alert/modal
+        const reportMessage = `Report Status: ${notification.reportStatus || 'Under Review'}\n\nReason: ${notification.reportReason || 'Not specified'}\n\n${notification.reportDetails || notification.message}`
+        alert(reportMessage)
         break
       default:
         // Default behavior - stay on current page
@@ -2638,6 +2892,7 @@ export default function Dashboard() {
     if (!query.trim()) {
       setSearchResults([])
       setSearchQuery('')
+      setSearchSubmitted(false)
       return
     }
 
@@ -2652,6 +2907,7 @@ export default function Dashboard() {
     })
 
     setSearchResults(results)
+    setSearchSubmitted(true)
 
     // Save to recent searches
     if (query.trim()) {
@@ -2667,7 +2923,11 @@ export default function Dashboard() {
   const handleSearchInputChange = (e) => {
     const value = e.target.value
     setSearchQuery(value)
-    // Don't auto-search, wait for Enter key
+    // Reset search submitted state when user types new query
+    if (searchSubmitted) {
+      setSearchSubmitted(false)
+      setSearchResults([])
+    }
   }
 
   const handleSearchKeyPress = (e) => {
@@ -2770,14 +3030,9 @@ export default function Dashboard() {
               
               <div className={styles.profileMenuDivider}></div>
               
-              <div className={styles.profileMenuItem} onClick={async () => {
+              <div className={styles.profileMenuItem} onClick={() => {
                 setShowProfileMenu(false)
-                try {
-                  await auth.signOut()
-                  router.push('/signin')
-                } catch (error) {
-                  console.error('Error signing out:', error)
-                }
+                handleLogout()
               }}>
                 <img src="/assets/icons/logout.png" alt="Logout" className={styles.menuIcon} />
                 <span>Logout</span>
@@ -2803,22 +3058,27 @@ export default function Dashboard() {
                 setActiveMenuItem('home')
                 setSearchResults([])
                 setSearchQuery('')
+                setSearchSubmitted(false)
+                setShowSearchPanel(false)
                 console.log('Home clicked - Feed reloaded')
               }}>
                 <img src={activeMenuItem === 'home' ? "/assets/icons/home-white.png" : "/assets/icons/home.png"} alt="Home" className={styles.leftMenuIcon} />
                 <span className={styles.leftMenuText}>Home</span>
               </div>
               
-              <div className={styles.leftMenuItem} onClick={() => {
+              <div className={`${styles.leftMenuItem} ${showSearchPanel ? styles.active : ''}`} onClick={() => {
                 setShowSearchPanel(true)
+                setActiveMenuItem('') // Clear active menu item
                 console.log('Search clicked')
               }}>
-                <img src="/assets/icons/search.png" alt="Search" className={styles.leftMenuIcon} />
+                <img src={showSearchPanel ? "/assets/icons/search-white.png" : "/assets/icons/search.png"} alt="Search" className={styles.leftMenuIcon} />
                 <span className={styles.leftMenuText}>Search</span>
               </div>
               
               <div className={`${styles.leftMenuItem} ${activeMenuItem === 'listings' ? styles.active : ''}`} onClick={() => {
+                setSelectedFeaturedListing(null) // Clear any selected featured listing
                 setActiveMenuItem('listings')
+                setShowSearchPanel(false)
                 console.log('Listings clicked')
               }}>
                 <img src={activeMenuItem === 'listings' ? "/assets/icons/listing-white.png" : "/assets/icons/listing.png"} alt="Listings" className={styles.leftMenuIcon} />
@@ -2827,6 +3087,7 @@ export default function Dashboard() {
               
               <div className={`${styles.leftMenuItem} ${activeMenuItem === 'listing-history' ? styles.active : ''}`} onClick={() => {
                 setActiveMenuItem('listing-history')
+                setShowSearchPanel(false)
                 console.log('Listing History clicked')
               }}>
                 <img src={activeMenuItem === 'listing-history' ? "/assets/icons/time-past-white.png" : "/assets/icons/time-past.png"} alt="Listing History" className={styles.leftMenuIcon} />
@@ -2839,6 +3100,7 @@ export default function Dashboard() {
               
               <div className={`${styles.leftMenuItem} ${activeMenuItem === 'profile' ? styles.active : ''}`} onClick={() => {
                 setActiveMenuItem('profile')
+                setShowSearchPanel(false)
                 console.log('Profile clicked')
               }}>
                 <img src={activeMenuItem === 'profile' ? "/assets/icons/profile-white.png" : "/assets/icons/profile.png"} alt="Profile" className={styles.leftMenuIcon} />
@@ -2926,6 +3188,8 @@ export default function Dashboard() {
               <button onClick={() => {
                 setShowSearchPanel(false)
                 setSearchQuery('')
+                setSearchSubmitted(false)
+                setSearchResults([])
               }} className={styles.searchBackButton}>
                 <img src="/assets/icons/back.png" alt="Back" className={styles.backIcon} />
               </button>
@@ -3348,11 +3612,20 @@ export default function Dashboard() {
                           <span>
                             {notification.type === 'listing_request' ? (
                               `${notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName : 'A crop farmer'} is interested in your listing: ${notification.listingName || 'your listing'}`
+                            ) : notification.type === 'report_status' ? (
+                              `${notification.message || 'Your content has been reported'}`
+                            ) : notification.type === 'comment_reply' ? (
+                              `${notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName : 'Someone'} replied to your comment`
                             ) : (
                               `${notification.fromUserName && notification.fromUserName !== 'Someone' ? notification.fromUserName : 'AgriLink User'} ${notification.actionText || (notification.actionType === 'like' ? 'liked your post' : 'commented on your post')}`
                             )}
                           </span>
                         </div>
+                        {notification.type === 'report_status' && notification.reportReason && (
+                          <div className={styles.notificationSubText}>
+                            <span style={{ fontSize: '12px', color: '#e74c3c' }}>Reason: {notification.reportReason}</span>
+                          </div>
+                        )}
                         <div className={styles.notificationTimeLine}>
                           <span className={styles.notificationTime}>
                             {formatNotificationTime(notification.createdAt)}
@@ -3361,7 +3634,11 @@ export default function Dashboard() {
                       </div>
                       <div className={styles.notificationIcon}>
                         {notification.type === 'listing_request' ? (
-                          <img src="/assets/icons/marketplace.png" alt="Listing Request" style={{width: '28px', height: '28px', pointerEvents: 'none'}} />
+                          <img src="/assets/icons/listing.png" alt="Listing Request" style={{width: '28px', height: '28px', pointerEvents: 'none'}} />
+                        ) : notification.type === 'report_status' ? (
+                          <img src="/assets/icons/triangle-warning.png" alt="Report" style={{width: '28px', height: '28px', pointerEvents: 'none'}} />
+                        ) : notification.type === 'comment_reply' ? (
+                          <img src="/assets/icons/comment-all-dots.png" alt="Reply" style={{width: '28px', height: '28px', pointerEvents: 'none'}} />
                         ) : notification.actionType === 'like' ? (
                           <img src="/assets/icons/red-heart.png" alt="Like" style={{width: '28px', height: '28px', pointerEvents: 'none'}} />
                         ) : (
@@ -3377,11 +3654,11 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Main Feed - Hide when listings, listing-history, or reports is active */}
-        {activeMenuItem !== 'listings' && activeMenuItem !== 'listing-history' && activeMenuItem !== 'reports' && (
+        {/* Main Feed - Hide when listings, listing-history, reports, or profile is active */}
+        {activeMenuItem !== 'listings' && activeMenuItem !== 'listing-history' && activeMenuItem !== 'reports' && activeMenuItem !== 'profile' && (
         <main className={styles.mainFeed}>
           {/* Post Creation Prompt - Only show when not viewing reports, listings, profile, or search results */}
-          {activeMenuItem !== 'reports' && activeMenuItem !== 'listings' && activeMenuItem !== 'profile' && searchResults.length === 0 && (
+          {activeMenuItem !== 'reports' && activeMenuItem !== 'listings' && activeMenuItem !== 'profile' && !searchSubmitted && (
             <div className={styles.postPromptContainer}>
               <div className={styles.postPrompt}>
                 <div className={styles.userAvatar}>
@@ -3397,8 +3674,8 @@ export default function Dashboard() {
 
           {/* News Feed / Reports / Listings */}
           <div className={styles.newsFeed}>
-            {/* Search Results Banner */}
-            {searchQuery.trim() !== '' && (
+            {/* Search Results Banner - Only show after user presses Enter */}
+            {searchSubmitted && searchQuery.trim() !== '' && (
               <div className={styles.searchResultsBanner}>
                 <div className={styles.searchResultsHeader}>
                   <h3>Search Results for "{searchQuery}"</h3>
@@ -3414,188 +3691,10 @@ export default function Dashboard() {
             {activeMenuItem === 'listings' ? (
               // Direct Listings Component Integration
               <Listings />
-            ) : activeMenuItem === 'profile' ? (
-              <>
-                {/* Profile Info Container */}
-                <div className={styles.profileInfoContainer}>
-                  <div className={styles.profilePictureContainer}>
-                    <div className={styles.profilePicture}>
-                      {user?.photoURL ? (
-                        <img src={user.photoURL} alt="Profile" className={styles.profileImage} />
-                      ) : (
-                        user?.displayName ? user.displayName[0].toUpperCase() : 
-                        user?.firstName ? user.firstName[0].toUpperCase() : 'U'
-                      )}
-                    </div>
-                  </div>
-                  <div className={styles.profileMainInfo}>
-                    <h1 className={styles.profileName}>
-                      {user?.displayName || 
-                       (user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : 'User Profile')}
-                    </h1>
-                    <p className={styles.profileEmail}>
-                      {user?.email || 'No email available'}
-                    </p>
-                    <p className={styles.profilePhone}>
-                      {user?.phoneNumber || 'No phone number'}
-                    </p>
-                    <p className={styles.profileRole}>
-                      {userRole === 'livestock_owner' ? 'Livestock Owner' : 
-                       userRole === 'crop_farmer' ? 'Crop Farmer' : 'User'}
-                    </p>
-                  </div>
-                </div>
-                
-                {/* Profile Posts Feed */}
-                <div className={styles.profilePosts}>
-                  {posts.filter(post => post.userId === user?.uid).length === 0 ? (
-                    <div className={styles.noPostsMessage}>
-                      <div className={styles.noPostsIcon}>📝</div>
-                      <h3>No posts yet</h3>
-                      <p>When you create posts, they'll appear here.</p>
-                    </div>
-                  ) : (
-                    posts.filter(post => post.userId === user?.uid).map((post) => (
-                      <div key={post.id} className={styles.post}>
-                        <div className={styles.postHeader}>
-                          <div className={styles.postAvatar}>{post.userName ? post.userName[0].toUpperCase() : 'U'}</div>
-                          <div className={styles.postInfo}>
-                            <h4 className={styles.postAuthor}>{post.userName || 'Anonymous'}</h4>
-                            <span className={styles.postTime}>
-                              {formatTimeAgo(post.createdAt)}
-                              {post.editedAt && <span className={styles.edited}> (edited)</span>}
-                            </span>
-                          </div>
-                          <div className={`${styles.postOptions} dropdown-container`}>
-                            <button 
-                              className={styles.optionsBtn}
-                              onClick={() => toggleDropdown(post.id)}
-                              data-post-options={post.id}
-                            >
-                              <img src="/assets/icons/menu-dots.png" alt="Options" className={styles.optionsIcon} />
-                            </button>
-                            {showDropdown === post.id && (
-                              <div className={styles.dropdown}>
-                                <button onClick={() => handleEditPost(post)} className={`${styles.dropdownItem} ${styles.editDropdownItem}`}>
-                                  <img src="/assets/icons/pencil.png" alt="Edit" className={styles.dropdownIcon} />
-                                  Edit Post
-                                </button>
-                                <button onClick={() => handleDeletePost(post.id)} className={`${styles.dropdownItem} ${styles.deleteDropdownItem}`}>
-                                  <img src="/assets/icons/delete-white.png" alt="Delete" className={styles.dropdownIcon} />
-                                  Delete
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className={styles.postContent}>
-                          <p 
-                            style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
-                            onClick={() => openCommentModal(post)}
-                          >
-                            {post.text}
-                          </p>
-                          {(post.imageUrls?.length > 0 || post.imageUrl) && (
-                            <div className={styles.imageCarousel}>
-                              {(() => {
-                                const images = post.imageUrls || (post.imageUrl ? [post.imageUrl] : [])
-                                const currentIndex = currentImageIndex[post.id] || 0
-                                const currentImage = images[currentIndex] || images[0]
-                                
-                                return (
-                                  <>
-                                    <div className={styles.imageContainer} data-post-id={post.id}>
-                                      <div 
-                                        className={styles.imageSlider}
-                                        style={{ transform: `translateX(-${currentIndex * 100}%)` }}
-                                      >
-                                        {images.map((imageUrl, index) => (
-                                          <img 
-                                            key={index}
-                                            src={imageUrl} 
-                                            alt={`Post image ${index + 1}`} 
-                                            className={styles.postImage}
-                                            onClick={() => openCommentModal(post)}
-                                            style={{ cursor: 'pointer' }}
-                                          />
-                                        ))}
-                                      </div>
-                                      
-                                      {images.length > 1 && (
-                                        <>
-                                          {currentIndex > 0 && (
-                                            <button 
-                                              className={`${styles.carouselBtn} ${styles.prevBtn}`}
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                prevImage(post.id)
-                                              }}
-                                            >
-                                              <img src="/assets/icons/back.png" alt="Previous" />
-                                            </button>
-                                          )}
-                                          
-                                          {currentIndex < images.length - 1 && (
-                                            <button 
-                                              className={`${styles.carouselBtn} ${styles.nextBtn}`}
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                nextImage(post.id, images.length)
-                                              }}
-                                            >
-                                              <img src="/assets/icons/greater-than-symbol.png" alt="Next" />
-                                            </button>
-                                          )}
-                                          
-                                          <div className={styles.imageIndicator}>
-                                            {currentIndex + 1} / {images.length}
-                                          </div>
-                                        </>
-                                      )}
-                                    </div>
-                                  </>
-                                )
-                              })()}
-                            </div>
-                          )}
-                        </div>
-                        <div className={styles.postStats}>
-                          <span>{post.likes || 0} likes</span>
-                          <span>{post.comments?.length || 0} comments</span>
-                        </div>
-                        
-                        <div className={styles.postSeparator}></div>
-                        
-                        <div className={styles.postActions}>
-                          <button 
-                            className={`${styles.actionBtn} ${hasUserLiked(post) ? styles.liked : ''}`}
-                            onClick={() => handleLikePost(post)}
-                          >
-                            <img 
-                              src={hasUserLiked(post) ? "/assets/icons/red-heart.png" : "/assets/icons/heart.png"} 
-                              alt="Like" 
-                              className={styles.actionIcon} 
-                            />
-                            {hasUserLiked(post) ? 'Liked' : 'Like'}
-                          </button>
-                          <button 
-                            className={styles.actionBtn}
-                            onClick={() => openCommentModal(post)}
-                          >
-                            <img src="/assets/icons/comment-all-dots.png" alt="Comment" className={styles.actionIcon} />
-                            Comment
-                          </button>
-                        </div>
-                        
-                      </div>
-                    ))
-                  )}
-                </div>
-              </>
             ) : (
-              // Regular Posts Feed or Search Results - only show search results if query exists
-              (searchQuery.trim() !== '' && searchResults.length > 0 ? searchResults : 
-               searchQuery.trim() !== '' && searchResults.length === 0 ? [] : 
+              // Regular Posts Feed or Search Results - only show search results after Enter is pressed
+              (searchSubmitted && searchResults.length > 0 ? searchResults : 
+               searchSubmitted && searchResults.length === 0 ? [] : 
                posts).map((post) => (
               <div key={post.id} className={styles.post}>
                 <div className={styles.postHeader}>
@@ -3744,15 +3843,122 @@ export default function Dashboard() {
         </main>
         )}
 
+        {/* Right Sidebar - Featured Listings (always show on home feed or when search panel is open, hide only on other screens) */}
+        {(activeMenuItem === 'home' || activeMenuItem === '' || showSearchPanel) && !searchSubmitted && (
+          <aside 
+            className={styles.rightSidebar}
+            onMouseEnter={() => {
+              document.body.style.overflow = 'hidden'
+            }}
+            onMouseLeave={() => {
+              if (activeMenuItem === 'home' || activeMenuItem === '' || showSearchPanel) {
+                document.body.style.overflow = 'auto'
+              }
+            }}
+          >
+            <div className={styles.featuredListingsCard}>
+              <div className={styles.featuredListingsHeader}>
+                <h3 className={styles.featuredListingsTitle}>Featured Listings</h3>
+                <button 
+                  className={styles.viewAllBtn}
+                  onClick={() => {
+                    setSelectedFeaturedListing(null)
+                    setActiveMenuItem('listings')
+                  }}
+                >
+                  View All
+                </button>
+              </div>
+              
+              {featuredListingsLoading ? (
+                <div className={styles.featuredListingsLoading}>
+                  <div className={styles.featuredListingsSpinner}></div>
+                </div>
+              ) : featuredListings.length === 0 ? (
+                <div className={styles.featuredListingsEmpty}>
+                  <img 
+                    src="/assets/icons/listing.png" 
+                    alt="No listings" 
+                    className={styles.featuredListingsEmptyIcon}
+                  />
+                  <p className={styles.featuredListingsEmptyText}>
+                    No listings available yet
+                  </p>
+                </div>
+              ) : (
+                <div className={styles.featuredListingsList}>
+                  {featuredListings.map((listing) => (
+                    <div 
+                      key={listing.id} 
+                      className={styles.featuredListingItem}
+                      onClick={() => {
+                        setSelectedFeaturedListing(listing)
+                        setActiveMenuItem('listings')
+                      }}
+                    >
+                      <img 
+                        src={listing.image || '/assets/images/placeholder-listing.png'} 
+                        alt={listing.name}
+                        className={styles.featuredListingImage}
+                        onError={(e) => {
+                          e.target.src = '/assets/icons/listing.png'
+                        }}
+                      />
+                      <div className={styles.featuredListingInfo}>
+                        <div className={styles.featuredListingNameRow}>
+                          <h4 className={styles.featuredListingName}>
+                            {listing.name?.length > 20 
+                              ? listing.name.substring(0, 20) + '...' 
+                              : listing.name || 'Unnamed Listing'}
+                          </h4>
+                          {listing.distanceKm != null && (
+                            <span className={styles.featuredListingDistance}>
+                              <img src="/assets/icons/location.png" alt="Distance" className={styles.featuredListingDistanceIcon} />
+                              {listing.distanceKm < 1 
+                                ? `${Math.round(listing.distanceKm * 1000)}m` 
+                                : `${listing.distanceKm.toFixed(1)}km`}
+                            </span>
+                          )}
+                        </div>
+                        <p className={styles.featuredListingPrice}>
+                          {listing.isFree ? 'Free' : listing.price ? `₱${listing.price}` : 'Contact for price'}
+                        </p>
+                        <div className={styles.featuredListingMeta}>
+                          <span className={styles.featuredListingOwner}>
+                            {listing.ownerName?.split(' ')[0] || 'Owner'}
+                          </span>
+                          <span className={styles.featuredListingDot}>•</span>
+                          <span className={styles.featuredListingRating}>
+                            ⭐ {typeof listing.ownerRating === 'number' ? listing.ownerRating.toFixed(1) : '0.0'}
+                          </span>
+                          <span className={styles.featuredListingDot}>•</span>
+                          <span className={`${styles.featuredListingTime} ${formatListingTime(listing.createdAt) === 'New' ? styles.newListing : ''}`}>
+                            {formatListingTime(listing.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+
         {/* Listings Screen - Separate from main feed */}
         {activeMenuItem === 'listings' && (
           <div style={{ 
             width: '100%', 
             height: '100vh', 
             display: 'flex', 
-            flexDirection: 'column' 
+            flexDirection: 'column',
+            overflow: 'hidden'
           }}>
-            <Listings />
+            <Listings 
+              initialSelectedListing={selectedFeaturedListing}
+              onClearSelectedListing={() => setSelectedFeaturedListing(null)}
+              key={selectedFeaturedListing?.id || 'listings'}
+            />
           </div>
         )}
 
@@ -3781,6 +3987,21 @@ export default function Dashboard() {
             position: 'relative'
           }}>
             <Reports />
+          </div>
+        )}
+
+        {/* Profile Screen - Full width, separate from main feed */}
+        {activeMenuItem === 'profile' && (
+          <div style={{ 
+            width: '100%', 
+            height: '100vh', 
+            display: 'flex', 
+            flexDirection: 'column',
+            marginLeft: '250px',
+            position: 'relative',
+            overflow: 'auto'
+          }}>
+            <UserProfile />
           </div>
         )}
 
@@ -4598,6 +4819,37 @@ export default function Dashboard() {
                 {reportLoading ? 'Submitting...' : 'Submit Report'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Switching Role Loading Popup */}
+      {showSwitchingRolePopup && (
+        <div className={styles.switchingRoleOverlay}>
+          <div className={styles.switchingRolePopup}>
+            <h3 className={styles.switchingRoleTitle}>Switching Role</h3>
+            
+            <div className={styles.switchingRoleSteps}>
+              {['Feed', 'Listings', 'Chats', 'Profile'].map((step, index) => (
+                <div 
+                  key={step} 
+                  className={`${styles.switchingRoleStep} ${index <= switchingRoleStep ? styles.active : ''}`}
+                >
+                  <div className={styles.stepNumber}>
+                    {index < switchingRoleStep ? '✓' : index === switchingRoleStep ? (
+                      <div className={styles.stepSpinner}></div>
+                    ) : (index + 1)}
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <p className={styles.currentAction}>
+              {switchingRoleStep === 0 && 'Loading Feed...'}
+              {switchingRoleStep === 1 && 'Loading Listings...'}
+              {switchingRoleStep === 2 && 'Loading Chats...'}
+              {switchingRoleStep === 3 && 'Loading Profile...'}
+            </p>
           </div>
         </div>
       )}

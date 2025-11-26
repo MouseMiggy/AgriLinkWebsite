@@ -13,18 +13,28 @@
 }
 
 .backButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 20px;
-  background: #fa9100;
-  color: white;
-  border: none;
+  background: white;
+  color: #1c1e21;
+  border: 1px solid #e4e6eb;
   border-radius: 8px;
   font-size: 16px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
 }
 
 .backButton:hover {
-  background: #e68200;
+  background: #f0f2f5;
+  border-color: #ccc;
+}
+
+.backIcon {
+  width: 20px;
+  height: 20px;
 }
 
 .title {

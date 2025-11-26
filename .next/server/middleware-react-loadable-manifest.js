@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{\"dashboard.js -> firebase/auth\":{\"id\":\"dashboard.js -> firebase/auth\",\"files\":[]},\"dashboard.js -> firebase/firestore\":{\"id\":\"dashboard.js -> firebase/firestore\",\"files\":[]}}"
+self.__REACT_LOADABLE_MANIFEST="{\"dashboard.js -> ../utils/recommendationAlgorithm\":{\"id\":\"dashboard.js -> ../utils/recommendationAlgorithm\",\"files\":[]},\"dashboard.js -> firebase/auth\":{\"id\":\"dashboard.js -> firebase/auth\",\"files\":[]},\"dashboard.js -> firebase/firestore\":{\"id\":\"dashboard.js -> firebase/firestore\",\"files\":[]}}"

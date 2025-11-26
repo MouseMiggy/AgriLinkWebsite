@@ -30,14 +30,40 @@
   margin: 0;
 }
 
-.loading, .error {
-  text-align: center;
-  padding: 40px;
-  font-size: 18px;
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 16px;
+}
+
+.loadingSpinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #e0e0e0;
+  border-top: 5px solid #fa9100;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loadingText {
+  font-size: 16px;
+  font-weight: 500;
   color: #65676b;
+  margin: 0;
 }
 
 .error {
+  text-align: center;
+  padding: 40px;
+  font-size: 18px;
   color: #dc3545;
 }
 
@@ -47,6 +73,7 @@
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin: 0;
 }
 
 .emptyIcon {

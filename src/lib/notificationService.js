@@ -20,8 +20,10 @@ export const NOTIFICATION_TYPES = {
   FRIEND_ACCEPTED: 'friend_accepted',
   POST_LIKE: 'post_like',
   POST_COMMENT: 'post_comment',
+  COMMENT_REPLY: 'comment_reply',
   COMMENT_LIKE: 'comment_like',
-  LISTING_REQUEST: 'listing_request'
+  LISTING_REQUEST: 'listing_request',
+  REPORT_STATUS: 'report_status'
 }
 
 // Get notifications for a user with real-time updates
@@ -311,5 +313,87 @@ export const sendCommentNotification = async (postId, postOwnerId, commenterUser
     console.log('Comment notification sent successfully with ID:', docRef.id)
   } catch (error) {
     console.error('Error sending comment notification:', error)
+  }
+}
+
+// Send comment reply notification
+export const sendCommentReplyNotification = async (postId, originalCommenterId, replierUserId, replierName, replyText) => {
+  try {
+    console.log('Attempting to send reply notification:', { postId, originalCommenterId, replierUserId, replierName, replyText })
+    
+    // Don't send notification if user replies to their own comment
+    if (originalCommenterId === replierUserId) {
+      console.log('Skipping notification - user replied to their own comment')
+      return
+    }
+
+    // Get the actual user data from Firestore
+    let actualUserName = replierName
+    try {
+      const userDoc = await getDoc(doc(db, 'Users', replierUserId))
+      if (userDoc.exists()) {
+        const userData = userDoc.data()
+        actualUserName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.displayName || replierName
+      }
+    } catch (userError) {
+      console.log('Could not fetch user data for reply, using provided name:', replierName)
+    }
+
+    const notification = {
+      type: NOTIFICATION_TYPES.COMMENT_REPLY,
+      toUserId: originalCommenterId,
+      fromUserId: replierUserId,
+      fromUserName: actualUserName,
+      postId: postId,
+      title: 'New Reply',
+      message: `${actualUserName} replied to your comment: "${replyText.substring(0, 50)}${replyText.length > 50 ? '...' : ''}"`,
+      read: false,
+      createdAt: serverTimestamp(),
+      actionType: 'reply',
+      actionText: 'replied to your comment',
+      replyPreview: replyText.substring(0, 100)
+    }
+
+    console.log('Creating reply notification:', notification)
+    const docRef = await addDoc(collection(db, 'notifications'), notification)
+    console.log('Reply notification sent successfully with ID:', docRef.id)
+  } catch (error) {
+    console.error('Error sending reply notification:', error)
+  }
+}
+
+// Send report status notification
+export const sendReportStatusNotification = async (reportedUserId, reportReason, reportStatus, reportDetails = '') => {
+  try {
+    console.log('Attempting to send report status notification:', { reportedUserId, reportReason, reportStatus })
+
+    const statusMessages = {
+      'pending': 'Your content has been reported and is under review.',
+      'valid': 'A report against your content was found to be valid.',
+      'invalid': 'A report against your content was reviewed and dismissed.',
+      'warning': 'You have received a warning regarding your content.'
+    }
+
+    const notification = {
+      type: NOTIFICATION_TYPES.REPORT_STATUS,
+      toUserId: reportedUserId,
+      fromUserId: 'system',
+      fromUserName: 'AgriLink Moderation',
+      title: 'Content Report Update',
+      message: statusMessages[reportStatus] || 'Your content has been reported.',
+      reportReason: reportReason,
+      reportStatus: reportStatus,
+      reportDetails: reportDetails,
+      read: false,
+      createdAt: serverTimestamp(),
+      actionType: 'report',
+      actionText: 'reported'
+    }
+
+    console.log('Creating report status notification:', notification)
+    const docRef = await addDoc(collection(db, 'notifications'), notification)
+    console.log('Report status notification sent successfully with ID:', docRef.id)
+  } catch (error) {
+    console.error('Error sending report status notification:', error)
   }
 }

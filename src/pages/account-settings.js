@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { auth, db } from '../lib/firebase'
-import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
 import styles from '../../styles/modules/account-settings.module.css'
 
 export default function AccountSettings() {
@@ -80,13 +80,13 @@ export default function AccountSettings() {
           navigator.geolocation.getCurrentPosition(
             async (position) => {
               const { latitude, longitude } = position.coords
-              await updateDoc(doc(db, 'Users', user.uid), {
+              await setDoc(doc(db, 'Users', user.uid), {
                 locationEnabled: true,
                 location: {
                   latitude,
                   longitude
                 }
-              })
+              }, { merge: true })
               setLocationEnabled(true)
               alert('Location enabled successfully!')
             },
@@ -100,9 +100,9 @@ export default function AccountSettings() {
         }
       } else {
         // Disable location
-        await updateDoc(doc(db, 'Users', user.uid), {
+        await setDoc(doc(db, 'Users', user.uid), {
           locationEnabled: false
-        })
+        }, { merge: true })
         setLocationEnabled(false)
         alert('Location disabled')
       }
@@ -140,38 +140,40 @@ export default function AccountSettings() {
     <div className={styles.container}>
       <div className={styles.header}>
         <button onClick={handleBack} className={styles.backButton}>
-          ← Back
+          <img src="/assets/icons/back.png" alt="Back" className={styles.backIcon} />
+          <span>Back</span>
         </button>
         <h1 className={styles.title}>Account Settings</h1>
       </div>
 
       <div className={styles.content}>
-        {/* Account Status Section */}
-        <section className={styles.section}>
-          <h2>Account Status</h2>
-          
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Registration Method:</span>
-            <span className={styles.infoValue}>{getRegistrationMethod()}</span>
-          </div>
-          
-          <div className={styles.infoRow}>
-            <span className={styles.infoLabel}>Account Status:</span>
-            {accountStatus.isPartial ? (
-              <span className={styles.infoValue} style={{ color: accountStatus.color, fontWeight: 600 }}>
-                {accountStatus.status}
-              </span>
-            ) : (
-              <span className={styles.statusBadge} style={{ backgroundColor: accountStatus.color }}>
-                {accountStatus.status}
-              </span>
-            )}
-          </div>
-        </section>
+        <div className={styles.leftColumn}>
+          {/* Account Status Section */}
+          <section className={styles.section}>
+            <h2>Account Status</h2>
+            
+            <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>Registration Method:</span>
+              <span className={styles.infoValue}>{getRegistrationMethod()}</span>
+            </div>
+            
+            <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>Account Status:</span>
+              {accountStatus.isPartial ? (
+                <span className={styles.infoValue} style={{ color: accountStatus.color, fontWeight: 600 }}>
+                  {accountStatus.status}
+                </span>
+              ) : (
+                <span className={styles.statusBadge} style={{ backgroundColor: accountStatus.color }}>
+                  {accountStatus.status}
+                </span>
+              )}
+            </div>
+          </section>
 
-        {/* Verification Section */}
-        <section className={styles.section}>
-          <h2>Verification</h2>
+          {/* Verification Section */}
+          <section className={styles.section}>
+            <h2>Verification</h2>
           
           <div className={styles.verificationItem}>
             <div className={styles.verificationInfo}>
@@ -214,22 +216,24 @@ export default function AccountSettings() {
               </button>
             )}
           </div>
-        </section>
+          </section>
+        </div>
 
-        {/* Security Information */}
-        <section className={styles.section}>
-          <h2>Security Information</h2>
-          <div className={styles.securityInfo}>
-            <img src="/assets/icons/shield.png" alt="Security" className={styles.securityIcon} />
-            <p>
-              Verifying both your email and phone number helps secure your account and enables account recovery options.
-            </p>
-          </div>
-        </section>
+        <div className={styles.rightColumn}>
+          {/* Security Information */}
+          <section className={styles.section}>
+            <h2>Security Information</h2>
+            <div className={styles.securityInfo}>
+              <img src="/assets/icons/shield.png" alt="Security" className={styles.securityIcon} />
+              <p>
+                Verifying both your email and phone number helps secure your account and enables account recovery options.
+              </p>
+            </div>
+          </section>
 
-        {/* Location Settings */}
-        <section className={styles.section}>
-          <h2>Location Settings</h2>
+          {/* Location Settings */}
+          <section className={styles.section}>
+            <h2>Location Settings</h2>
           
           <div className={styles.locationSetting}>
             <div className={styles.locationInfo}>
@@ -253,7 +257,8 @@ export default function AccountSettings() {
               </button>
             </div>
           </div>
-        </section>
+          </section>
+        </div>
       </div>
     </div>
   )

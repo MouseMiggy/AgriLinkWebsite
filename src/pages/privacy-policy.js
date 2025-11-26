@@ -27,7 +27,8 @@ export default function PrivacyPolicy() {
     <div className={styles.container}>
       <div className={styles.header}>
         <button onClick={handleBack} className={styles.backButton}>
-          ← Back
+          <img src="/assets/icons/back.png" alt="Back" className={styles.backIcon} />
+          <span>Back</span>
         </button>
         <h1 className={styles.title}>Privacy Policy</h1>
       </div>

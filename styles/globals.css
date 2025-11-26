@@ -90,8 +90,11 @@ input {
 
 .popup-message {
   font-size: 14px;
+  font-weight: 400;
   color: #65676b;
   line-height: 1.5;
+  text-align: center;
+  white-space: pre-line;
   margin: 0;
 }
 
@@ -159,4 +162,13 @@ input {
 .popup-button-confirm:hover {
   opacity: 0.9;
   transform: translateY(-1px);
+}
+
+.popup-button-danger {
+  background-color: #dc3545 !important;
+}
+
+.popup-button-danger:hover {
+  background-color: #c82333 !important;
+  opacity: 1;
 }

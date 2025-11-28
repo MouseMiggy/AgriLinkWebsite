@@ -191,128 +191,53 @@ export const debugNotifications = async (userId) => {
 // Send post like notification
 export const sendPostLikeNotification = async (postId, postOwnerId, likerUserId, likerName) => {
   try {
-    console.log('Attempting to send like notification:', { postId, postOwnerId, likerUserId, likerName })
-    
     // Don't send notification if user likes their own post
-    if (postOwnerId === likerUserId) {
-      console.log('Skipping notification - user liked their own post')
-      return
-    }
-
-    // Get the actual user data from Firestore to ensure we have the correct name
-    let actualUserName = likerName
-    try {
-      const userDoc = await getDoc(doc(db, 'Users', likerUserId))
-      if (userDoc.exists()) {
-        const userData = userDoc.data()
-        actualUserName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.displayName || likerName
-        console.log('Found user data for notification:', actualUserName)
-      } else {
-        // Try alternative collection name
-        const userDoc2 = await getDoc(doc(db, 'Users', likerUserId))
-        if (userDoc2.exists()) {
-          const userData = userDoc2.data()
-          actualUserName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.displayName || likerName
-          console.log('Found user data in Users collection:', actualUserName)
-        }
-      }
-    } catch (userError) {
-      console.log('Could not fetch user data, using provided name:', likerName)
-    }
-
-    // Check if notification already exists for this like
-    const existingNotificationQuery = query(
-      collection(db, 'notifications'),
-      where('toUserId', '==', postOwnerId),
-      where('fromUserId', '==', likerUserId),
-      where('type', '==', NOTIFICATION_TYPES.POST_LIKE),
-      where('postId', '==', postId)
-    )
-
-    const existingNotifications = await getDocs(existingNotificationQuery)
+    if (postOwnerId === likerUserId) return;
     
-    // If notification already exists, don't create duplicate
-    if (!existingNotifications.empty) {
-      console.log('Notification already exists, skipping duplicate')
-      return
-    }
-
     const notification = {
       type: NOTIFICATION_TYPES.POST_LIKE,
       toUserId: postOwnerId,
       fromUserId: likerUserId,
-      fromUserName: actualUserName,
+      fromUserName: likerName,
       postId: postId,
       title: 'New Like',
-      message: `${actualUserName} liked your post`,
+      message: `${likerName} liked your post`,
       read: false,
       createdAt: serverTimestamp(),
-      // Additional user info for display
       actionType: 'like',
       actionText: 'liked your post'
-    }
-
-    console.log('Creating notification:', notification)
-    const docRef = await addDoc(collection(db, 'notifications'), notification)
-    console.log('Post like notification sent successfully with ID:', docRef.id)
+    };
+    
+    await addDoc(collection(db, 'notifications'), notification);
   } catch (error) {
-    console.error('Error sending post like notification:', error)
+    console.error('Error sending post like notification:', error);
   }
 }
 
 // Send comment notification
 export const sendCommentNotification = async (postId, postOwnerId, commenterUserId, commenterName, commentText) => {
   try {
-    console.log('Attempting to send comment notification:', { postId, postOwnerId, commenterUserId, commenterName, commentText })
-    
     // Don't send notification if user comments on their own post
-    if (postOwnerId === commenterUserId) {
-      console.log('Skipping notification - user commented on their own post')
-      return
-    }
-
-    // Get the actual user data from Firestore to ensure we have the correct name
-    let actualUserName = commenterName
-    try {
-      const userDoc = await getDoc(doc(db, 'Users', commenterUserId))
-      if (userDoc.exists()) {
-        const userData = userDoc.data()
-        actualUserName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.displayName || commenterName
-        console.log('Found user data for comment notification:', actualUserName)
-      } else {
-        // Try alternative collection name
-        const userDoc2 = await getDoc(doc(db, 'Users', commenterUserId))
-        if (userDoc2.exists()) {
-          const userData = userDoc2.data()
-          actualUserName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.displayName || commenterName
-          console.log('Found user data in Users collection for comment:', actualUserName)
-        }
-      }
-    } catch (userError) {
-      console.log('Could not fetch user data for comment, using provided name:', commenterName)
-    }
-
+    if (postOwnerId === commenterUserId) return;
+    
     const notification = {
       type: NOTIFICATION_TYPES.POST_COMMENT,
       toUserId: postOwnerId,
       fromUserId: commenterUserId,
-      fromUserName: actualUserName,
+      fromUserName: commenterName,
       postId: postId,
       title: 'New Comment',
-      message: `${actualUserName} commented on your post: "${commentText.substring(0, 50)}${commentText.length > 50 ? '...' : ''}"`,
+      message: `${commenterName} commented on your post`,
       read: false,
       createdAt: serverTimestamp(),
-      // Additional user info for display
       actionType: 'comment',
       actionText: 'commented on your post',
       commentPreview: commentText.substring(0, 100)
-    }
-
-    console.log('Creating comment notification:', notification)
-    const docRef = await addDoc(collection(db, 'notifications'), notification)
-    console.log('Comment notification sent successfully with ID:', docRef.id)
+    };
+    
+    await addDoc(collection(db, 'notifications'), notification);
   } catch (error) {
-    console.error('Error sending comment notification:', error)
+    console.error('Error sending comment notification:', error);
   }
 }
 

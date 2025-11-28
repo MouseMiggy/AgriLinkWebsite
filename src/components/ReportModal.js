@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { db } from '../lib/firebase'
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore'
 import styles from '../../styles/modules/ReportModal.module.css'
@@ -6,6 +7,19 @@ import styles from '../../styles/modules/ReportModal.module.css'
 const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'post', reporterId }) => {
   const [showSuccess, setShowSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  // Debug: Log content when modal becomes visible
+  if (visible && content) {
+    console.log('📋 ReportModal received content:', {
+      contentType,
+      imageUrl: content?.imageUrl,
+      imageUrls: content?.imageUrls,
+      mediaUrl: content?.mediaUrl,
+      name: content?.name,
+      caption: content?.caption,
+      details: content?.details
+    })
+  }
 
   // Lock body scroll when modal is visible
   useEffect(() => {
@@ -21,10 +35,68 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
   }, [visible])
 
   const handleReport = async () => {
+    // Validate reporterId before proceeding
+    if (!reporterId) {
+      alert('You must be logged in to submit a report.')
+      return
+    }
+
     setLoading(true)
 
     try {
       const timestamp = Date.now()
+
+      // Helper function to check if a string is base64 (to avoid storing large base64 images)
+      // Only check for data: prefix, not length - Cloudinary URLs can be long but are valid
+      const isBase64 = (str) => {
+        if (!str || typeof str !== 'string') return false
+        return str.startsWith('data:image') || str.startsWith('data:application')
+      }
+
+      // Helper function to filter out base64 images from URLs
+      const filterValidUrls = (urls) => {
+        if (!urls || !Array.isArray(urls)) return []
+        return urls.map(url => {
+          // Handle both string URLs and object URLs (e.g., { url: '...' })
+          if (typeof url === 'string') return url
+          if (typeof url === 'object' && url?.url) return url.url
+          return null
+        }).filter(url => url && typeof url === 'string' && !isBase64(url))
+      }
+
+      // Get clean URLs (filter out base64 images to avoid exceeding Firebase document size limit)
+      const cleanImageUrl = isBase64(content?.imageUrl) ? '' : (content?.imageUrl || '')
+      const cleanMediaUrl = isBase64(content?.mediaUrl) ? '' : (content?.mediaUrl || '')
+      const cleanImageUrls = filterValidUrls(content?.imageUrls)
+      
+      // For listings, ensure single image URLs are added to imageUrls array
+      // Add cleanImageUrl if it exists and is not already in the array
+      if (contentType === 'listing' && cleanImageUrl && !cleanImageUrls.includes(cleanImageUrl)) {
+        console.log('✅ Adding cleanImageUrl to imageUrls array:', cleanImageUrl)
+        cleanImageUrls.push(cleanImageUrl)
+      }
+      // Add cleanMediaUrl if it exists, is different from cleanImageUrl, and not already in array
+      if (contentType === 'listing' && cleanMediaUrl && cleanMediaUrl !== cleanImageUrl && !cleanImageUrls.includes(cleanMediaUrl)) {
+        console.log('✅ Adding cleanMediaUrl to imageUrls array:', cleanMediaUrl)
+        cleanImageUrls.push(cleanMediaUrl)
+      }
+      
+      // Debug: Log image extraction
+      console.log('🖼️ Image extraction DEBUG:', {
+        contentType,
+        rawImageUrl: content?.imageUrl,
+        rawMediaUrl: content?.mediaUrl,
+        rawImageUrls: content?.imageUrls,
+        cleanImageUrl,
+        cleanMediaUrl,
+        cleanImageUrls,
+        cleanImageUrlsLength: cleanImageUrls.length,
+        isBase64ImageUrl: isBase64(content?.imageUrl),
+        isBase64MediaUrl: isBase64(content?.mediaUrl)
+      })
+      
+      // Determine if there's valid media
+      const hasValidMedia = cleanImageUrl || cleanMediaUrl || cleanImageUrls.length > 0
 
       // Prepare report data matching mobile app structure exactly
       const reportData = {
@@ -39,10 +111,12 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
         additionalNote: '',
         createdAt: new Date(),
         timestamp,
-        mediaType: (content?.imageUrl || content?.imageUrls?.length > 0) ? 'image' : 'text',
-        mediaUrl: content?.imageUrl || content?.mediaUrl || '',
-        imageUrls: content?.imageUrls || [],
-        postImageUrl: content?.imageUrl || content?.mediaUrl || '' // For display in modal
+        mediaType: hasValidMedia ? 'image' : 'text',
+        mediaUrl: cleanMediaUrl || cleanImageUrl,
+        imageUrls: cleanImageUrls,
+        postImageUrl: cleanImageUrl || cleanMediaUrl, // For display in modal
+        // Flag if original had base64 image (for reference)
+        hadBase64Image: isBase64(content?.imageUrl) || isBase64(content?.mediaUrl)
       }
 
       // Save report to Firestore
@@ -50,37 +124,58 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
       console.log('📝 Report saved to Firebase:', reportRef.id)
 
       // Call AI validation backend
-      const backendUrl = process.env.NEXT_PUBLIC_FLASK_BACKEND_URL || 'http://192.168.1.20:5000'
+      const backendUrl = process.env.NEXT_PUBLIC_FLASK_BACKEND_URL || 'http://192.168.0.104:5000'
 
       // Wait 2 seconds before showing success
       await new Promise(resolve => setTimeout(resolve, 2000))
 
       // Call AI validation backend asynchronously (don't wait for it)
       console.log('🔄 Calling AI validation backend:', backendUrl)
-      console.log('📤 Sending data:', {
-        caption: content?.caption || content?.text || content?.content || '',
-        mediaUrl: content?.imageUrl || content?.mediaUrl || '',
-        imageUrls: content?.imageUrls || []
+      
+      // All reports use the same /validate-report endpoint (including listings)
+      const endpoint = '/validate-report'
+      
+      // Prepare caption based on content type
+      let caption = ''
+      if (contentType === 'listing') {
+        // For listings, combine name and details into caption
+        const listingName = content?.caption || content?.name || content?.title || ''
+        const listingDetails = content?.text || content?.details || content?.description || content?.content || ''
+        caption = listingName + (listingDetails ? ` - ${listingDetails}` : '')
+      } else {
+        // For posts, comments, messages - use existing caption/text
+        caption = content?.caption || content?.text || content?.content || ''
+      }
+      
+      // Unified request body for all report types
+      const requestBody = {
+        reporterId,
+        reportedUserId: targetUser?.id || targetUser,
+        contentType,
+        contentId: content?.id || '',
+        caption: caption,
+        mediaType: hasValidMedia ? 'image' : 'text',
+        mediaUrl: cleanMediaUrl || cleanImageUrl,
+        imageUrls: cleanImageUrls,
+        reportType: contentType === 'listing' ? 'spam' : 'offensive',
+        additionalNote: '',
+        timestamp
+      }
+      
+      console.log('📤 Sending report data:', {
+        contentType,
+        caption: requestBody.caption?.substring(0, 100),
+        mediaUrl: requestBody.mediaUrl ? 'present' : 'none',
+        imageUrls: requestBody.imageUrls,
+        imageUrlsCount: requestBody.imageUrls?.length || 0
       })
 
-      fetch(`${backendUrl}/validate-report`, {
+      fetch(`${backendUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          reporterId,
-          reportedUserId: targetUser?.id || targetUser,
-          contentType,
-          contentId: content?.id || '',
-          caption: content?.caption || content?.text || content?.content || '',
-          mediaType: (content?.imageUrl || content?.imageUrls?.length > 0) ? 'image' : 'text',
-          mediaUrl: content?.imageUrl || content?.mediaUrl || '',
-          imageUrls: content?.imageUrls || [],
-          reportType: 'offensive',
-          additionalNote: '',
-          timestamp
-        })
+        body: JSON.stringify(requestBody)
       })
       .then(response => {
         console.log('✅ AI response status:', response.status)
@@ -128,7 +223,10 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
 
   if (!visible) return null
 
-  return (
+  // Use createPortal to render at document body level to ensure proper z-index stacking
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
     <>
       {/* Confirmation Modal */}
       {!showSuccess && !loading && (
@@ -175,7 +273,8 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
           </div>
         </div>
       )}
-    </>
+    </>,
+    document.body
   )
 }
 

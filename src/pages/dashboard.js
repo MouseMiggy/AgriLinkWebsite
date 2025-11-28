@@ -7,6 +7,9 @@ import ListingHistory from './listing-history'
 import Reports from './reports'
 import UserProfile from './user-profile'
 import ReportModal from '../components/ReportModal'
+
+import { usePostHandlers } from '../components/PostHandlers'
+
 import { usePopup } from '../contexts/PopupContext'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
@@ -27,7 +30,7 @@ import {
   getDoc,
   setDoc
 } from 'firebase/firestore'
-import { uploadImageToCloudinary } from '../lib/cloudinary'
+import { uploadImageToFirebaseStorage, uploadMultipleImagesToFirebaseStorage } from '../lib/firebaseStorage'
 import { listenToNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadNotificationCount, sendPostLikeNotification, sendCommentNotification, sendCommentReplyNotification, debugNotifications } from '../lib/notificationService'
 import styles from '../../styles/modules/dashboard.module.css'
 
@@ -103,6 +106,40 @@ export default function Dashboard() {
   const dropdownRef = useRef(null)
   const markAsReadTimeoutRef = useRef(null)
   const router = useRouter()
+
+  // Use post handlers hook
+  const { handleLikePost, handleAddComment: addComment, handleAddReply: addReply, formatTimeAgo } = usePostHandlers(user)
+
+  // Wrapper for handleAddComment with required parameters
+  const handleAddComment = async () => {
+    if (!selectedPost || !commentText.trim()) return
+    
+    setCommentLoading(true)
+    try {
+      await addComment(selectedPost.id, commentText, user)
+      setCommentText('')
+    } catch (error) {
+      console.error('Error adding comment:', error)
+    } finally {
+      setCommentLoading(false)
+    }
+  }
+
+  // Wrapper for handleAddReply with required parameters
+  const handleAddReply = async (commentId, replyId = null) => {
+    if (!selectedPost) return
+    
+    const replyText = replyId ? replyTextMap[replyId] : replyTextMap[commentId]
+    if (!replyText?.trim()) return
+    
+    try {
+      await addReply(selectedPost.id, commentId, replyText, user, replyId)
+      // Clear the reply text
+      setReplyTextMap(prev => ({ ...prev, [replyId || commentId]: '' }))
+    } catch (error) {
+      console.error('Error adding reply:', error)
+    }
+  }
 
   // Control body scroll based on active menu item
   useEffect(() => {
@@ -1135,6 +1172,16 @@ export default function Dashboard() {
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedChat || !user || !db) return
     
+    // Check if there's an approved request - both users must wait for approval
+    const hasApprovedRequest = chatMessages.some(msg => 
+      msg.isListingRequest && msg.requestStatus === 'approved'
+    )
+    
+    if (!hasApprovedRequest) {
+      console.log('Cannot send message: Request not yet approved')
+      return
+    }
+    
     try {
       const chatId = selectedChat.id
       const messageData = {
@@ -1438,23 +1485,40 @@ export default function Dashboard() {
   }
 
   const handlePost = async () => {
-    if ((!postText.trim() && imageFiles.length === 0) || !user || !db) return
+    console.log('🚀 handlePost called')
+    console.log('📝 postText:', postText?.trim())
+    console.log('🖼️ imageFiles length:', imageFiles?.length)
+    console.log('👤 user:', user?.uid)
+    console.log('🔥 db initialized:', !!db)
+    
+    if ((!postText.trim() && imageFiles.length === 0) || !user || !db) {
+      console.log('❌ Validation failed - returning early')
+      return
+    }
 
+    console.log('✅ Validation passed - setting loading to true')
     setLoading(true)
     try {
       let imageUrls = []
       
-      // Upload multiple images to Cloudinary if selected
+      // Upload multiple images to Firebase Storage if selected
       if (imageFiles.length > 0) {
-        console.log('Uploading images to Cloudinary...')
-        for (const imageFile of imageFiles) {
-          const imageUrl = await uploadImageToCloudinary(imageFile)
-          imageUrls.push(imageUrl)
-          console.log('Image uploaded successfully:', imageUrl)
+        console.log('📤 Starting image upload to Firebase Storage...')
+        for (let i = 0; i < imageFiles.length; i++) {
+          const imageFile = imageFiles[i]
+          console.log(`📤 Uploading image ${i + 1}/${imageFiles.length}:`, imageFile.name)
+          try {
+            const imageUrl = await uploadImageToFirebaseStorage(imageFile, 'Images/Feed', user.uid)
+            imageUrls.push(imageUrl)
+            console.log(`✅ Image ${i + 1} uploaded successfully:`, imageUrl)
+          } catch (uploadError) {
+            console.error(`❌ Image ${i + 1} upload failed:`, uploadError)
+            throw new Error(`Image upload failed: ${uploadError.message}`)
+          }
         }
       }
 
-      console.log('Saving post to Firestore...')
+      console.log('💾 Saving post to Firestore...')
       
       // Create post with multiple images support
       const postData = {
@@ -1470,112 +1534,32 @@ export default function Dashboard() {
         createdAt: serverTimestamp(),
       }
       
-      console.log('Post data:', postData)
+      console.log('📝 Post data prepared:', postData)
       
-      await addDoc(collection(db, 'Posts'), postData)
-
-      console.log('Post created successfully!')
+      const docRef = await addDoc(collection(db, 'Posts'), postData)
+      console.log('✅ Post created successfully with ID:', docRef.id)
       
       setPostText('')
       removeAllImages()
       closePostModal()
     } catch (error) {
-      console.error('Error creating post:', error)
-      alert('Failed to create post. Please try again.')
+      console.error('❌ Error creating post:', error)
+      console.error('❌ Error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      })
+      alert(`Failed to create post: ${error.message}`)
     } finally {
+      console.log('🔄 Setting loading to false')
       setLoading(false)
     }
   }
 
-  const handleLikePost = async (post) => {
-    if (!user || !db) return
-
-    try {
-      const postRef = doc(db, 'Posts', post.id)
-      const hasLiked = post.likedBy && post.likedBy.includes(user.uid)
-      
-      if (hasLiked) {
-        // Unlike: remove user from likedBy array and decrease count
-        const newLikedBy = post.likedBy.filter(uid => uid !== user.uid)
-        await updateDoc(postRef, {
-          likes: Math.max(0, (post.likes || 0) - 1),
-          likedBy: newLikedBy
-        })
-      } else {
-        // Like: add user to likedBy array and increase count
-        const newLikedBy = [...(post.likedBy || []), user.uid]
-        await updateDoc(postRef, {
-          likes: (post.likes || 0) + 1,
-          likedBy: newLikedBy
-        })
-        
-        // Send notification to post owner
-        if (post.userId && post.userId !== user.uid) {
-          console.log('Sending like notification for post:', post.id, 'to user:', post.userId)
-          console.log('Current user data for notification:', {
-            uid: user.uid,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            displayName: user.displayName,
-            email: user.email
-          })
-          
-          // Get the full user name - try multiple sources
-          let userName = ''
-          if (user.firstName) {
-            userName = `${user.firstName} ${user.lastName || ''}`.trim()
-          } else if (user.displayName) {
-            userName = user.displayName
-          } else if (user.email) {
-            userName = user.email.split('@')[0] // Use email username as fallback
-          } else {
-            userName = 'AgriLink User'
-          }
-          
-          console.log('Using username for notification:', userName)
-          
-          await sendPostLikeNotification(
-            post.id,
-            post.userId,
-            user.uid,
-            userName
-          )
-        } else {
-          console.log('Not sending like notification - same user or missing userId')
-        }
-      }
-    } catch (error) {
-      console.error('Error liking post:', error)
-    }
-  }
+  // handleLikePost moved to PostHandlers.js
 
   // Format time ago (same as mobile app)
-  const formatTimeAgo = (timestamp) => {
-    if (!timestamp) return "Just now"
-    
-    const now = new Date()
-    let postTime
-    
-    if (timestamp.toDate) {
-      postTime = timestamp.toDate()
-    } else if (timestamp instanceof Date) {
-      postTime = timestamp
-    } else {
-      postTime = new Date(timestamp)
-    }
-    
-    if (isNaN(postTime.getTime())) {
-      return "Just now"
-    }
-    
-    const diffInSeconds = Math.floor((now - postTime) / 1000)
-    
-    if (diffInSeconds < 60) return "Just now"
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`
-    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d`
-    return postTime.toLocaleDateString()
-  }
+  // formatTimeAgo moved to PostHandlers.js
 
   // Format listing time for featured listings
   const formatListingTime = (timestamp) => {
@@ -1645,89 +1629,7 @@ export default function Dashboard() {
     document.body.style.overflow = 'unset'
   }
 
-  const handleAddComment = async () => {
-    if (!commentText.trim() || !user || !selectedPost || commentLoading) return
-
-    // Store the comment text before clearing it
-    const currentCommentText = commentText.trim()
-    
-    // Clear the input immediately (social media behavior)
-    setCommentText('')
-    
-    // Set loading state
-    setCommentLoading(true)
-
-    try {
-      const postRef = doc(db, 'Posts', selectedPost.id)
-      const newComment = {
-        id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        text: currentCommentText,
-        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
-        userEmail: user.email,
-        userId: user.uid,
-        createdAt: new Date()
-      }
-
-      // Update selectedPost immediately for optimistic UI
-      setSelectedPost(prev => ({
-        ...prev,
-        comments: [...(prev.comments || []), newComment]
-      }))
-
-      await updateDoc(postRef, {
-        comments: arrayUnion(newComment)
-      })
-
-      // Send notification to post owner
-      if (selectedPost.userId && selectedPost.userId !== user.uid) {
-        console.log('Sending comment notification for post:', selectedPost.id, 'to user:', selectedPost.userId)
-        console.log('Current user data for comment notification:', {
-          uid: user.uid,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          displayName: user.displayName,
-          email: user.email
-        })
-        
-        // Get the full user name - try multiple sources
-        let userName = ''
-        if (user.firstName) {
-          userName = `${user.firstName} ${user.lastName || ''}`.trim()
-        } else if (user.displayName) {
-          userName = user.displayName
-        } else if (user.email) {
-          userName = user.email.split('@')[0] // Use email username as fallback
-        } else {
-          userName = 'AgriLink User'
-        }
-        
-        console.log('Using username for comment notification:', userName)
-        
-        await sendCommentNotification(
-          selectedPost.id,
-          selectedPost.userId,
-          user.uid,
-          userName,
-          currentCommentText
-        )
-      } else {
-        console.log('Not sending comment notification - same user or missing userId')
-      }
-
-    } catch (error) {
-      console.error('Error adding comment:', error)
-      // If there's an error, restore the comment text
-      setCommentText(currentCommentText)
-      // Remove the optimistically added comment
-      setSelectedPost(prev => ({
-        ...prev,
-        comments: prev.comments.filter(comment => comment.text !== currentCommentText || comment.userId !== user.uid)
-      }))
-    } finally {
-      // Clear loading state
-      setCommentLoading(false)
-    }
-  }
+  // handleAddComment moved to PostHandlers.js
   const toggleReplyInput = (targetId) => {
     const isCurrentlyOpen = showReplyInput[targetId]
     
@@ -1770,77 +1672,7 @@ export default function Dashboard() {
       }))
     }
   }
-  const handleAddReply = async (parentCommentId, replyToReplyId = null) => {
-    const targetId = replyToReplyId || parentCommentId
-    const text = replyTextMap[targetId]?.trim()
-    if (!text || !user || !selectedPost) return
-
-    try {
-      const postRef = doc(db, 'Posts', selectedPost.id)
-      
-      // Process the text to format mentions (remove @ and make name bold)
-      let processedText = text
-      // Find @mentions at the beginning or after a space, followed by a space or end of string
-      processedText = processedText.replace(/(^|[\s])@([A-Za-z]+(?:\s+[A-Za-z]+)*)([\s]|$)/g, '$1<strong>$2</strong>$3')
-      
-      const replierName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User'
-      
-      const newReply = {
-        id: `reply-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        text: processedText,
-        userName: replierName,
-        userEmail: user.email,
-        userId: user.uid,
-        createdAt: new Date(),
-        parentId: parentCommentId,
-        replyToReplyId: replyToReplyId // Track if this is a reply to another reply
-      }
-
-      // Find the original comment to get the commenter's userId
-      const parentComment = selectedPost.comments?.find(c => (c.id || c.commentId) === parentCommentId)
-      let notifyUserId = null
-      
-      if (replyToReplyId && parentComment?.replies) {
-        // Replying to a reply - notify the reply author
-        const targetReply = parentComment.replies.find(r => r.id === replyToReplyId)
-        if (targetReply?.userId && targetReply.userId !== user.uid) {
-          notifyUserId = targetReply.userId
-        }
-      } else if (parentComment?.userId && parentComment.userId !== user.uid) {
-        // Replying to a comment - notify the comment author
-        notifyUserId = parentComment.userId
-      }
-
-      const updatedComments = (selectedPost.comments || []).map(c => {
-        const cid = c.id || c.commentId
-        if (cid === parentCommentId) {
-          const replies = c.replies ? [...c.replies, newReply] : [newReply]
-          return { ...c, replies }
-        }
-        return c
-      })
-
-      await updateDoc(postRef, { comments: updatedComments })
-
-      // Send notification to the comment/reply author
-      if (notifyUserId) {
-        console.log('Sending reply notification to:', notifyUserId)
-        await sendCommentReplyNotification(
-          selectedPost.id,
-          notifyUserId,
-          user.uid,
-          replierName,
-          text
-        )
-      }
-
-      setSelectedPost(prev => ({ ...prev, comments: updatedComments }))
-      setReplyTextMap(prev => ({ ...prev, [targetId]: '' }))
-      setShowReplyInput(prev => ({ ...prev, [targetId]: false }))
-    } catch (error) {
-      console.error('Error adding reply:', error)
-    }
-  }
+  // handleAddReply moved to PostHandlers.js
 
   // Migration function to update existing comments with proper structure
   const migrateCommentsStructure = async () => {
@@ -1912,12 +1744,12 @@ export default function Dashboard() {
     setEditLoading(true)
 
     try {
-      // Upload new images to Cloudinary
+      // Upload new images to Firebase Storage
       const newImageUrls = []
       if (editImageFiles.length > 0) {
         console.log('Uploading new images for edit...')
         for (const file of editImageFiles) {
-          const imageUrl = await uploadImageToCloudinary(file)
+          const imageUrl = await uploadImageToFirebaseStorage(file, 'Images/Feed', user.uid)
           newImageUrls.push(imageUrl)
           console.log('New image uploaded successfully:', imageUrl)
         }
@@ -3421,14 +3253,17 @@ export default function Dashboard() {
                       // Check if current user is the listing owner (can always chat)
                       const isListingOwner = userRole === 'livestock_owner'
                       
-                      // Allow chat if: user is livestock owner OR there's an approved request
-                      const canChat = isListingOwner || hasApprovedRequest
+                      // BOTH users must wait for approval - chat is disabled for everyone until approved
+                      const canChat = hasApprovedRequest
                       
                       if (!canChat) {
                         return (
                           <div className={styles.chatRestricted}>
                             <p className={styles.restrictedText}>
-                              💬 Chat will be available after the listing owner approves your request
+                              {isListingOwner 
+                                ? '💬 Chat will be available after you approve the request. Use the Accept/Decline buttons above.'
+                                : '💬 Chat will be available after the listing owner approves your request'
+                              }
                             </p>
                           </div>
                         )
@@ -3913,10 +3748,12 @@ export default function Dashboard() {
                           </h4>
                           {listing.distanceKm != null && (
                             <span className={styles.featuredListingDistance}>
-                              <img src="/assets/icons/location.png" alt="Distance" className={styles.featuredListingDistanceIcon} />
-                              {listing.distanceKm < 1 
-                                ? `${Math.round(listing.distanceKm * 1000)}m` 
-                                : `${listing.distanceKm.toFixed(1)}km`}
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill={listing.distanceKm < 5 ? "#2d5a27" : "#fa9100"} xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '2px', flexShrink: 0 }}>
+                                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                              </svg>
+                              <span style={{ color: listing.distanceKm < 5 ? '#2d5a27' : '#fa9100', fontWeight: listing.distanceKm < 5 ? '600' : 'normal' }}>
+                                {listing.distanceKm < 5 ? 'Nearby' : `${listing.distanceKm.toFixed(1)} km`}
+                              </span>
                             </span>
                           )}
                         </div>

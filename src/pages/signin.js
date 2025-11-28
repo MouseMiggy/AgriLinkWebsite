@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import styles from '../../styles/modules/signin.module.css'
+import { validateEmailOrPhone, formatPhoneForLookup } from '../utils/authValidation'
 
 export default function SignIn() {
   const router = useRouter()
@@ -9,7 +10,7 @@ export default function SignIn() {
   
   // Signin form state
   const [formData, setFormData] = useState({
-    email: '',
+    emailOrPhone: '',
     password: ''
   })
   const [loading, setLoading] = useState(false)
@@ -17,6 +18,7 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [showSignupModal, setShowSignupModal] = useState(false)
+  const [inputType, setInputType] = useState(null)
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const [touchStart, setTouchStart] = useState(null)
   const [touchEnd, setTouchEnd] = useState(null)
@@ -71,10 +73,17 @@ export default function SignIn() {
 
   // Signin form handlers
   const handleChange = (e) => {
+    const { name, value } = e.target
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     })
+    
+    // Validate email/phone input and update type
+    if (name === 'emailOrPhone') {
+      const validation = validateEmailOrPhone(value)
+      setInputType(validation.type)
+    }
   }
 
   const togglePasswordVisibility = () => {
@@ -99,20 +108,265 @@ export default function SignIn() {
     setLoading(true)
     setError('')
 
-    try {
-      // Import Firebase auth functions
-      const { signInWithEmailAndPassword } = await import('firebase/auth')
-      const { auth } = await import('../lib/firebase')
-      
-      // Sign in with Firebase (same as mobile app)
-      const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password)
-      const user = userCredential.user
+    // Validation
+    if (!formData.emailOrPhone.trim() || !formData.password.trim()) {
+      showErrorToast('Please enter email/phone and password.')
+      setLoading(false)
+      return
+    }
 
+    // Validate email or phone format
+    const validation = validateEmailOrPhone(formData.emailOrPhone)
+    if (!validation.isValid) {
+      showErrorToast(validation.error)
+      setLoading(false)
+      return
+    }
+
+    try {
+      console.log('🚀 Starting secure login process for:', formData.emailOrPhone)
+      
+      // Step 1: Validate password against stored hash (same as mobile app)
+      let response;
+      try {
+        response = await fetch('https://api-tykddqtfpa-uc.a.run.app/validate-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            emailOrPhone: formData.emailOrPhone,
+            password: formData.password
+          }),
+        });
+      } catch (fetchError) {
+        console.error('❌ Network error during password validation:', fetchError);
+        setLoading(false);
+        showErrorToast('Unable to connect to the server. Please check your internet connection and try again.');
+        return;
+      }
+
+      if (!response.ok) {
+        console.log('⚠️ Password validation response not OK:', response.status);
+        setLoading(false);
+        
+        // Handle different HTTP status codes appropriately
+        let errorMessage = 'An error occurred during login. Please try again.';
+        
+        if (response.status === 401) {
+          errorMessage = 'Invalid credentials. Please check your email/phone and password.';
+        } else if (response.status === 404) {
+          errorMessage = 'No account found with this email or phone number. Please check your credentials or register a new account.';
+        } else if (response.status >= 500) {
+          errorMessage = 'The server is temporarily unavailable. Please try again in a few moments.';
+        } else if (response.status === 429) {
+          errorMessage = 'Too many login attempts. Please wait a few minutes before trying again.';
+        } else {
+          errorMessage = 'Unable to complete login. Please try again.';
+        }
+        
+        showErrorToast(errorMessage);
+        return;
+      }
+
+      // Parse JSON response - only if response is OK
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        console.log('⚠️ Failed to parse JSON response:', jsonError);
+        setLoading(false);
+        showErrorToast('Invalid response from server. Please try again.');
+        return;
+      }
+
+      if (!result.success) {
+        console.log('❌ Password validation failed:', result.error);
+        setLoading(false);
+        showErrorToast('Invalid credentials. Please check your email/phone and password.');
+        return;
+      }
+
+      console.log('✅ Password validation successful for user:', result.user.uid);
+      
+      // Step 2: Sign in with Firebase Auth using the validated user's email
+      let userCredential;
+      const userData = result.user;
+      
+      // Determine Firebase Auth email based on registration method
+      let firebaseEmail;
+      if (userData.registrationMethod === 'email' && userData.email && !userData.email.includes('@temp.agrilink.com')) {
+        firebaseEmail = userData.email;
+      } else if (userData.registrationMethod === 'phone') {
+        // For phone users, use the stored Firebase Auth email
+        firebaseEmail = userData.firebaseEmail || userData.email;
+      } else {
+        firebaseEmail = userData.firebaseEmail || userData.email || `${userData.uid}@temp.agrilink.com`;
+      }
+
+      console.log('🔐 Attempting Firebase Auth with email:', firebaseEmail);
+      
+      try {
+        // Import Firebase auth functions
+        const { signInWithEmailAndPassword } = await import('firebase/auth')
+        const { auth } = await import('../lib/firebase')
+        
+        userCredential = await signInWithEmailAndPassword(auth, firebaseEmail, formData.password);
+        console.log('✅ Firebase Auth successful');
+      } catch (authError) {
+        console.log('❌ Firebase Auth failed:', authError.code);
+        
+        // If Firebase Auth fails but password validation succeeded, 
+        // create Firebase Auth account and use custom token for authentication
+        try {
+          console.log('🔧 Creating Firebase Auth account for user...');
+          const createResponse = await fetch('https://api-tykddqtfpa-uc.a.run.app/create-firebase-auth', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              uid: userData.uid,
+              email: firebaseEmail,
+              password: formData.password,
+              displayName: userData.displayName
+            }),
+          });
+          
+          const createResult = await createResponse.json();
+          
+          if (createResult.success) {
+            console.log('✅ Firebase Auth account created, attempting custom token authentication...');
+            
+            // Try custom token authentication first
+            try {
+              const tokenResponse = await fetch('https://api-tykddqtfpa-uc.a.run.app/create-custom-token', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  uid: userData.uid
+                }),
+              });
+              
+              const tokenResult = await tokenResponse.json();
+              
+              if (tokenResult.success && tokenResult.customToken) {
+                // Import Firebase auth functions
+                const { signInWithCustomToken } = await import('firebase/auth')
+                const { auth } = await import('../lib/firebase')
+                
+                // Sign in with custom token
+                userCredential = await signInWithCustomToken(auth, tokenResult.customToken);
+                console.log('✅ Login successful with custom token');
+              } else {
+                console.log('⚠️ Custom token failed, trying direct Firebase Auth...');
+                throw new Error(`Custom token generation failed: ${tokenResult.error}`);
+              }
+            } catch (tokenError) {
+              console.log('⚠️ Custom token authentication failed, attempting direct Firebase Auth...');
+              console.log('Token error details:', tokenError.message);
+              
+              // Fallback: Try direct Firebase Auth with a temporary password
+              try {
+                // Generate a temporary password for this session
+                const tempPassword = `temp_${userData.uid}_${Date.now()}`;
+                
+                // Update Firebase Auth user with temporary password
+                const updateResponse = await fetch('https://api-tykddqtfpa-uc.a.run.app/update-firebase-password', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    uid: userData.uid,
+                    tempPassword: tempPassword
+                  }),
+                });
+                
+                const updateResult = await updateResponse.json();
+                
+                if (updateResult.success) {
+                  // Import Firebase auth functions
+                  const { signInWithEmailAndPassword } = await import('firebase/auth')
+                  const { auth } = await import('../lib/firebase')
+                  
+                  // Try to sign in with temporary password
+                  userCredential = await signInWithEmailAndPassword(auth, firebaseEmail, tempPassword);
+                  console.log('✅ Login successful with temporary password fallback');
+                } else {
+                  throw new Error('Failed to update Firebase Auth password');
+                }
+              } catch (fallbackError) {
+                console.error('❌ All authentication methods failed:', fallbackError);
+                throw new Error('Unable to complete login. Please try again or contact support if the problem persists.');
+              }
+            }
+          } else {
+            throw new Error(`Failed to create Firebase Auth account: ${createResult.error}`);
+          }
+        } catch (createError) {
+          console.error('❌ Authentication process failed:', createError);
+          console.log('🔄 Attempting offline authentication fallback...');
+          
+          // Fallback: Try direct Firebase Auth with email/password for existing users
+          try {
+            console.log('🔧 Attempting direct Firebase Auth as fallback...');
+            const { signInWithEmailAndPassword } = await import('firebase/auth')
+            const { auth } = await import('../lib/firebase')
+            
+            userCredential = await signInWithEmailAndPassword(auth, firebaseEmail, formData.password);
+            console.log('✅ Fallback Firebase Auth successful');
+          } catch (fallbackAuthError) {
+            console.log('❌ Fallback Firebase Auth also failed:', fallbackAuthError.code);
+            
+            // Final fallback: Create Firebase Auth account directly (for new users)
+            try {
+              console.log('🔧 Creating Firebase Auth account directly as final fallback...');
+              const { createUserWithEmailAndPassword, updateProfile } = await import('firebase/auth')
+              const { auth } = await import('../lib/firebase')
+              
+              userCredential = await createUserWithEmailAndPassword(auth, firebaseEmail, formData.password);
+              console.log('✅ Direct Firebase Auth account creation successful');
+              
+              // Update the user's display name
+              if (userData.displayName) {
+                await updateProfile(userCredential.user, {
+                  displayName: userData.displayName
+                });
+              }
+            } catch (finalError) {
+              console.error('❌ All authentication methods failed:', finalError);
+              
+              // Provide user-friendly error message
+              let errorMessage = 'Authentication error. Please try again.';
+              if (createError.message.includes('Custom token')) {
+                errorMessage = 'Authentication service is temporarily unavailable. Please try again in a few moments.';
+              } else if (createError.message.includes('Firebase Auth')) {
+                errorMessage = 'Account setup failed. Please contact support if this persists.';
+              } else if (finalError.code === 'auth/network-request-failed') {
+                errorMessage = 'Network connection error. Please check your internet connection and try again.';
+              } else if (finalError.code === 'auth/email-already-in-use') {
+                errorMessage = 'This email is already registered. Please try logging in instead.';
+              }
+              
+              setLoading(false);
+              showErrorToast(errorMessage);
+              return;
+            }
+          }
+        }
+      }
+
+      // Step 3: Store user data and complete login
+      console.log('✅ Login successful! User authenticated:', userData.uid);
+      
       // Check user onboarding status and redirect appropriately
       const { doc, getDoc } = await import('firebase/firestore')
       const { db } = await import('../lib/firebase')
       
-      const userDocRef = doc(db, 'Users', user.uid)
+      const userDocRef = doc(db, 'Users', userData.uid)
       const userDoc = await getDoc(userDocRef)
       
       if (userDoc.exists()) {
@@ -150,18 +404,23 @@ export default function SignIn() {
       // Redirect to dashboard after successful signin
       router.push('/dashboard')
     } catch (err) {
-      console.error('Sign in error:', err)
-      if (err.code === 'auth/user-not-found') {
-        showErrorToast('No account found with this email address')
-      } else if (err.code === 'auth/wrong-password') {
-        showErrorToast('Invalid password')
-      } else if (err.code === 'auth/invalid-email') {
-        showErrorToast('Invalid email address')
-      } else if (err.code === 'auth/user-disabled') {
-        showErrorToast('This account has been disabled')
-      } else {
-        showErrorToast('Invalid email or password')
+      console.error('❌ Login error:', err)
+      setLoading(false)
+      
+      // Provide user-friendly error messages based on error type
+      let errorMessage = 'An error occurred during login. Please try again.'
+      
+      if (err.message && err.message.includes('Network request failed')) {
+        errorMessage = 'Network connection failed. Please check your internet connection and try again.'
+      } else if (err.message && err.message.includes('fetch')) {
+        errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.'
+      } else if (err.code === 'auth/network-request-failed') {
+        errorMessage = 'Network connection error. Please check your internet connection and try again.'
+      } else if (err.message) {
+        errorMessage = err.message
       }
+      
+      showErrorToast(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -466,19 +725,26 @@ export default function SignIn() {
 
             <form className={styles.form} onSubmit={handleSubmit}>
               <div className={styles.inputGroup}>
-                <label htmlFor="email" className={styles.label}>
-                  Email Address
+                <label htmlFor="emailOrPhone" className={styles.label}>
+                  Email or Phone Number
                 </label>
                 <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
+                  type="text"
+                  id="emailOrPhone"
+                  name="emailOrPhone"
+                  value={formData.emailOrPhone}
                   onChange={handleChange}
                   className={styles.input}
-                  placeholder="Enter your email address"
+                  placeholder={inputType ? 
+                    (inputType === 'email' ? 'Enter your email address' : 'Enter your phone number (09 format)') : 
+                    'Enter your email or phone number'}
                   required
                 />
+                {inputType && (
+                  <small className={styles.inputHint}>
+                    Detected: {inputType === 'email' ? 'email address' : 'phone number'}
+                  </small>
+                )}
               </div>
 
               <div className={styles.inputGroup}>

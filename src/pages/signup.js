@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import styles from '../../styles/modules/signup.module.css'
+import { validateEmailOrPhone, formatPhoneForFirebase, getInputTypeText } from '../utils/authValidation'
 
 export default function SignUp() {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    email: '',
+    emailOrPhone: '',
     password: '',
     confirmPassword: ''
   })
@@ -19,6 +20,7 @@ export default function SignUp() {
   const [showToast, setShowToast] = useState(false)
   const [isEmailExistsError, setIsEmailExistsError] = useState(false)
   const [showModal, setShowModal] = useState(false)
+  const [inputType, setInputType] = useState(null)
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const [touchStart, setTouchStart] = useState(null)
   const [touchEnd, setTouchEnd] = useState(null)
@@ -58,10 +60,17 @@ export default function SignUp() {
   }
 
   const handleChange = (e) => {
+    const { name, value } = e.target
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     })
+    
+    // Validate email/phone input and update type
+    if (name === 'emailOrPhone') {
+      const validation = validateEmailOrPhone(value)
+      setInputType(validation.type)
+    }
   }
 
   const togglePasswordVisibility = () => {
@@ -155,8 +164,16 @@ export default function SignUp() {
     setError('')
 
     // Validation
-    if (!formData.firstName.trim() || !formData.lastName.trim() || !formData.email.trim() || !formData.password.trim() || !formData.confirmPassword.trim()) {
+    if (!formData.firstName.trim() || !formData.lastName.trim() || !formData.emailOrPhone.trim() || !formData.password.trim() || !formData.confirmPassword.trim()) {
       showErrorToast('Please fill all fields')
+      setLoading(false)
+      return
+    }
+
+    // Validate email or phone format
+    const validation = validateEmailOrPhone(formData.emailOrPhone)
+    if (!validation.isValid) {
+      showErrorToast(validation.error)
       setLoading(false)
       return
     }
@@ -180,52 +197,99 @@ export default function SignUp() {
     }
 
     try {
-      // Send registration data to backend (same as mobile app)
-      console.log('Attempting to register user:', formData.email)
+      console.log('Attempting to register user:', formData.emailOrPhone, 'Type:', validation.type)
       
-      const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/send-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          email: formData.email,
-          password: formData.password,
-        }),
-      })
+      if (validation.type === 'email') {
+        // Email registration - use existing flow
+        const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/send-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.emailOrPhone,
+            password: formData.password,
+          }),
+        })
 
-      if (!response.ok) {
-        throw new Error(`Server responded with status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log('Server response:', data)
-
-      if (!data.success) {
-        const errorMessage = data.error || 'Failed to send verification code'
-        // Check if it's specifically an email already exists error
-        if (errorMessage.toLowerCase().includes('already') || 
-            errorMessage.toLowerCase().includes('exists') || 
-            errorMessage.toLowerCase().includes('taken') ||
-            errorMessage.toLowerCase().includes('duplicate') ||
-            errorMessage.toLowerCase().includes('registered') ||
-            errorMessage.toLowerCase().includes('in use') ||
-            errorMessage.toLowerCase().includes('conflict') ||
-            errorMessage.toLowerCase().includes('email address is already in use') ||
-            errorMessage.toLowerCase().includes('email-already-in-use') ||
-            errorMessage.toLowerCase().includes('auth/email-already-in-use')) {
-          showEmailExistsModal()
-        } else {
-          showErrorToast(errorMessage)
+        if (!response.ok) {
+          throw new Error(`Server responded with status: ${response.status}`)
         }
-        return
-      }
 
-      // Navigate to code verification page
-      router.push({
-        pathname: '/verify-code',
-        query: { email: formData.email }
-      })
+        const data = await response.json()
+        console.log('Server response:', data)
+
+        if (!data.success) {
+          const errorMessage = data.error || 'Failed to send verification code'
+          // Check if it's specifically an email already exists error
+          if (errorMessage.toLowerCase().includes('already') || 
+              errorMessage.toLowerCase().includes('exists') || 
+              errorMessage.toLowerCase().includes('taken') ||
+              errorMessage.toLowerCase().includes('duplicate') ||
+              errorMessage.toLowerCase().includes('registered') ||
+              errorMessage.toLowerCase().includes('in use') ||
+              errorMessage.toLowerCase().includes('conflict') ||
+              errorMessage.toLowerCase().includes('email address is already in use') ||
+              errorMessage.toLowerCase().includes('email-already-in-use') ||
+              errorMessage.toLowerCase().includes('auth/email-already-in-use')) {
+            showEmailExistsModal()
+          } else {
+            showErrorToast(errorMessage)
+          }
+          return
+        }
+
+        // Navigate to code verification page
+        router.push({
+          pathname: '/verify-code',
+          query: { email: formData.emailOrPhone }
+        })
+      } else {
+        // Phone registration - auto-send SMS and navigate to verification
+        console.log('Starting phone registration with auto-SMS for:', formData.emailOrPhone)
+        
+        // Auto-send SMS verification code
+        try {
+          const smsResponse = await fetch('https://api-tykddqtfpa-uc.a.run.app/send-sms-code', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              firstName: formData.firstName,
+              lastName: formData.lastName,
+              phoneNumber: formData.emailOrPhone,
+              password: formData.password
+            }),
+          })
+
+          const smsResult = await smsResponse.json()
+          
+          if (smsResult.success) {
+            console.log('✅ SMS sent successfully, navigating to verification')
+            setLoading(false)
+            
+            // Navigate to phone verification page
+            router.push({
+              pathname: '/phone-number-verification',
+              query: { 
+                phoneNumber: formData.emailOrPhone,
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                password: formData.password,
+                autoSent: 'true'
+              },
+            })
+          } else {
+            throw new Error(smsResult.error || 'Failed to send SMS verification code')
+          }
+        } catch (smsError) {
+          console.error('❌ SMS sending failed:', smsError)
+          setLoading(false)
+          showErrorToast('Failed to send verification code. Please try again.')
+          return
+        }
+      }
     } catch (err) {
       console.error('Registration error:', err)
       const errorMessage = err.message || err.toString()
@@ -385,19 +449,26 @@ export default function SignUp() {
               </div>
 
               <div className={styles.inputGroup}>
-                <label htmlFor="email" className={styles.label}>
-                  Email Address
+                <label htmlFor="emailOrPhone" className={styles.label}>
+                  Email or Phone Number
                 </label>
                 <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
+                  type="text"
+                  id="emailOrPhone"
+                  name="emailOrPhone"
+                  value={formData.emailOrPhone}
                   onChange={handleChange}
                   className={styles.input}
-                  placeholder="Enter your email address"
+                  placeholder={inputType ? 
+                    (inputType === 'email' ? 'Enter your email address' : 'Enter your phone number (09 format)') : 
+                    'Enter your email or phone number'}
                   required
                 />
+                {inputType && (
+                  <small className={styles.inputHint}>
+                    Detected: {getInputTypeText(inputType)}
+                  </small>
+                )}
               </div>
 
               <div className={styles.inputGroup}>

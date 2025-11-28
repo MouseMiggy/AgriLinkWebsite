@@ -17,7 +17,7 @@ import {
   writeBatch
 } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
-import { uploadImageToCloudinary } from '../../lib/cloudinary'
+import { uploadImageToFirebaseStorage } from '../../lib/firebaseStorage'
 import styles from '../../../styles/modules/chatroom.module.css'
 
 export default function ChatRoom() {
@@ -308,7 +308,7 @@ export default function ChatRoom() {
       
       // Upload image if selected
       if (selectedImage) {
-        imageUrl = await uploadImageToCloudinary(selectedImage)
+        imageUrl = await uploadImageToFirebaseStorage(selectedImage, 'Images/Feed', user.uid)
       }
       // Check if current user is livestock owner and if there are pending requests
       const userDoc = await getDoc(doc(db, 'Users', user.uid))

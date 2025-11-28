@@ -2,50 +2,76 @@
   max-width: 100%;
   width: 100%;
   margin: 0;
-  padding: 20px;
-  background-color: #f8f9fa;
+  padding: 0;
+  padding-top: 90px;
+  padding-bottom: 120px;
+  padding-left: 280px; /* Add space for left container */
+  background-color: #f0f0f0;
   min-height: calc(100vh - 60px);
   position: relative;
+  font-family: 'Poppins', sans-serif;
 }
 
 .header {
-  text-align: center;
-  margin-bottom: 30px;
-  padding: 20px;
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 20px 20px;
+  border-bottom: 1px solid #e4e6ea;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-left: 260px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding-left: 40px;
+}
+
+.headerContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.headerLeft {
+  display: flex;
+  flex-direction: column;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  margin-right: 80px;
 }
 
 .title {
   font-size: 28px;
   font-weight: 700;
   color: #1c1e21;
-  margin: 0 0 8px 0;
+  margin: 0;
+  font-family: 'Poppins', sans-serif;
 }
 
-.subtitle {
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 60px 20px;
   font-size: 16px;
   color: #65676b;
-  margin: 0;
-}
-
-.loadingContainer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  gap: 16px;
+  font-family: 'Poppins', sans-serif;
 }
 
 .loadingSpinner {
-  width: 50px;
-  height: 50px;
-  border: 5px solid #e0e0e0;
-  border-top: 5px solid #fa9100;
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e0e0e0;
+  border-top: 4px solid #fa9100;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
@@ -53,185 +79,246 @@
   100% { transform: rotate(360deg); }
 }
 
-.loadingText {
-  font-size: 16px;
-  font-weight: 500;
-  color: #65676b;
-  margin: 0;
-}
-
-.error {
-  text-align: center;
-  padding: 40px;
-  font-size: 18px;
-  color: #dc3545;
-}
-
 .emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  margin: 20px;
+  margin-left: 300px;
   text-align: center;
-  padding: 60px 20px;
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  margin: 0;
 }
 
 .emptyIcon {
   width: 64px;
   height: 64px;
-  opacity: 0.5;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+  opacity: 0.6;
 }
 
 .emptyTitle {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   color: #1c1e21;
-  margin: 0 0 12px 0;
+  margin: 0 0 8px 0;
+  font-family: 'Poppins', sans-serif;
 }
 
 .emptyText {
   font-size: 16px;
   color: #65676b;
   margin: 0;
-  max-width: 400px;
-  margin-left: auto;
-  margin-right: auto;
-  line-height: 1.5;
+  font-family: 'Poppins', sans-serif;
+}
+
+.tableContainer {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  margin: 20px;
+}
+
+.tableHeader {
+  display: flex;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e4e6ea;
+  padding: 16px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  font-weight: 600;
+  color: #1c1e21;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+}
+
+.headerListingName,
+.headerDetails,
+.headerPrice,
+.headerQuantity,
+.headerStatus,
+.headerDateAdded,
+.headerDateSold {
+  flex: 1;
+  min-width: 0;
+  padding-right: 16px;
+  text-align: center;
 }
 
 .listingsList {
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
 
 .listingCard {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e4e6ea;
-  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e4e6ea;
+  transition: background-color 0.2s;
+  font-size: 14px;
+  font-family: 'Poppins', sans-serif;
 }
 
 .listingCard:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  background-color: #f8f9fa;
 }
 
-.listingHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
+.listingCard.lastItem {
+  margin-bottom: 0px;
 }
 
-.listingInfo {
+.listingName,
+.details,
+.price,
+.quantity,
+.status,
+.dateAdded,
+.dateSold {
   flex: 1;
+  min-width: 0;
+  padding-right: 16px;
+  text-align: center;
 }
 
 .listingName {
-  font-size: 20px;
   font-weight: 600;
   color: #1c1e21;
-  margin: 0 0 4px 0;
+  text-align: left;
 }
 
-.listingPrice {
-  font-size: 18px;
+.details {
+  color: #65676b;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.price {
+  color: #000000;
   font-weight: 600;
-  color: #fa9100;
-  margin: 0;
+}
+
+.quantity {
+  color: #1c1e21;
+}
+
+.dateAdded,
+.dateSold {
+  color: #65676b;
+  font-size: 13px;
 }
 
 .statusBadge {
-  padding: 6px 12px;
-  border-radius: 20px;
-  color: white;
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  text-align: center;
+  min-width: 60px;
 }
 
-.activeBadge {
-  background-color: #28a745;
+.statusSold {
+  background-color: #d4edda;
+  color: #155724;
 }
 
-.soldBadge {
-  background-color: #17a2b8;
+.statusDeleted {
+  background-color: #f8d7da;
+  color: #721c24;
 }
 
-.deletedBadge {
-  background-color: #dc3545;
+/* Responsive design */
+@media (max-width: 1200px) {
+  .tableContainer {
+    max-height: calc(100vh - 150px);
+  }
+  
+  .headerListingName,
+  .listingName {
+    flex: 1.2;
+    min-width: 120px;
+  }
+  
+  .headerDetails,
+  .details {
+    flex: 1.5;
+    min-width: 150px;
+  }
 }
 
-.listingDetails {
-  margin-bottom: 16px;
-  padding: 16px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-}
-
-.detailItem {
-  display: flex;
-  margin-bottom: 8px;
-}
-
-.detailItem:last-child {
-  margin-bottom: 0;
-}
-
-.detailLabel {
-  font-weight: 600;
-  color: #1c1e21;
-  min-width: 120px;
-  margin-right: 12px;
-}
-
-.detailValue {
-  color: #65676b;
-  flex: 1;
-}
-
-.listingFooter {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 16px;
-  border-top: 1px solid #e4e6ea;
-}
-
-.listingDate {
-  font-size: 14px;
-  color: #65676b;
-}
-
-.listingViews {
-  font-size: 14px;
-  color: #65676b;
-  font-weight: 500;
-}
-
-/* Responsive Design */
 @media (max-width: 768px) {
   .container {
-    padding: 16px;
+    padding: 0;
+    padding-top: 90px;
+    padding-bottom: 120px;
+    padding-left: 10px; /* Reset padding for mobile */
   }
   
-  .listingHeader {
-    flex-direction: column;
-    gap: 12px;
+  .header {
+    margin-left: 0;
+    padding-left: 20px;
   }
   
-  .statusBadge {
-    align-self: flex-start;
+  .headerRight {
+    margin-right: 20px;
   }
   
-  .listingFooter {
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
+  .tableContainer {
+    margin: 20px;
+    margin-left: 20px;
+    max-height: calc(100vh - 160px);
+  }
+  
+  .emptyState {
+    margin: 20px;
+    margin-left: 20px;
+  }
+  
+  .title {
+    font-size: 24px;
+  }
+  
+  .tableHeader {
+    padding: 12px 15px;
+    font-size: 12px;
+  }
+  
+  .listingCard {
+    padding: 12px 15px;
+    font-size: 12px;
+  }
+  
+  .headerPrice,
+  .price {
+    width: 80px;
+    min-width: 70px;
+  }
+  
+  .headerQuantity,
+  .quantity {
+    width: 70px;
+    min-width: 60px;
+  }
+  
+  .headerStatus,
+  .status {
+    width: 60px;
+    min-width: 60px;
+  }
+  
+  .headerDateAdded,
+  .dateAdded,
+  .headerDateSold,
+  .dateSold {
+    width: 100px;
+    min-width: 90px;
+    font-size: 11px;
   }
 }

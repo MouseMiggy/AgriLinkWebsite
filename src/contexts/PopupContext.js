@@ -60,6 +60,7 @@ export const PopupProvider = ({ children }) => {
         message,
         type: 'confirm',
         danger: options.danger || false,
+        confirmText: options.confirmText || (options.danger ? 'Logout' : 'Confirm'),
         onConfirm: () => {
           setShowPopup(false)
           resolve(true)
@@ -110,7 +111,7 @@ export const PopupProvider = ({ children }) => {
                     className={`popup-button-confirm ${popupConfig.danger ? 'popup-button-danger' : ''}`}
                     onClick={popupConfig.onConfirm}
                   >
-                    {popupConfig.danger ? 'Logout' : 'Confirm'}
+                    {popupConfig.confirmText}
                   </button>
                 </>
               ) : (

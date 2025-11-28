@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { db, auth } from '../lib/firebase'
 import { collection, onSnapshot, query, where, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { getRecommendedListings } from '../utils/recommendationAlgorithm'
 import { onAuthStateChanged } from 'firebase/auth'
 import { usePopup } from '../contexts/PopupContext'
+import ReportModal from '../components/ReportModal'
+import { uploadImageToFirebaseStorage } from '../lib/firebaseStorage'
 import styles from '../../styles/modules/listings.module.css'
 
 export default function Listings({ initialSelectedListing = null, onClearSelectedListing = null }) {
@@ -36,10 +39,23 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     measurementUnit: 'kg',
     price: '',
     isFree: false,
-    image: null
+    image: null,
+    imagePreview: null
   })
   const [isCreatingListing, setIsCreatingListing] = useState(false)
   const [isRequestingListing, setIsRequestingListing] = useState(false)
+  const [isDeletingListing, setIsDeletingListing] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportedListing, setReportedListing] = useState(null)
+  const [showImageModal, setShowImageModal] = useState(false)
+  const [selectedImage, setSelectedImage] = useState(null)
+  const [selectedImageAlt, setSelectedImageAlt] = useState('')
+  
+  // AI Validation states
+  const [isImageValidating, setIsImageValidating] = useState(false)
+  const [imageValidationResult, setImageValidationResult] = useState(null)
+  const [isImageVerified, setIsImageVerified] = useState(false)
+  const [validatedImageUrl, setValidatedImageUrl] = useState(null)
 
   const measurementUnits = ['kg', 'ton', 'sack', 'bag', 'liter', 'cubic meter', 'pieces', 'bundle']
 
@@ -58,6 +74,37 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     if (title.length <= maxLength) return title
     return title.substring(0, maxLength) + '...'
   }
+
+  // Image modal functions
+  const openImageModal = (imageUrl, imageAlt) => {
+    setSelectedImage(imageUrl)
+    setSelectedImageAlt(imageAlt)
+    setShowImageModal(true)
+    document.body.style.overflow = 'hidden'
+  }
+
+  const closeImageModal = () => {
+    setShowImageModal(false)
+    setSelectedImage(null)
+    setSelectedImageAlt('')
+    document.body.style.overflow = 'auto'
+  }
+
+  // Handle ESC key for image modal
+  useEffect(() => {
+    const handleEscapeKey = (e) => {
+      if (e.key === 'Escape' && showImageModal) {
+        closeImageModal()
+      }
+    }
+
+    if (showImageModal) {
+      document.addEventListener('keydown', handleEscapeKey)
+      return () => {
+        document.removeEventListener('keydown', handleEscapeKey)
+      }
+    }
+  }, [showImageModal])
 
   // Function to get button text and state based on request status
   const getButtonState = (listingId) => {
@@ -82,6 +129,108 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   }
 
   // Modal functions
+  // AI Validation function
+  const validateImageWithAI = async (imageFile, listingName, listingDetails, existingImageUrl = null) => {
+    if (!imageFile) return null
+    
+    setIsImageValidating(true)
+    setImageValidationResult(null)
+    
+    try {
+      // Use existing image URL if provided (for re-validation), otherwise upload
+      let imageUrl = existingImageUrl
+      if (!imageUrl) {
+        console.log('📤 Uploading image for AI validation...')
+        imageUrl = await uploadImageToFirebaseStorage(imageFile, 'Images/Listing-Validation', user.uid)
+      }
+      
+      // Call AI validation backend
+      console.log('🤖 Calling AI validation service...')
+      const aiValidationUrl = process.env.NEXT_PUBLIC_AI_VALIDATION_URL || 'http://localhost:5000/validate-listing-image'
+      
+      // Create AbortController for timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+      
+      const response = await fetch(aiValidationUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageUrl: imageUrl,
+          listingName: listingName || '',
+          listingDetails: listingDetails || ''
+        }),
+        signal: controller.signal
+      })
+      
+      clearTimeout(timeoutId)
+      
+      if (!response.ok) {
+        throw new Error(`AI validation failed: ${response.status}`)
+      }
+      
+      const result = await response.json()
+      console.log('✅ AI validation result:', result)
+      
+      if (result.status === 'success') {
+        setImageValidationResult(result.result)
+        const isVerified = result.result.verdict === 'VERIFIED_LEGITIMATE'
+        setIsImageVerified(isVerified)
+        setValidatedImageUrl(imageUrl)
+        
+        // Show appropriate popup message only for non-legitimate cases
+        if (!isVerified) {
+          if (result.result.verdict === 'VERIFIED_NOT_LEGITIMATE') {
+            // Removed popup - user doesn't want any AI verification popups
+          } else {
+            // Removed popup - user doesn't want any AI verification popups
+          }
+        }
+        
+        return { ...result.result, validatedImageUrl: imageUrl }
+      } else {
+        throw new Error(result.error || 'AI validation service error')
+      }
+    } catch (error) {
+      console.error('❌ AI validation error:', error)
+      showErrorPopup('Validation Error', `Failed to validate image: ${error.message}. You can still create your listing without AI verification.`)
+      return null
+    } finally {
+      setIsImageValidating(false)
+    }
+  }
+
+  // Re-validate image function
+  const revalidateImage = async () => {
+    if (formData.image && formData.name && formData.details) {
+      await validateImageWithAI(formData.image, formData.name, formData.details, validatedImageUrl)
+    }
+  }
+
+  // Check if all steps are completed
+  const areAllStepsCompleted = () => {
+    const step1Complete = formData.name.trim() && formData.details.trim()
+    const step2Complete = formData.measurements && formData.measurementUnit
+    const step3Complete = formData.isFree || (formData.price && parseFloat(formData.price) > 0)
+    const step4Complete = formData.image !== null
+    
+    return step1Complete && step2Complete && step3Complete && step4Complete
+  }
+
+  // Check if current step is valid for Next button
+  const isCurrentStepValid = () => {
+    if (modalStep === 1) {
+      return formData.name.trim() && formData.details.trim()
+    } else if (modalStep === 2) {
+      return formData.measurements && formData.measurementUnit
+    } else if (modalStep === 3) {
+      return formData.isFree || (formData.price && parseFloat(formData.price) > 0)
+    }
+    return true // Step 4 doesn't need Next button
+  }
+
   const openAddModal = () => {
     console.log('📝 Opening add listing modal for user:', { 
       uid: user?.uid, 
@@ -95,7 +244,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       measurementUnit: 'kg',
       price: '',
       isFree: false,
-      image: null
+      image: null,
+      imagePreview: null
     })
     setShowAddModal(true)
   }
@@ -104,6 +254,10 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     setShowAddModal(false)
     setEditingListing(null)
     setModalStep(1)
+    setIsImageValidating(false)
+    setImageValidationResult(null)
+    setIsImageVerified(false)
+    setValidatedImageUrl(null)
     setFormData({
       name: '',
       details: '',
@@ -111,7 +265,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       measurementUnit: 'kg',
       price: '',
       isFree: false,
-      image: null
+      image: null,
+      imagePreview: null
     })
   }
 
@@ -148,7 +303,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       measurementUnit: listing.measurementUnit || 'kg',
       price: listing.isFree ? '' : (listing.price === 'Free' ? '' : listing.price || ''),
       isFree: listing.isFree || listing.price === 'Free',
-      image: listing.image || null
+      image: listing.image || null,
+      imagePreview: listing.image || null
     })
     setEditingListing(listing)
     setShowAddModal(true)
@@ -157,10 +313,13 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   const deleteListing = async (listing) => {
     const confirmed = await showConfirmPopup(
       'Delete Listing',
-      'Are you sure you want to delete this listing? This action cannot be undone.'
+      'Are you sure you want to delete this listing? This action cannot be undone.',
+      null,
+      { danger: true, confirmText: 'Delete' }
     )
     
     if (confirmed) {
+      setIsDeletingListing(true)
       try {
         // Update listing status to 'deleted' instead of deleting
         await updateDoc(doc(db, 'livestock_listings', listing.id), {
@@ -171,6 +330,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       } catch (error) {
         console.error('Error deleting listing:', error)
         showErrorPopup('Error', 'Failed to delete listing')
+      } finally {
+        setIsDeletingListing(false)
       }
     }
   }
@@ -211,6 +372,31 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     }
     // Restore background scrolling
     document.body.style.overflow = 'unset'
+  }
+
+  // Handle report listing
+  const handleReportListing = (listing) => {
+    if (!user) {
+      showErrorPopup('Authentication Required', 'Please sign in to report a listing.')
+      return
+    }
+    // Debug: Log the listing object to see what fields are available
+    console.log('🔍 Reporting listing:', {
+      id: listing?.id,
+      name: listing?.name,
+      image: listing?.image,
+      images: listing?.images,
+      imageUrl: listing?.imageUrl,
+      imageUrls: listing?.imageUrls,
+      fullListing: listing
+    })
+    setReportedListing(listing)
+    setShowReportModal(true)
+  }
+
+  const closeReportModal = () => {
+    setShowReportModal(false)
+    setReportedListing(null)
   }
 
   // Load recent searches from localStorage
@@ -256,59 +442,84 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     console.log('👤 User data:', { uid: user?.uid, email: user?.email, role: userRole })
     console.log('🔥 Database initialized:', !!db)
 
-    // Show loading state
-    setIsCreatingListing(true)
-
-    // Validate all required fields
+    // Validate all required fields first
     if (!formData.name.trim()) {
-      setIsCreatingListing(false)
       showErrorPopup('Validation Error', 'Please enter a listing title')
       return
     }
 
     if (!formData.details.trim()) {
-      setIsCreatingListing(false)
       showErrorPopup('Validation Error', 'Please enter a description')
       return
     }
 
     if (!formData.measurements || formData.measurements <= 0) {
-      setIsCreatingListing(false)
       showErrorPopup('Validation Error', 'Please enter a valid quantity')
       return
     }
 
     if (!formData.measurementUnit) {
-      setIsCreatingListing(false)
       showErrorPopup('Validation Error', 'Please select unit of measurement')
       return
     }
 
     if (!formData.isFree && (!formData.price || formData.price <= 0)) {
-      setIsCreatingListing(false)
       showErrorPopup('Validation Error', 'Please enter a valid price or mark as free')
       return
     }
 
     if (!formData.image) {
-      setIsCreatingListing(false)
       showErrorPopup('Validation Error', 'Please add an image')
       return
     }
 
     if (!user) {
-      setIsCreatingListing(false)
       showErrorPopup('Authentication Error', 'User not authenticated. Please sign in again.')
       return
     }
 
     if (!db) {
-      setIsCreatingListing(false)
       showErrorPopup('Database Error', 'Database not initialized. Please refresh the page.')
       return
     }
 
+    // Show loading state and close modal for new listings
+    const isUpdating = !!editingListing
+    setIsCreatingListing(true)
+    
+    if (!isUpdating) {
+      // Close modal immediately for new listings
+      closeModal()
+    }
+
     try {
+      let imageUrl = null
+      
+      // Use validated image URL if available to avoid re-uploading
+      if (validatedImageUrl) {
+        console.log('📤 Reusing validated image URL:', validatedImageUrl)
+        imageUrl = validatedImageUrl
+      } else if (formData.image && formData.image instanceof File) {
+        console.log('📤 Uploading image to Firebase Storage...')
+        try {
+          imageUrl = await uploadImageToFirebaseStorage(formData.image, 'Images/Listing', user.uid)
+          console.log('✅ Image uploaded successfully:', imageUrl)
+        } catch (uploadError) {
+          console.error('❌ Image upload failed:', uploadError)
+          setIsCreatingListing(false)
+          showErrorPopup('Upload Error', `Failed to upload image: ${uploadError.message}`)
+          // Reopen modal if it was closed for new listing
+          if (!isUpdating) {
+            setShowAddModal(true)
+          }
+          return
+        }
+      } else if (formData.image && typeof formData.image === 'string') {
+        // Handle base64 fallback (should not happen with new implementation)
+        console.warn('⚠️ Image is base64 string, should be File object')
+        imageUrl = formData.image
+      }
+
       const listingData = {
         name: formData.name.trim(),
         details: formData.details.trim(),
@@ -316,11 +527,14 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         measurementUnit: formData.measurementUnit,
         price: formData.isFree ? 'Free' : formData.price.trim(),
         isFree: formData.isFree,
-        image: formData.image,
+        imageUrl: imageUrl, // Store as imageUrl for consistency with mobile app
         ownerId: user.uid,
         ownerName: user.displayName || user.email || 'Livestock Owner',
         ownerEmail: user.email || '',
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        // Add AI verification data
+        isAiVerified: isImageVerified || false,
+        aiValidationResult: imageValidationResult || null
       }
 
       console.log('📝 Listing data to save:', listingData)
@@ -362,6 +576,10 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       
       setIsCreatingListing(false)
       showErrorPopup('Error', errorMessage)
+      // Reopen modal if it was closed for new listing
+      if (!isUpdating) {
+        setShowAddModal(true)
+      }
     }
   }
 
@@ -1434,22 +1652,34 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         {(() => {
           const imageUrl = listing.images?.[0] || listing.imageUrls?.[0] || listing.imageUrl || listing.image || listing.photo || listing.photoUrl || listing.photos?.[0]
           return imageUrl ? (
-            <img 
-              src={imageUrl} 
-              alt={listing.name || listing.title || 'Listing'}
-              className={styles.listingImage}
-              onError={(e) => {
-                e.target.style.display = 'none'
-                e.target.nextSibling.style.display = 'flex'
-              }}
-            />
-          ) : null
+            <>
+              <img 
+                src={imageUrl} 
+                alt={listing.name || listing.title || 'Listing'}
+                className={styles.listingImage}
+                onClick={() => openImageModal(imageUrl, listing.name || listing.title || 'Listing')}
+                onError={(e) => {
+                  e.target.style.display = 'none'
+                  e.target.nextSibling.style.display = 'flex'
+                }}
+              />
+              <div className={styles.imagePlaceholder} style={{ display: 'none' }}>
+                <p>Failed to load image</p>
+              </div>
+              
+              {/* AI Verification Badge */}
+              {listing.isAiVerified && (
+                <div className={styles.verifiedBadge}>
+                  <span className={styles.verifiedText}>Verified by AI</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className={styles.imagePlaceholder}>
+              <p>No image available</p>
+            </div>
+          )
         })()}
-        <div className={styles.placeholderImage} style={{
-          display: (listing.images?.[0] || listing.imageUrls?.[0] || listing.imageUrl || listing.image || listing.photo || listing.photoUrl || listing.photos?.[0]) ? 'none' : 'flex'
-        }}>
-          <p>No image</p>
-        </div>
       </div>
 
       {/* Card Content */}
@@ -1488,10 +1718,12 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
           </span>
           {userRole === 'crop_farmer' && listing.distanceKm != null && (
             <span className={styles.listingLocation}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="#fa9100" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '4px' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill={listing.distanceKm < 5 ? "#2d5a27" : "#fa9100"} xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '4px' }}>
                 <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
               </svg>
-              <span style={{ color: '#fa9100' }}>{formatDistanceKm(listing.distanceKm)}</span>
+              <span style={{ color: listing.distanceKm < 5 ? '#2d5a27' : '#fa9100', fontWeight: listing.distanceKm < 5 ? '600' : 'normal' }}>
+                {listing.distanceKm < 5 ? 'Nearby' : `${listing.distanceKm.toFixed(1)} km away`}
+              </span>
             </span>
           )}
         </div>
@@ -1541,7 +1773,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                   markAsSold(listing)
                 }}
               >
-                Mark as Sold
+                Sold
               </button>
               <button 
                 className={styles.deleteButton}
@@ -1607,8 +1839,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         </div>
         
         {/* Loading Content */}
-        <div className={styles.loadingContent}>
-          <p className={styles.loadingText}>Loading listings...</p>
+        <div className={styles.emptyState}>
           <div className={styles.loadingSpinner}></div>
         </div>
       </div>
@@ -1633,6 +1864,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
 
   return (
     <div className={styles.container}>
+      {/* Loading Overlay for Creating Listing - REMOVED DUPLICATE */}
+      
       {/* Header Container */}
       <div className={styles.headerContainer}>
         <div className={styles.headerLeft}>
@@ -1806,8 +2039,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         )}
       </div>
 
-      {/* Add Listing Modal - Multi-Step */}
-      {showAddModal && (
+      {/* Add Listing Modal - Multi-Step - Using Portal to render at document body level */}
+      {showAddModal && typeof document !== 'undefined' && createPortal(
         <div className={styles.modalOverlay}>
           <div className={styles.modal}>
             <div className={styles.modalHeader}>
@@ -1817,30 +2050,35 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
               </button>
             </div>
 
-            {/* Step Indicator */}
-            <div className={styles.stepIndicator}>
-              <div className={`${styles.step} ${modalStep >= 1 ? styles.active : ''} ${modalStep > 1 ? styles.completed : ''}`}>
-                <div className={styles.stepNumber}>1</div>
-                <div className={styles.stepLabel}>Basic Info</div>
-              </div>
-              <div className={styles.stepLine}></div>
-              <div className={`${styles.step} ${modalStep >= 2 ? styles.active : ''} ${modalStep > 2 ? styles.completed : ''}`}>
-                <div className={styles.stepNumber}>2</div>
-                <div className={styles.stepLabel}>Measurements</div>
-              </div>
-              <div className={styles.stepLine}></div>
-              <div className={`${styles.step} ${modalStep >= 3 ? styles.active : ''} ${modalStep > 3 ? styles.completed : ''}`}>
-                <div className={styles.stepNumber}>3</div>
-                <div className={styles.stepLabel}>Pricing</div>
-              </div>
-              <div className={styles.stepLine}></div>
-              <div className={`${styles.step} ${modalStep >= 4 ? styles.active : ''} ${modalStep > 4 ? styles.completed : ''}`}>
-                <div className={styles.stepNumber}>4</div>
-                <div className={styles.stepLabel}>Image</div>
-              </div>
-            </div>
-            
-            <div className={styles.modalContent}>
+            <div className={styles.modalBody}>
+              <div className={styles.modalLayout}>
+                {/* Left Side - Vertical Step Indicator */}
+                <div className={styles.stepSidebar}>
+                  <div className={styles.verticalSteps}>
+                    <div className={`${styles.verticalStep} ${modalStep >= 1 ? styles.active : ''} ${modalStep > 1 ? styles.completed : ''}`}>
+                      <div className={styles.stepCircle}>1</div>
+                      <div className={styles.stepLabel}>Basic Info</div>
+                    </div>
+                    <div className={styles.stepLine}></div>
+                    <div className={`${styles.verticalStep} ${modalStep >= 2 ? styles.active : ''} ${modalStep > 2 ? styles.completed : ''}`}>
+                      <div className={styles.stepCircle}>2</div>
+                      <div className={styles.stepLabel}>Measurements</div>
+                    </div>
+                    <div className={styles.stepLine}></div>
+                    <div className={`${styles.verticalStep} ${modalStep >= 3 ? styles.active : ''} ${modalStep > 3 ? styles.completed : ''}`}>
+                      <div className={styles.stepCircle}>3</div>
+                      <div className={styles.stepLabel}>Pricing</div>
+                    </div>
+                    <div className={styles.stepLine}></div>
+                    <div className={`${styles.verticalStep} ${modalStep >= 4 ? styles.active : ''} ${modalStep > 4 ? styles.completed : ''}`}>
+                      <div className={styles.stepCircle}>4</div>
+                      <div className={styles.stepLabel}>Image</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Side - Step Content */}
+                <div className={styles.contentArea}>
               {/* Step 1: Basic Information */}
               {modalStep === 1 && (
                 <div className={styles.stepContent}>
@@ -1876,25 +2114,33 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                   <div className={styles.formGroup}>
                     <label>Quantity *</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       className={styles.input}
                       placeholder="e.g., 50, 100, 500"
                       value={formData.measurements}
-                      onChange={(e) => setFormData({...formData, measurements: e.target.value})}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9]/g, '')
+                        setFormData({...formData, measurements: value})
+                      }}
                     />
                   </div>
                   
                   <div className={styles.formGroup}>
                     <label>Unit of Measurement *</label>
-                    <select
-                      className={styles.select}
-                      value={formData.measurementUnit}
-                      onChange={(e) => setFormData({...formData, measurementUnit: e.target.value})}
-                    >
+                    <div className={styles.measurementButtons}>
                       {measurementUnits.map((unit) => (
-                        <option key={unit} value={unit}>{unit}</option>
+                        <button
+                          key={unit}
+                          type="button"
+                          className={`${styles.measurementButton} ${formData.measurementUnit === unit ? styles.active : ''}`}
+                          onClick={() => setFormData({...formData, measurementUnit: unit})}
+                        >
+                          {unit}
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1919,11 +2165,16 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                   <div className={styles.formGroup}>
                     <label>Price (₱) {!formData.isFree && '*'}</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       className={styles.input}
                       placeholder="Enter price in Philippine Peso"
                       value={formData.price}
-                      onChange={(e) => setFormData({...formData, price: e.target.value})}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9]/g, '')
+                        setFormData({...formData, price: value})
+                      }}
                       onFocus={() => setFormData({...formData, isFree: false})}
                     />
                   </div>
@@ -1934,18 +2185,82 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
               {modalStep === 4 && (
                 <div className={styles.stepContent}>
                   <h3 className={styles.stepTitle}>Add Image</h3>
+                  
+                  {/* AI Verification Info Box */}
+                  {userRole === 'livestock_owner' && (
+                    <div className={styles.verificationInfoBox}>
+                      <div className={styles.infoIcon}>ℹ️</div>
+                      <div className={styles.infoText}>
+                        <strong>AI Image Verification (Optional)</strong>
+                        <p>Your image will be verified by AI to confirm it contains legitimate livestock waste or processed fertilizer. You can still create your listing even if verification fails or if the image isn't recognized as livestock waste.</p>
+                        <p><strong>Note:</strong> If the listing is not verified by AI, the listing might be reported for non-agricultural content.</p>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className={styles.formGroup}>
                     <label>Product Image *</label>
-                    {formData.image ? (
-                      <div className={styles.imagePreview}>
-                        <img src={formData.image} alt="Preview" />
-                        <button 
-                          className={styles.removeImageButton}
-                          onClick={() => setFormData({...formData, image: null})}
-                        >
-                          ×
-                        </button>
-                      </div>
+                    {formData.imagePreview ? (
+                      <>
+                        <div className={styles.imagePreview}>
+                          <img src={formData.imagePreview} alt="Preview" />
+                          
+                          <button 
+                            className={styles.removeImageButton}
+                            onClick={() => {
+                              // Revoke the blob URL to prevent memory leaks
+                              if (formData.imagePreview && formData.imagePreview.startsWith('blob:')) {
+                                URL.revokeObjectURL(formData.imagePreview)
+                              }
+                              setFormData({...formData, image: null, imagePreview: null})
+                              setIsImageValidating(false)
+                              setImageValidationResult(null)
+                              setIsImageVerified(false)
+                              setValidatedImageUrl(null)
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                        
+                        {/* AI Validation Status - Moved outside image preview */}
+                        {userRole === 'livestock_owner' && (
+                          <div className={styles.validationStatus}>
+                            {isImageValidating ? (
+                              <div className={styles.validating}>
+                                <div className={styles.validationSpinner}></div>
+                                <span>AI is verifying your image...</span>
+                              </div>
+                            ) : imageValidationResult ? (
+                              <div className={`${styles.verificationResult} ${
+                                imageValidationResult.verdict === 'VERIFIED_LEGITIMATE' ? styles.verifiedLegitimate :
+                                imageValidationResult.verdict === 'VERIFIED_NOT_LEGITIMATE' ? styles.verifiedNotLegitimate :
+                                styles.unableToVerify
+                              }`}>
+                                <div className={styles.verificationIcon}>
+                                  {imageValidationResult.verdict === 'VERIFIED_LEGITIMATE' ? '✅' :
+                                   imageValidationResult.verdict === 'VERIFIED_NOT_LEGITIMATE' ? 'ℹ️' : '⚠️'}
+                                </div>
+                                <div className={styles.verificationText}>
+                                  <strong>
+                                    {imageValidationResult.verdict === 'VERIFIED_LEGITIMATE' ? 'Verified by AI - Legitimate Livestock Waste' :
+                                     imageValidationResult.verdict === 'VERIFIED_NOT_LEGITIMATE' ? 'Verified by AI - Not Livestock Waste' :
+                                     'Unable to Verify'}
+                                  </strong>
+                                  <p>{imageValidationResult.reason}</p>
+                                  <button 
+                                    className={styles.revalidateButton}
+                                    onClick={revalidateImage}
+                                    disabled={isImageValidating}
+                                  >
+                                    {isImageValidating ? 'Re-validating...' : 'Re-validate Image'}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className={styles.imageUploadContainer}>
                         <input
@@ -1953,14 +2268,17 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                           accept="image/*"
                           className={styles.fileInput}
                           id="imageUpload"
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const file = e.target.files[0]
                             if (file) {
-                              const reader = new FileReader()
-                              reader.onload = (event) => {
-                                setFormData({...formData, image: event.target.result})
+                              // Create blob URL for preview
+                              const imagePreview = URL.createObjectURL(file)
+                              setFormData({...formData, image: file, imagePreview})
+                              
+                              // Trigger AI validation if user is livestock owner
+                              if (userRole === 'livestock_owner' && formData.name && formData.details) {
+                                await validateImageWithAI(file, formData.name, formData.details)
                               }
-                              reader.readAsDataURL(file)
                             }
                           }}
                         />
@@ -1975,6 +2293,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                   </div>
                 </div>
               )}
+                </div>
+              </div>
             </div>
             
             <div className={styles.modalFooter}>
@@ -1985,46 +2305,70 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                 {modalStep === 1 ? 'Cancel' : 'Back'}
               </button>
               {modalStep < 4 ? (
-                <button className={styles.nextButton} onClick={nextStep}>
+                <button className={styles.nextButton} onClick={nextStep} disabled={!isCurrentStepValid()}>
                   Next
                 </button>
               ) : (
-                <button className={styles.saveButton} onClick={saveListing}>
-                  {editingListing ? 'Update Listing' : 'Create Listing'}
+                <button
+                  type="button"
+                  className={`${styles.nextButton} ${styles.createButton}`}
+                  onClick={saveListing}
+                  disabled={isCreatingListing || isImageValidating || !areAllStepsCompleted()}
+                >
+                  {isCreatingListing ? 'Creating...' : isImageValidating ? 'Validating Image...' : 'Create Listing'}
                 </button>
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Loading Modal for Creating Listing */}
-      {isCreatingListing && (
+      {isCreatingListing && typeof document !== 'undefined' && createPortal(
         <div className={styles.loadingOverlay}>
           <div className={styles.loadingModal}>
             <div className={styles.loadingSpinner}></div>
             <p className={styles.loadingText}>Processing...</p>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Loading Modal for Requesting Listing */}
-      {isRequestingListing && (
+      {isRequestingListing && typeof document !== 'undefined' && createPortal(
         <div className={styles.loadingOverlay}>
           <div className={styles.loadingModal}>
             <div className={styles.loadingSpinner}></div>
             <p className={styles.loadingText}>Requesting...</p>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Listing Details Modal */}
-      {showDetailsModal && selectedListing && (
-        <div className={styles.modalOverlay}>
-          <div className={styles.modal}>
+      {/* Loading Modal for Deleting Listing */}
+      {isDeletingListing && typeof document !== 'undefined' && createPortal(
+        <div className={styles.loadingOverlay}>
+          <div className={styles.loadingModal}>
+            <div className={styles.loadingSpinner}></div>
+            <p className={styles.loadingText}>Deleting listing...</p>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Listing Details Modal - Using Portal to render at document body level */}
+      {showDetailsModal && selectedListing && typeof document !== 'undefined' && createPortal(
+        <div className={styles.modalOverlay} onClick={closeDetailsModal}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
               <div className={styles.headerContent}>
-                <h2>{selectedListing.name || 'Unnamed Listing'}</h2>
+                <div className={styles.headerTitleRow}>
+                  <h2>{selectedListing.name || 'Unnamed Listing'}</h2>
+                  <span className={styles.headerPrice}>
+                    {formatPrice(selectedListing.price, selectedListing.isFree)}
+                  </span>
+                </div>
                 <span className={styles.headerDate}>
                   {formatDate(selectedListing.createdAt || selectedListing.timestamp)}
                 </span>
@@ -2038,28 +2382,36 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
               <div className={styles.detailsLayout}>
                 {/* Left Column - Image */}
                 <div className={styles.detailsLeft}>
-                  {selectedListing.image ? (
-                    <div className={styles.detailsImageContainer}>
-                      <img 
-                        src={selectedListing.image} 
-                        alt={selectedListing.name}
-                        className={styles.detailsImage}
-                      />
-                    </div>
-                  ) : (
-                    <div className={styles.detailsPlaceholder}>
-                      <p>No image available</p>
-                    </div>
-                  )}
+                  {(() => {
+                    const imageUrl = selectedListing.images?.[0] || selectedListing.imageUrls?.[0] || selectedListing.imageUrl || selectedListing.image || selectedListing.photo || selectedListing.photoUrl || selectedListing.photos?.[0]
+                    return imageUrl ? (
+                      <div className={styles.detailsImageContainer}>
+                        <img 
+                          src={imageUrl} 
+                          alt={selectedListing.name}
+                          className={styles.detailsImage}
+                          onClick={() => openImageModal(imageUrl, selectedListing.name)}
+                          onError={(e) => {
+                            e.target.style.display = 'none'
+                            e.target.nextSibling.style.display = 'flex'
+                          }}
+                        />
+                        <div className={styles.detailsPlaceholder} style={{ display: 'none' }}>
+                          <p>Failed to load image</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={styles.detailsPlaceholder}>
+                        <p>No image available</p>
+                      </div>
+                    )
+                  })()}
                 </div>
                 
                 {/* Right Column - Details */}
                 <div className={styles.detailsRight}>
-                  {/* Price and Owner */}
+                  {/* Owner Info */}
                   <div className={styles.detailsSection}>
-                    <div className={styles.detailsPrice}>
-                      {formatPrice(selectedListing.price, selectedListing.isFree)}
-                    </div>
                     <p className={styles.detailsOwner}>
                       by {selectedListing.ownerName || 'Unknown Owner'}
                       <span className={styles.detailsRating}>
@@ -2089,10 +2441,12 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                       <div className={styles.detailsSection}>
                         <h4>Distance</h4>
                         <p style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="#fa9100" xmlns="http://www.w3.org/2000/svg">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill={selectedListing.distanceKm < 5 ? "#2d5a27" : "#fa9100"} xmlns="http://www.w3.org/2000/svg">
                             <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
                           </svg>
-                          <span style={{ color: '#fa9100', fontWeight: '500' }}>{formatDistanceKm(selectedListing.distanceKm)}</span>
+                          <span style={{ color: selectedListing.distanceKm < 5 ? '#2d5a27' : '#fa9100', fontWeight: '600' }}>
+                            {selectedListing.distanceKm < 5 ? 'Nearby' : `${selectedListing.distanceKm.toFixed(1)} km away`}
+                          </span>
                         </p>
                       </div>
                     )}
@@ -2107,31 +2461,46 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                 (() => {
                   const buttonState = getButtonState(selectedListing?.id)
                   return (
-                    <button 
-                      className={`${styles.requestButton} ${
-                        requestStatuses[selectedListing?.id] === 'pending' ? styles.cancelButton : 
-                        requestStatuses[selectedListing?.id] === 'approved' ? styles.approvedButton : ''
-                      }`}
-                      disabled={buttonState.disabled}
-                      onClick={() => {
-                        if (requestStatuses[selectedListing?.id] === 'pending') {
-                          // Try main cancel function first, with fallback to simplified version
-                          handleCancelRequest(selectedListing?.id).catch((error) => {
-                            console.error('Main cancel failed, trying simplified version:', error)
-                            handleCancelRequestSimple(selectedListing?.id)
-                          }).finally(() => {
+                    <div className={styles.cropFarmerActions}>
+                      <button 
+                        className={`${styles.requestButton} ${
+                          requestStatuses[selectedListing?.id] === 'pending' ? styles.cancelButton : 
+                          requestStatuses[selectedListing?.id] === 'approved' ? styles.approvedButton : ''
+                        }`}
+                        disabled={buttonState.disabled}
+                        onClick={() => {
+                          if (requestStatuses[selectedListing?.id] === 'pending') {
+                            // Try main cancel function first, with fallback to simplified version
+                            handleCancelRequest(selectedListing?.id).catch((error) => {
+                              console.error('Main cancel failed, trying simplified version:', error)
+                              handleCancelRequestSimple(selectedListing?.id)
+                            }).finally(() => {
+                              closeDetailsModal()
+                            })
+                          } else if (!requestStatuses[selectedListing?.id] || requestStatuses[selectedListing?.id] === 'rejected' || requestStatuses[selectedListing?.id] === 'cancelled') {
+                            handleListingRequest(selectedListing)
                             closeDetailsModal()
-                          })
-                        } else if (!requestStatuses[selectedListing?.id] || requestStatuses[selectedListing?.id] === 'rejected' || requestStatuses[selectedListing?.id] === 'cancelled') {
-                          handleListingRequest(selectedListing)
+                          } else {
+                            closeDetailsModal()
+                          }
+                        }}
+                      >
+                        {buttonState.text}
+                      </button>
+                      <button 
+                        className={styles.reportListingButton}
+                        onClick={() => {
                           closeDetailsModal()
-                        } else {
-                          closeDetailsModal()
-                        }
-                      }}
-                    >
-                      {buttonState.text}
-                    </button>
+                          handleReportListing(selectedListing)
+                        }}
+                        title="Report this listing"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 9v4M12 17h.01M5.07 19H19a2 2 0 001.75-2.96l-7-12a2 2 0 00-3.5 0l-7 12A2 2 0 005.07 19z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Report
+                      </button>
+                    </div>
                   )
                 })()
               ) : userRole === 'livestock_owner' ? (
@@ -2158,7 +2527,52 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
               ) : null}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Report Modal */}
+      <ReportModal
+        visible={showReportModal}
+        onClose={closeReportModal}
+        targetUser={{
+          id: reportedListing?.ownerId,
+          displayName: reportedListing?.ownerName,
+          firstName: reportedListing?.ownerName?.split(' ')[0],
+          lastName: reportedListing?.ownerName?.split(' ').slice(1).join(' ')
+        }}
+        content={{
+          id: reportedListing?.id,
+          name: reportedListing?.name,
+          caption: reportedListing?.name,
+          details: reportedListing?.details || reportedListing?.description,
+          description: reportedListing?.details || reportedListing?.description,
+          text: reportedListing?.details || reportedListing?.description,
+          content: `${reportedListing?.name || ''} - ${reportedListing?.details || reportedListing?.description || ''}`,
+          // Primary field is 'image' (singular) based on how listings are saved
+          imageUrl: reportedListing?.image || reportedListing?.images?.[0] || reportedListing?.imageUrls?.[0] || reportedListing?.imageUrl || '',
+          imageUrls: reportedListing?.image ? [reportedListing.image] : (reportedListing?.images || reportedListing?.imageUrls || []),
+          mediaUrl: reportedListing?.image || reportedListing?.images?.[0] || reportedListing?.imageUrls?.[0] || reportedListing?.imageUrl || ''
+        }}
+        contentType="listing"
+        reporterId={user?.uid}
+      />
+
+      {/* Image Modal */}
+      {showImageModal && createPortal(
+        <div className={styles.imageModalOverlay} onClick={closeImageModal}>
+          <div className={styles.imageModalContent} onClick={(e) => e.stopPropagation()}>
+            <button className={styles.imageModalClose} onClick={closeImageModal}>
+              ×
+            </button>
+            <img 
+              src={selectedImage} 
+              alt={selectedImageAlt}
+              className={styles.imageModalImage}
+            />
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   )

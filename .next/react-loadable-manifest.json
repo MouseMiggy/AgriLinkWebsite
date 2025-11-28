@@ -10,5 +10,17 @@
   "dashboard.js -> firebase/firestore": {
     "id": "dashboard.js -> firebase/firestore",
     "files": []
+  },
+  "signin.js -> ../lib/firebase": {
+    "id": "signin.js -> ../lib/firebase",
+    "files": []
+  },
+  "signin.js -> firebase/auth": {
+    "id": "signin.js -> firebase/auth",
+    "files": []
+  },
+  "signin.js -> firebase/firestore": {
+    "id": "signin.js -> firebase/firestore",
+    "files": []
   }
 }

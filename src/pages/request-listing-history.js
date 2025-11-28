@@ -286,7 +286,17 @@ export default function RequestListingHistory() {
   if (loading) {
     return (
       <div className={styles.container}>
-        <div className={styles.loading}>Loading your requests...</div>
+        <div className={styles.header}>
+          <div className={styles.headerContent}>
+            <div className={styles.headerLeft}>
+              <h1 className={styles.title}>Request Listing History</h1>
+            </div>
+          </div>
+        </div>
+        <div className={styles.loadingContainer}>
+          <div className={styles.loadingSpinner}></div>
+          <p className={styles.loadingText}>Loading Request Listing History...</p>
+        </div>
       </div>
     )
   }

@@ -4,21 +4,7 @@ import styles from '../../styles/user-profile.module.css'
 import dashboardStyles from '../../styles/modules/dashboard.module.css'
 import { auth, db } from '../lib/firebase'
 import { doc, getDoc, collection, query, where, getDocs, updateDoc, setDoc, deleteDoc, arrayUnion, arrayRemove, onSnapshot, serverTimestamp } from 'firebase/firestore'
-
-// Cloudinary upload function
-const uploadImageToCloudinary = async (file) => {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('upload_preset', 'agrilink_unsigned')
-  
-  const response = await fetch(
-    `https://api.cloudinary.com/v1_1/dqpsjlfjh/image/upload`,
-    { method: 'POST', body: formData }
-  )
-  
-  const data = await response.json()
-  return data.secure_url
-}
+import { uploadImageToFirebaseStorage } from '../lib/firebaseStorage'
 
 export default function UserProfile() {
   const router = useRouter()
@@ -251,7 +237,7 @@ export default function UserProfile() {
         console.log('Uploading', editImageFiles.length, 'new images...')
         for (const file of editImageFiles) {
           try {
-            const imageUrl = await uploadImageToCloudinary(file)
+            const imageUrl = await uploadImageToFirebaseStorage(file, 'Images/Feed', user.uid)
             if (imageUrl) {
               newImageUrls.push(imageUrl)
               console.log('Image uploaded:', imageUrl)
@@ -412,7 +398,7 @@ export default function UserProfile() {
       // Upload new profile picture if selected
       if (editProfilePicture) {
         console.log('Uploading new profile picture...')
-        profilePictureUrl = await uploadImageToCloudinary(editProfilePicture)
+        profilePictureUrl = await uploadImageToFirebaseStorage(editProfilePicture, 'Images/Profile', user.uid)
         console.log('Profile picture uploaded:', profilePictureUrl)
       }
 

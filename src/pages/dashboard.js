@@ -85,7 +85,7 @@ export default function Dashboard() {
   const [requestStatus, setRequestStatus] = useState(null)
   const [listingName, setListingName] = useState(null)
   const [isSendingSuggestion, setIsSendingSuggestion] = useState(false)
-  const [transactionStage, setTransactionStage] = useState('initial')
+  const [transactionStage, setTransactionStage] = useState('1')
   const [detectedLanguage, setDetectedLanguage] = useState('english')
   const [waitingForReply, setWaitingForReply] = useState(false)
   const [lastMessageSenderId, setLastMessageSenderId] = useState(null)
@@ -99,6 +99,75 @@ export default function Dashboard() {
   const [showTransactionCompleteModal, setShowTransactionCompleteModal] = useState(false)
   const [transactionCompleteChatId, setTransactionCompleteChatId] = useState(null)
   const [transactionListingId, setTransactionListingId] = useState(null)
+  
+  // Trigger AI suggestions when new message arrives
+  const triggerAISuggestions = async (messages) => {
+    if (!user || !selectedChat || messages.length === 0) return;
+    
+    try {
+      console.log('🤖 Triggering AI suggestions for new message...');
+      console.log('📊 Messages being sent to AI:', messages.map(m => ({ text: m.text, sender: m.senderId === user.uid ? 'You' : 'Other' })));
+      
+      setIsSendingSuggestion(true);
+      
+      // Get current chat state or use defaults (stage '1' for new conversations)
+      const currentChatState = chatTransactionStates[selectedChat.chatId] || {
+        stage: '1',
+        language: 'english'
+      };
+      
+      console.log('🎯 Current chat state:', currentChatState);
+      
+      // Prepare conversation data for AI
+      const conversationData = {
+        userId: user.uid,
+        userRole: userRole,
+        listingName: selectedChat.listingName || 'product',
+        messages: messages.map(msg => ({
+          text: msg.text,
+          senderName: msg.senderId === user.uid ? 'You' : selectedChat.otherUserName,
+          timestamp: msg.createdAt,
+          isOwnMessage: msg.senderId === user?.uid
+        })),
+        currentStage: currentChatState.stage,
+        detectedLanguage: currentChatState.language
+      };
+      
+      console.log('📤 Sending to AI:', {
+        stage: conversationData.currentStage,
+        messageCount: conversationData.messages.length,
+        userRole: conversationData.userRole
+      });
+      
+      // Call AI service to get suggestions
+      const result = await AIChatService.generateContextualSuggestions(conversationData);
+      
+      console.log('📥 AI Response:', {
+        stage: result.stage,
+        suggestions: result.suggestions,
+        language: result.language
+      });
+      
+      if (result.success && result.suggestions.length > 0) {
+        console.log('✅ AI suggestions generated:', result.suggestions);
+        setAiSuggestions(result.suggestions);
+        setShowSuggestions(true);
+        
+        // Update chat transaction state
+        setChatTransactionStates(prev => ({
+          ...prev,
+          [selectedChat.chatId]: {
+            stage: result.stage || currentChatState.stage,
+            language: result.language || currentChatState.language
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('❌ Error triggering AI suggestions:', error);
+    } finally {
+      setIsSendingSuggestion(false);
+    }
+  };
 
   // Extract listing ID from chat messages for transaction completion
   const extractListingIdFromChat = () => {
@@ -377,58 +446,22 @@ export default function Dashboard() {
       return
     }
 
+    setIsSendingSuggestion(true)
+    
     try {
-      console.log('🚀 Auto-sending AI suggestion:', suggestion)
-      setIsSendingSuggestion(true)
-      
-      // Set waiting state and hide suggestions immediately
-      setWaitingForReply(true)
+      // Clear suggestions immediately when user sends a message
+      setAiSuggestions([])
       setShowSuggestions(false)
       
-      // Small delay for better UX, then auto-send
-      setTimeout(async () => {
-        if (suggestion.trim() && selectedChat && user && db) {
-          // Check if there's an approved request - both users must wait for approval
-          const hasApprovedRequest = chatMessages.some(msg => 
-            msg.isListingRequest && msg.requestStatus === 'approved'
-          )
-          
-          if (!hasApprovedRequest) {
-            console.log('Cannot auto-send message: Request not yet approved')
-            setIsSendingSuggestion(false)
-            setWaitingForReply(false)
-            return
-          }
-
-          const chatId = selectedChat.id
-          const messageData = {
-            text: suggestion.trim(),
-            senderId: user.uid,
-            senderName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
-            createdAt: serverTimestamp(),
-            read: false
-          }
-
-          await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
-
-          // Update chat's last message
-          await updateDoc(doc(db, 'chats', chatId), {
-            lastMessage: suggestion.trim(),
-            lastMessageTime: serverTimestamp(),
-            lastMessageSenderId: user.uid
-          })
-          
-          setNewMessage('')
-          console.log('✅ AI suggestion sent successfully - waiting for other user to reply')
-        }
-        setIsSendingSuggestion(false)
-      }, 300)
+      // Send the suggestion as a message
+      await sendMessage(suggestion)
+      
+      console.log('✅ AI suggestion sent successfully:', suggestion)
+      
     } catch (error) {
-      console.error('❌ Error auto-sending AI suggestion:', error)
+      console.error('❌ Error sending AI suggestion:', error)
       setIsSendingSuggestion(false)
       setWaitingForReply(false)
-      // Fallback: just set the message in input if auto-send fails
-      setNewMessage(suggestion)
     }
   }
 
@@ -1597,6 +1630,15 @@ export default function Dashboard() {
         }))
         setChatMessages(messages)
         
+        // Trigger AI suggestions when new message arrives from other user
+        if (messages.length > 0) {
+          const lastMessage = messages[messages.length - 1]
+          if (lastMessage.senderId !== user?.uid) {
+            // New message from other user, generate AI suggestions
+            await triggerAISuggestions(messages)
+          }
+        }
+        
         // Clear any existing timeout
         if (markAsReadTimeoutRef.current) {
           clearTimeout(markAsReadTimeoutRef.current)
@@ -1639,7 +1681,8 @@ export default function Dashboard() {
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedChat || !user || !db) return
     
-    // Close AI suggestions and wait for other user's reply
+    // Clear AI suggestions immediately when user sends a message
+    setAiSuggestions([])
     setShowSuggestions(false)
     setWaitingForReply(true)
     
@@ -3724,31 +3767,41 @@ export default function Dashboard() {
                     ))}
                   </div>
                   
-                  {/* AI Suggestions */}
-                  {showSuggestions && aiSuggestions.length > 0 && requestStatus === 'approved' && (
-                    <div className={aiStyles.aiSuggestionsContainer}>
-                      <div className={aiStyles.aiSuggestionsHeader}>
-                        <span>💬 AI Suggestions</span>
+                  {/* AI Suggestions - Toggle Button and Container */}
+                  {aiSuggestions.length > 0 && (
+                    <>
+                      {/* AI Suggestions Toggle Button - Always visible when suggestions exist */}
+                      <div className={aiStyles.aiSuggestionsToggle}>
+                        <span>AI suggestions</span>
                         <button 
-                          className={aiStyles.closeSuggestionsBtn}
-                          onClick={() => setShowSuggestions(false)}
+                          className={aiStyles.toggleSuggestionsBtn}
+                          onClick={() => setShowSuggestions(!showSuggestions)}
                         >
-                          ×
+                          <img 
+                            src={showSuggestions ? "/assets/icons/chevron-up.png" : "/assets/icons/chevron-down.png"}
+                            alt="Toggle suggestions"
+                          />
                         </button>
                       </div>
-                      <div className={aiStyles.aiSuggestionsList}>
-                        {aiSuggestions.map((suggestion, index) => (
-                          <button
-                            key={index}
-                            className={aiStyles.suggestionBtn}
-                            onClick={() => useSuggestion(suggestion)}
-                            title="Click to auto-send this suggestion"
-                          >
-                            {suggestion}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                      
+                      {/* AI Suggestions Container - Only show when expanded */}
+                      {showSuggestions && (
+                        <div className={aiStyles.aiSuggestionsContainer}>
+                          <div className={aiStyles.aiSuggestionsList}>
+                            {aiSuggestions.map((suggestion, index) => (
+                              <button
+                                key={index}
+                                className={aiStyles.suggestionBtn}
+                                onClick={() => useSuggestion(suggestion)}
+                                title="Click to auto-send this suggestion"
+                              >
+                                {suggestion}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                   
                   {/* Transaction Summary Component */}

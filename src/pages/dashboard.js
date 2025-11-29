@@ -31,8 +31,10 @@ import {
   setDoc
 } from 'firebase/firestore'
 import { uploadImageToFirebaseStorage, uploadMultipleImagesToFirebaseStorage } from '../lib/firebaseStorage'
+import AIChatService from '../lib/aiChatService'
 import { listenToNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadNotificationCount, sendPostLikeNotification, sendCommentNotification, sendCommentReplyNotification, debugNotifications } from '../lib/notificationService'
 import styles from '../../styles/modules/dashboard.module.css'
+import aiStyles from '../../styles/modules/dashboard-ai-suggestions.module.css'
 
 export default function Dashboard() {
   const { showInfoPopup, showSuccessPopup, showErrorPopup, showConfirmPopup } = usePopup()
@@ -78,6 +80,471 @@ export default function Dashboard() {
   const [selectedChat, setSelectedChat] = useState(null)
   const [chatMessages, setChatMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
+  const [aiSuggestions, setAiSuggestions] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [requestStatus, setRequestStatus] = useState(null)
+  const [listingName, setListingName] = useState(null)
+  const [isSendingSuggestion, setIsSendingSuggestion] = useState(false)
+  const [transactionStage, setTransactionStage] = useState('initial')
+  const [detectedLanguage, setDetectedLanguage] = useState('english')
+  const [waitingForReply, setWaitingForReply] = useState(false)
+  const [lastMessageSenderId, setLastMessageSenderId] = useState(null)
+  const [transactionSummary, setTransactionSummary] = useState(null)
+  const [showSummary, setShowSummary] = useState(false)
+  
+  // Chat-specific transaction states to prevent conflicts
+  const [chatTransactionStates, setChatTransactionStates] = useState({})
+  
+  // Transaction completion confirmation modal
+  const [showTransactionCompleteModal, setShowTransactionCompleteModal] = useState(false)
+  const [transactionCompleteChatId, setTransactionCompleteChatId] = useState(null)
+  const [transactionListingId, setTransactionListingId] = useState(null)
+
+  // Extract listing ID from chat messages for transaction completion
+  const extractListingIdFromChat = () => {
+    // Find the listing request message to get listing ID
+    const listingRequestMessage = chatMessages.find(msg => msg.isListingRequest)
+    if (listingRequestMessage && listingRequestMessage.listingId) {
+      return listingRequestMessage.listingId
+    }
+    
+    // Fallback: try to extract from conversation data
+    if (listingName) {
+      // For now, return null - in production, you might have a mapping
+      return null
+    }
+    
+    return null
+  }
+
+  // Handle transaction completion confirmation
+  const handleTransactionComplete = async (isComplete) => {
+    console.log('🎯 Transaction completion response:', isComplete)
+    
+    if (isComplete) {
+      // User confirmed transaction is complete
+      console.log('✅ Transaction confirmed complete by user')
+      
+      // If listing owner and we have listing ID, update listing status to sold
+      if (userRole === 'livestock_owner' && transactionListingId) {
+        try {
+          await updateListingStatusToSold(transactionListingId)
+          console.log('🏷️ Listing status updated to sold')
+        } catch (error) {
+          console.error('❌ Error updating listing status:', error)
+        }
+      }
+      
+      // Close modal and mark transaction as completed
+      setShowTransactionCompleteModal(false)
+      setTransactionCompleteChatId(null)
+      setTransactionListingId(null)
+      
+      // Update chat state to show transaction is completed
+      if (transactionCompleteChatId) {
+        setChatTransactionStates(prev => ({
+          ...prev,
+          [transactionCompleteChatId]: {
+            ...prev[transactionCompleteChatId],
+            completed: true,
+            completedAt: new Date().toISOString()
+          }
+        }))
+      }
+      
+    } else {
+      // User said transaction is not complete - continue the conversation
+      console.log('🔄 Transaction not complete, continuing conversation')
+      
+      // Reset stage to allow continued discussion
+      if (transactionCompleteChatId) {
+        setChatTransactionStates(prev => ({
+          ...prev,
+          [transactionCompleteChatId]: {
+            ...prev[transactionCompleteChatId],
+            stage: 'transportation_discussed' // Go back to location discussion
+          }
+        }))
+      }
+      
+      // Close modal but allow continued conversation
+      setShowTransactionCompleteModal(false)
+      setTransactionCompleteChatId(null)
+      setTransactionListingId(null)
+      
+      // Generate new suggestions for continued discussion
+      generateAISuggestions()
+    }
+  }
+
+  // Update listing status to sold in Firestore
+  const updateListingStatusToSold = async (listingId) => {
+    if (!db || !listingId) return
+    
+    try {
+      const listingRef = doc(db, 'livestock_listings', listingId)
+      await updateDoc(listingRef, {
+        status: 'sold',
+        soldAt: serverTimestamp(),
+        soldTo: selectedChat?.participantId || null
+      })
+      
+      console.log('✅ Listing marked as sold:', listingId)
+      
+    } catch (error) {
+      console.error('❌ Error updating listing status:', error)
+      throw error
+    }
+  }
+  const generateAISuggestions = async () => {
+    try {
+      console.log('🤖 Dashboard: Calling real AI backend for suggestions...')
+      
+      // Get chat-specific transaction state
+      const chatId = selectedChat?.id
+      console.log('🔍 DEBUG: Chat-Specific State Analysis')
+      console.log('💬 Current chatId:', chatId)
+      console.log('📊 All chatTransactionStates:', chatTransactionStates)
+      console.log('🎯 Current chat state:', chatTransactionStates[chatId])
+      
+      const currentChatState = chatTransactionStates[chatId] || {
+        stage: 'initial',
+        language: 'english'
+      }
+      
+      console.log('📍 Using stage:', currentChatState.stage)
+      console.log('🌐 Using language:', currentChatState.language)
+      console.log('=' * 60)
+      
+      // DEBUG: Verify userRole value before sending
+      console.log('🔍 DEBUG: FRONTEND ROLE VERIFICATION')
+      console.log('📋 userRole being sent:', userRole)
+      console.log('📋 userRole type:', typeof userRole)
+      console.log('📋 userRole length:', userRole?.length || 0)
+      console.log('📋 Expected: "crop_farmer" or "livestock_owner"')
+      console.log('📋 Is crop_farmer?', userRole === 'crop_farmer')
+      console.log('📋 Is livestock_owner?', userRole === 'livestock_owner')
+      console.log('💬 Chat ID:', chatId)
+      console.log('📍 Chat-specific stage:', currentChatState.stage)
+      console.log('=' * 50)
+      
+      // Prepare structured conversation data for AI analysis
+      const conversationData = {
+        userRole,
+        listingName,
+        messages: chatMessages.map(msg => ({
+          senderId: msg.senderId,
+          senderName: msg.senderName,
+          text: msg.text,
+          timestamp: msg.createdAt,
+          isOwnMessage: msg.senderId === user?.uid
+        })),
+        currentStage: currentChatState.stage,  // Use chat-specific stage
+        detectedLanguage: currentChatState.language,  // Use chat-specific language
+        requestForSummary: currentChatState.stage === 'transportation_discussed' // Request summary in final stage
+      }
+      
+      console.log('📊 Dashboard: Sending conversation data to AI backend:', conversationData)
+      
+      // Call AI backend - this is the ONLY source of suggestions
+      const result = await AIChatService.generateContextualSuggestions(conversationData)
+      
+      console.log('📋 Dashboard: AI Backend Response:', result)
+      
+      if (result.success) {
+        console.log('✅ Dashboard: Transaction stage updated to:', result.stage)
+        console.log('✅ Dashboard: Language detected as:', result.language)
+        console.log('✅ Dashboard: AI suggestions received:', result.suggestions)
+        
+        // Update chat-specific transaction state from AI response
+        const updatedChatState = {
+          stage: result.stage || 'initial',
+          language: result.language || 'english',
+          summary: result.summary || null
+        }
+        
+        console.log('🔍 DEBUG: Stage Update Analysis')
+        console.log('💬 Updating chatId:', chatId)
+        console.log('📊 Previous state:', chatTransactionStates[chatId])
+        console.log('🆕 New state:', updatedChatState)
+        console.log('📈 Stage progression:', chatTransactionStates[chatId]?.stage, '→', updatedChatState.stage)
+        
+        setChatTransactionStates(prev => {
+          const newState = {
+            ...prev,
+            [chatId]: updatedChatState
+          }
+          console.log('✅ Updated all chatTransactionStates:', newState)
+          return newState
+        })
+        
+        // REMOVED: Global states that interfere with chat-specific management
+        // setTransactionStage(result.stage || 'initial')
+        // setDetectedLanguage(result.language || 'english')
+        
+        // Check if transaction is complete and show confirmation modal
+        if (result.stage === 'agreement_confirmed' && userRole === 'livestock_owner') {
+          console.log('🎉 Transaction complete! Showing confirmation modal for listing owner')
+          
+          // Extract listing ID from chat messages or conversation data
+          const listingId = extractListingIdFromChat()
+          
+          setTransactionCompleteChatId(chatId)
+          setTransactionListingId(listingId)
+          setShowTransactionCompleteModal(true)
+        }
+        
+        // Check if AI returned a transaction summary
+        if (result.summary) {
+          console.log('📋 Dashboard: Transaction summary generated by AI')
+          setTransactionSummary(result.summary)
+          setShowSummary(true)
+        }
+        
+        // Set AI suggestions from backend ONLY
+        setAiSuggestions(result.suggestions || [])
+        setShowSuggestions(true)
+        setWaitingForReply(false)
+      } else {
+        console.error('❌ Dashboard: AI backend failed:', result.error)
+        // No fallback - suggestions remain hidden until AI backend works
+        setAiSuggestions([])
+        setShowSuggestions(false)
+        setWaitingForReply(false)
+      }
+    } catch (error) {
+      console.error('❌ Dashboard: Error calling AI backend:', error)
+      // No fallback - suggestions remain hidden until AI backend works
+      setAiSuggestions([])
+      setShowSuggestions(false)
+      setWaitingForReply(false)
+    }
+  }
+
+  // Intelligent message analysis for contextual AI suggestions
+  const analyzeLastMessageAndGenerateSuggestions = (messages, userRole, currentStage) => {
+    if (messages.length === 0) return []
+    
+    // Get the last message from the OTHER user (not current user)
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage.senderId === user?.uid) return [] // Don't analyze own messages
+    
+    const messageText = lastMessage.text.toLowerCase()
+    console.log('🧠 Dashboard: Analyzing message for intelligent suggestions:', messageText)
+    
+    // Detect language from the message
+    const detectedLanguage = detectLanguage(messageText)
+    console.log('🌐 Dashboard: Detected language:', detectedLanguage)
+    setDetectedLanguage(detectedLanguage)
+    
+    // Detect question type and generate contextual suggestions
+    const suggestions = generateContextualSuggestionsForMessage(messageText, userRole, currentStage, detectedLanguage)
+    
+    // Determine next transaction stage based on conversation context
+    const nextStage = determineNextTransactionStage(messageText, currentStage, userRole)
+    if (nextStage !== currentStage) {
+      console.log('📈 Dashboard: Advancing transaction stage from', currentStage, 'to', nextStage)
+      setTransactionStage(nextStage)
+    }
+    
+    return suggestions
+  }
+
+  // Detect language from message text
+  const detectLanguage = (text) => {
+    const tagalogKeywords = ['magkano', 'tagpila', 'presyo', 'bayad', 'pila', 'meron', 'ilang', 'salamat', 'po', 'opa', 'ba', 'pa']
+    const cebuanoKeywords = ['tagpila', 'pila', 'presyo', 'bayad', 'naay', 'pila ka', 'salamat', 'diay', 'ba', 'pa']
+    
+    const tagalogCount = tagalogKeywords.filter(keyword => text.includes(keyword)).length
+    const cebuanoCount = cebuanoKeywords.filter(keyword => text.includes(keyword)).length
+    
+    if (tagalogCount > cebuanoCount && tagalogCount > 0) {
+      return 'tagalog'
+    } else if (cebuanoCount > tagalogCount && cebuanoCount > 0) {
+      return 'cebuano'
+    } else {
+      return 'english'
+    }
+  }
+
+ 
+
+  // Use AI suggestion in popup chat - Intelligent flow with reply waiting
+  const useSuggestion = async (suggestion) => {
+    // Prevent multiple rapid clicks
+    if (isSendingSuggestion) {
+      console.log('🚫 Already sending suggestion, ignoring click')
+      return
+    }
+
+    try {
+      console.log('🚀 Auto-sending AI suggestion:', suggestion)
+      setIsSendingSuggestion(true)
+      
+      // Set waiting state and hide suggestions immediately
+      setWaitingForReply(true)
+      setShowSuggestions(false)
+      
+      // Small delay for better UX, then auto-send
+      setTimeout(async () => {
+        if (suggestion.trim() && selectedChat && user && db) {
+          // Check if there's an approved request - both users must wait for approval
+          const hasApprovedRequest = chatMessages.some(msg => 
+            msg.isListingRequest && msg.requestStatus === 'approved'
+          )
+          
+          if (!hasApprovedRequest) {
+            console.log('Cannot auto-send message: Request not yet approved')
+            setIsSendingSuggestion(false)
+            setWaitingForReply(false)
+            return
+          }
+
+          const chatId = selectedChat.id
+          const messageData = {
+            text: suggestion.trim(),
+            senderId: user.uid,
+            senderName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
+            createdAt: serverTimestamp(),
+            read: false
+          }
+
+          await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
+
+          // Update chat's last message
+          await updateDoc(doc(db, 'chats', chatId), {
+            lastMessage: suggestion.trim(),
+            lastMessageTime: serverTimestamp(),
+            lastMessageSenderId: user.uid
+          })
+          
+          setNewMessage('')
+          console.log('✅ AI suggestion sent successfully - waiting for other user to reply')
+        }
+        setIsSendingSuggestion(false)
+      }, 300)
+    } catch (error) {
+      console.error('❌ Error auto-sending AI suggestion:', error)
+      setIsSendingSuggestion(false)
+      setWaitingForReply(false)
+      // Fallback: just set the message in input if auto-send fails
+      setNewMessage(suggestion)
+    }
+  }
+
+  // Extract request status and listing name from chat messages
+  useEffect(() => {
+    if (!chatMessages.length) {
+      setRequestStatus(null)
+      setListingName(null)
+      return
+    }
+
+    // Find the listing request message
+    const listingRequestMessage = chatMessages.find(msg => msg.isListingRequest)
+    if (listingRequestMessage) {
+      const newStatus = listingRequestMessage.requestStatus || 'pending'
+      setRequestStatus(newStatus)
+      setListingName(listingRequestMessage.listingTitle || listingRequestMessage.listingName || null)
+      
+      // Start waiting for reply when request is approved to trigger initial AI suggestions
+      if (newStatus === 'approved') {
+        console.log('🚀 Dashboard: Request approved - resetting stage for THIS chat only')
+        
+        // CRITICAL FIX: Reset stage ONLY for the current chat, not all chats
+        const currentChatId = selectedChat?.id
+        if (currentChatId) {
+          setChatTransactionStates(prev => ({
+            ...prev,
+            [currentChatId]: {
+              stage: 'initial',
+              language: 'english',
+              summary: null
+            }
+          }))
+          
+          console.log('✅ Reset stage for chat', currentChatId, 'to initial')
+        }
+        
+        // Update global states for backward compatibility ONLY
+        setTransactionStage('initial')
+        setDetectedLanguage('english')
+        setShowSummary(false)
+        setTransactionSummary(null)
+        
+        setWaitingForReply(true)
+      }
+    }
+  }, [chatMessages, selectedChat?.id])
+
+  // Auto-generate AI suggestions when other user replies
+  useEffect(() => {
+    if (requestStatus === 'approved' && userRole && listingName && chatMessages.length > 0) {
+      // Get the last message
+      const lastMessage = chatMessages[chatMessages.length - 1]
+      
+      // Check if the last message is from the OTHER user (not current user)
+      if (lastMessage && lastMessage.senderId !== user?.uid) {
+        console.log('📨 New message received from other user - generating AI suggestions...')
+        console.log('📊 Last message:', {
+          senderId: lastMessage.senderId,
+          senderName: lastMessage.senderName,
+          text: lastMessage.text?.substring(0, 50) + '...'
+        })
+        
+        // Set waiting state and generate AI suggestions
+        setWaitingForReply(true)
+        setLastMessageSenderId(lastMessage.senderId)
+        
+        // Call AI to analyze the reply and generate suggestions
+        generateAISuggestions()
+      }
+    }
+  }, [chatMessages.length, requestStatus, userRole, listingName, user?.uid])
+
+  // Close AI suggestions when current user sends a message or clicks suggestion
+  useEffect(() => {
+    if (chatMessages.length > 0) {
+      const lastMessage = chatMessages[chatMessages.length - 1]
+      
+      // If last message is from current user, close suggestions and wait for reply
+      if (lastMessage && lastMessage.senderId === user?.uid) {
+        console.log('📤 Current user sent message - closing AI suggestions')
+        setShowSuggestions(false)
+        setWaitingForReply(true)
+      }
+    }
+  }, [chatMessages.length, user?.uid])
+
+  // Generate AI suggestions when other user replies (intelligent flow)
+  useEffect(() => {
+    if (chatMessages.length > 0) {
+      const lastMessage = chatMessages[chatMessages.length - 1]
+      const isOtherUserReply = lastMessage.senderId !== user?.uid
+      
+      console.log('🤖 Dashboard Intelligent AI Flow Analysis:', { 
+        messageCount: chatMessages.length,
+        requestStatus, 
+        userRole, 
+        listingName, 
+        currentStage: transactionStage,
+        detectedLanguage: detectedLanguage,
+        waitingForReply,
+        lastMessageSenderId: lastMessage.senderId,
+        isOtherUserReply,
+        shouldTrigger: requestStatus === 'approved' && userRole && listingName && isOtherUserReply
+      })
+      
+      // Track last message sender
+      setLastMessageSenderId(lastMessage.senderId)
+      
+      // Always trigger AI analysis when other user replies (no waiting check needed)
+      if (requestStatus === 'approved' && userRole && listingName && isOtherUserReply) {
+        console.log('🚀 Dashboard: Other user replied - analyzing transaction flow...')
+        generateAISuggestions()
+      }
+    }
+  }, [chatMessages.length, requestStatus, userRole, listingName]) // Remove waitingForReply dependency
   const [showMenuDropdown, setShowMenuDropdown] = useState(false)
   const [activeMenuItem, setActiveMenuItem] = useState('home')
   const [showMessageMenu, setShowMessageMenu] = useState(null)
@@ -1172,6 +1639,10 @@ export default function Dashboard() {
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedChat || !user || !db) return
     
+    // Close AI suggestions and wait for other user's reply
+    setShowSuggestions(false)
+    setWaitingForReply(true)
+    
     // Check if there's an approved request - both users must wait for approval
     const hasApprovedRequest = chatMessages.some(msg => 
       msg.isListingRequest && msg.requestStatus === 'approved'
@@ -1183,28 +1654,39 @@ export default function Dashboard() {
     }
     
     try {
-      const chatId = selectedChat.id
       const messageData = {
-        text: newMessage.trim(),
         senderId: user.uid,
-        senderName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
-        createdAt: serverTimestamp(),
+        senderName: `${user.firstName} ${user.lastName}`,
+        text: newMessage.trim(),
+        createdAt: new Date(),
         read: false
       }
       
-      // Add message to chat
-      await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
-      
-      // Update chat's last message
-      await updateDoc(doc(db, 'chats', chatId), {
-        lastMessage: newMessage.trim(),
-        lastMessageTime: serverTimestamp(),
-        lastMessageSenderId: user.uid
-      })
-      
+      await addDoc(collection(db, 'chats', selectedChat.id, 'messages'), messageData)
       setNewMessage('')
+      console.log('Message sent successfully')
     } catch (error) {
       console.error('Error sending message:', error)
+    }
+  }
+
+  // Send message with pre-formatted text (for summary confirmation)
+  const sendMessageWithText = async (messageText) => {
+    if (!messageText.trim() || !selectedChat || !user || !db) return
+    
+    try {
+      const messageData = {
+        senderId: user.uid,
+        senderName: `${user.firstName} ${user.lastName}`,
+        text: messageText.trim(),
+        createdAt: new Date(),
+        read: false
+      }
+      
+      await addDoc(collection(db, 'chats', selectedChat.id, 'messages'), messageData)
+      console.log('Summary confirmation message sent successfully')
+    } catch (error) {
+      console.error('Error sending summary confirmation message:', error)
     }
   }
 
@@ -1277,6 +1759,8 @@ export default function Dashboard() {
     setSelectedChat(null)
     setChatMessages([])
     setNewMessage('')
+    setAiSuggestions([])
+    setShowSuggestions(false)
   }
 
   // Mark conversation as read
@@ -3240,6 +3724,100 @@ export default function Dashboard() {
                     ))}
                   </div>
                   
+                  {/* AI Suggestions */}
+                  {showSuggestions && aiSuggestions.length > 0 && requestStatus === 'approved' && (
+                    <div className={aiStyles.aiSuggestionsContainer}>
+                      <div className={aiStyles.aiSuggestionsHeader}>
+                        <span>💬 AI Suggestions</span>
+                        <button 
+                          className={aiStyles.closeSuggestionsBtn}
+                          onClick={() => setShowSuggestions(false)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className={aiStyles.aiSuggestionsList}>
+                        {aiSuggestions.map((suggestion, index) => (
+                          <button
+                            key={index}
+                            className={aiStyles.suggestionBtn}
+                            onClick={() => useSuggestion(suggestion)}
+                            title="Click to auto-send this suggestion"
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Transaction Summary Component */}
+                  {showSummary && transactionSummary && (
+                    <div className={aiStyles.transactionSummaryContainer}>
+                      <div className={aiStyles.summaryHeader}>
+                        <span>📋 Transaction Summary</span>
+                        <button 
+                          className={aiStyles.closeSummaryBtn}
+                          onClick={() => setShowSummary(false)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className={aiStyles.summaryContent}>
+                        <div className={aiStyles.summaryItem}>
+                          <strong>Name:</strong> {transactionSummary.name}
+                        </div>
+                        <div className={aiStyles.summaryItem}>
+                          <strong>Price:</strong> {transactionSummary.price}
+                        </div>
+                        <div className={aiStyles.summaryItem}>
+                          <strong>Mode of Payment:</strong> {transactionSummary.paymentMethod}
+                        </div>
+                        <div className={aiStyles.summaryItem}>
+                          <strong>Location:</strong> 
+                          {transactionSummary.needsLocationInput ? (
+                            <input
+                              type="text"
+                              className={aiStyles.locationInput}
+                              placeholder={userRole === 'livestock_owner' ? 'Enter pickup location' : 'Enter delivery location'}
+                              value={transactionSummary.location || ''}
+                              onChange={(e) => setTransactionSummary({
+                                ...transactionSummary,
+                                location: e.target.value
+                              })}
+                            />
+                          ) : (
+                            transactionSummary.location
+                          )}
+                        </div>
+                      </div>
+                      <div className={aiStyles.summaryActions}>
+                        <button
+                          className={aiStyles.copySummaryBtn}
+                          onClick={() => {
+                            const summaryText = `Name: ${transactionSummary.name}\nPrice: ${transactionSummary.price}\nMode of Payment: ${transactionSummary.paymentMethod}\nLocation: ${transactionSummary.location || 'To be filled'}`
+                            navigator.clipboard.writeText(summaryText)
+                            alert('Summary copied to clipboard!')
+                          }}
+                        >
+                          📋 Copy Summary
+                        </button>
+                        <button
+                          className={aiStyles.confirmSummaryBtn}
+                          onClick={() => {
+                            // Send confirmation message and proceed to final step
+                            const confirmationMessage = `Transaction confirmed! Summary:\nName: ${transactionSummary.name}\nPrice: ${transactionSummary.price}\nPayment: ${transactionSummary.paymentMethod}\nLocation: ${transactionSummary.location || 'To be filled'}`
+                            sendMessageWithText(confirmationMessage)
+                            setShowSummary(false)
+                            setTransactionStage('agreement_confirmed')
+                          }}
+                        >
+                          ✅ Confirm & Complete
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div 
                     className={styles.chatInputContainer}
                     onWheel={(e) => e.stopPropagation()}
@@ -4687,6 +5265,44 @@ export default function Dashboard() {
               {switchingRoleStep === 2 && 'Loading Chats...'}
               {switchingRoleStep === 3 && 'Loading Profile...'}
             </p>
+          </div>
+        </div>
+      )}
+      
+      {/* Transaction Completion Confirmation Modal */}
+      {showTransactionCompleteModal && (
+        <div className={styles.transactionCompleteModalOverlay}>
+          <div className={styles.transactionCompleteModal}>
+            <div className={styles.transactionCompleteHeader}>
+              <h3>🎉 Transaction Complete!</h3>
+              <button 
+                className={styles.closeModalBtn}
+                onClick={() => setShowTransactionCompleteModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className={styles.transactionCompleteContent}>
+              <p>Great! Your transaction has been successfully completed.</p>
+              <p><strong>Done transaction?</strong></p>
+              
+              <div className={styles.transactionCompleteActions}>
+                <button 
+                  className={styles.transactionCompleteBtnNo}
+                  onClick={() => handleTransactionComplete(false)}
+                >
+                  No - Continue Discussion
+                </button>
+                
+                <button 
+                  className={styles.transactionCompleteBtnYes}
+                  onClick={() => handleTransactionComplete(true)}
+                >
+                  Yes - Transaction Complete
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

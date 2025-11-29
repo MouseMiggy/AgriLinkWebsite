@@ -2756,6 +2756,13 @@ app.post("/verify-otp", async (req, res) => {
   }
 });
 
+// Import AI chat monitoring functions
+const scheduledChatMonitor = require('./scheduledChatMonitor');
+
+// Export AI chat monitoring functions
+exports.runChatMonitoring = scheduledChatMonitor.runChatMonitoring;
+exports.triggerChatMonitoring = scheduledChatMonitor.triggerChatMonitoring;
+
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('Global error handler:', err);

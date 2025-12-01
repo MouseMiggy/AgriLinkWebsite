@@ -150,7 +150,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       
       // Create AbortController for timeout
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 90000) // 90 second timeout for Render cold starts
       
       const response = await fetch(aiValidationUrl, {
         method: 'POST',
@@ -195,7 +195,11 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       }
     } catch (error) {
       console.error('❌ AI validation error:', error)
-      showErrorPopup('Validation Error', `Failed to validate image: ${error.message}. You can still create your listing without AI verification.`)
+      if (error.name === 'AbortError') {
+        showErrorPopup('Validation Timeout', 'The AI service is taking longer than expected to respond. This is normal on first use. Please try again in a moment.')
+      } else {
+        showErrorPopup('Validation Error', `Failed to validate image: ${error.message}. You can still create your listing without AI verification.`)
+      }
       return null
     } finally {
       setIsImageValidating(false)

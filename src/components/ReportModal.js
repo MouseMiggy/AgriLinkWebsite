@@ -133,9 +133,6 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
       // Call AI validation backend asynchronously (don't wait for it)
       console.log('🔄 Calling AI validation backend:', backendUrl)
       
-      // All reports use the same /validate-report endpoint (including listings)
-      const endpoint = '/validate-report'
-      
       // Prepare caption based on content type
       let caption = ''
       if (contentType === 'listing') {
@@ -171,7 +168,7 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
         imageUrlsCount: requestBody.imageUrls?.length || 0
       })
 
-      fetch(`${backendUrl}${endpoint}`, {
+      fetch(backendUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -7,6 +7,7 @@ import ListingHistory from './listing-history'
 import Reports from './reports'
 import UserProfile from './user-profile'
 import ReportModal from '../components/ReportModal'
+import Chat from './chat'
 
 import { usePostHandlers } from '../components/PostHandlers'
 
@@ -52,7 +53,6 @@ export default function Dashboard() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [postToDelete, setPostToDelete] = useState(null)
   const [showDropdown, setShowDropdown] = useState(null)
-  const [conversations, setConversations] = useState([])
   const [imageFiles, setImageFiles] = useState([])
   const [imagePreviews, setImagePreviews] = useState([])
   const [currentImageIndex, setCurrentImageIndex] = useState({})
@@ -66,523 +66,18 @@ export default function Dashboard() {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotifications, setShowNotifications] = useState(false)
-  const [showChat, setShowChat] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [editingComment, setEditingComment] = useState(null)
   const [editCommentText, setEditCommentText] = useState('')
   const [showCommentMenu, setShowCommentMenu] = useState(null)
   const [previousUnreadCount, setPreviousUnreadCount] = useState(0)
-  const [unreadChats, setUnreadChats] = useState(0)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
-  const [replyTextMap, setReplyTextMap] = useState({})
-  const [showReplyInput, setShowReplyInput] = useState({})
-  const [selectedChat, setSelectedChat] = useState(null)
-  const [chatMessages, setChatMessages] = useState([])
-  const [newMessage, setNewMessage] = useState('')
-  const [aiSuggestions, setAiSuggestions] = useState([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [requestStatus, setRequestStatus] = useState(null)
-  const [listingName, setListingName] = useState(null)
-  const [isSendingSuggestion, setIsSendingSuggestion] = useState(false)
-  const [transactionStage, setTransactionStage] = useState('1')
-  const [detectedLanguage, setDetectedLanguage] = useState('english')
-  const [waitingForReply, setWaitingForReply] = useState(false)
-  const [lastMessageSenderId, setLastMessageSenderId] = useState(null)
-  const [transactionSummary, setTransactionSummary] = useState(null)
-  const [showSummary, setShowSummary] = useState(false)
+  const [unreadChats, setUnreadChats] = useState(0) // Keep for navigation badge
   
-  // Chat-specific transaction states to prevent conflicts
-  const [chatTransactionStates, setChatTransactionStates] = useState({})
-  
-  // Transaction completion confirmation modal
-  const [showTransactionCompleteModal, setShowTransactionCompleteModal] = useState(false)
-  const [transactionCompleteChatId, setTransactionCompleteChatId] = useState(null)
-  const [transactionListingId, setTransactionListingId] = useState(null)
-  
-  // Trigger AI suggestions when new message arrives
-  const triggerAISuggestions = async (messages) => {
-    if (!user || !selectedChat || messages.length === 0) return;
-    
-    try {
-      console.log('🤖 Triggering AI suggestions for new message...');
-      console.log('📊 Messages being sent to AI:', messages.map(m => ({ text: m.text, sender: m.senderId === user.uid ? 'You' : 'Other' })));
-      
-      setIsSendingSuggestion(true);
-      
-      // Get current chat state or use defaults (stage '1' for new conversations)
-      const currentChatState = chatTransactionStates[selectedChat.chatId] || {
-        stage: '1',
-        language: 'english'
-      };
-      
-      console.log('🎯 Current chat state:', currentChatState);
-      
-      // Prepare conversation data for AI
-      const conversationData = {
-        userId: user.uid,
-        userRole: userRole,
-        listingName: selectedChat.listingName || 'product',
-        messages: messages.map(msg => ({
-          text: msg.text,
-          senderName: msg.senderId === user.uid ? 'You' : selectedChat.otherUserName,
-          timestamp: msg.createdAt,
-          isOwnMessage: msg.senderId === user?.uid
-        })),
-        currentStage: currentChatState.stage,
-        detectedLanguage: currentChatState.language
-      };
-      
-      console.log('📤 Sending to AI:', {
-        stage: conversationData.currentStage,
-        messageCount: conversationData.messages.length,
-        userRole: conversationData.userRole
-      });
-      
-      // Call AI service to get suggestions
-      const result = await AIChatService.generateContextualSuggestions(conversationData);
-      
-      console.log('📥 AI Response:', {
-        stage: result.stage,
-        suggestions: result.suggestions,
-        language: result.language
-      });
-      
-      if (result.success && result.suggestions.length > 0) {
-        console.log('✅ AI suggestions generated:', result.suggestions);
-        setAiSuggestions(result.suggestions);
-        setShowSuggestions(true);
-        
-        // Update chat transaction state
-        setChatTransactionStates(prev => ({
-          ...prev,
-          [selectedChat.chatId]: {
-            stage: result.stage || currentChatState.stage,
-            language: result.language || currentChatState.language
-          }
-        }));
-      }
-    } catch (error) {
-      console.error('❌ Error triggering AI suggestions:', error);
-    } finally {
-      setIsSendingSuggestion(false);
-    }
-  };
-
-  // Extract listing ID from chat messages for transaction completion
-  const extractListingIdFromChat = () => {
-    // Find the listing request message to get listing ID
-    const listingRequestMessage = chatMessages.find(msg => msg.isListingRequest)
-    if (listingRequestMessage && listingRequestMessage.listingId) {
-      return listingRequestMessage.listingId
-    }
-    
-    // Fallback: try to extract from conversation data
-    if (listingName) {
-      // For now, return null - in production, you might have a mapping
-      return null
-    }
-    
-    return null
-  }
-
-  // Handle transaction completion confirmation
-  const handleTransactionComplete = async (isComplete) => {
-    console.log('🎯 Transaction completion response:', isComplete)
-    
-    if (isComplete) {
-      // User confirmed transaction is complete
-      console.log('✅ Transaction confirmed complete by user')
-      
-      // If listing owner and we have listing ID, update listing status to sold
-      if (userRole === 'livestock_owner' && transactionListingId) {
-        try {
-          await updateListingStatusToSold(transactionListingId)
-          console.log('🏷️ Listing status updated to sold')
-        } catch (error) {
-          console.error('❌ Error updating listing status:', error)
-        }
-      }
-      
-      // Close modal and mark transaction as completed
-      setShowTransactionCompleteModal(false)
-      setTransactionCompleteChatId(null)
-      setTransactionListingId(null)
-      
-      // Update chat state to show transaction is completed
-      if (transactionCompleteChatId) {
-        setChatTransactionStates(prev => ({
-          ...prev,
-          [transactionCompleteChatId]: {
-            ...prev[transactionCompleteChatId],
-            completed: true,
-            completedAt: new Date().toISOString()
-          }
-        }))
-      }
-      
-    } else {
-      // User said transaction is not complete - continue the conversation
-      console.log('🔄 Transaction not complete, continuing conversation')
-      
-      // Reset stage to allow continued discussion
-      if (transactionCompleteChatId) {
-        setChatTransactionStates(prev => ({
-          ...prev,
-          [transactionCompleteChatId]: {
-            ...prev[transactionCompleteChatId],
-            stage: 'transportation_discussed' // Go back to location discussion
-          }
-        }))
-      }
-      
-      // Close modal but allow continued conversation
-      setShowTransactionCompleteModal(false)
-      setTransactionCompleteChatId(null)
-      setTransactionListingId(null)
-      
-      // Generate new suggestions for continued discussion
-      generateAISuggestions()
-    }
-  }
-
-  // Update listing status to sold in Firestore
-  const updateListingStatusToSold = async (listingId) => {
-    if (!db || !listingId) return
-    
-    try {
-      const listingRef = doc(db, 'livestock_listings', listingId)
-      await updateDoc(listingRef, {
-        status: 'sold',
-        soldAt: serverTimestamp(),
-        soldTo: selectedChat?.participantId || null
-      })
-      
-      console.log('✅ Listing marked as sold:', listingId)
-      
-    } catch (error) {
-      console.error('❌ Error updating listing status:', error)
-      throw error
-    }
-  }
-  const generateAISuggestions = async () => {
-    try {
-      console.log('🤖 Dashboard: Calling real AI backend for suggestions...')
-      
-      // Get chat-specific transaction state
-      const chatId = selectedChat?.id
-      console.log('🔍 DEBUG: Chat-Specific State Analysis')
-      console.log('💬 Current chatId:', chatId)
-      console.log('📊 All chatTransactionStates:', chatTransactionStates)
-      console.log('🎯 Current chat state:', chatTransactionStates[chatId])
-      
-      const currentChatState = chatTransactionStates[chatId] || {
-        stage: 'initial',
-        language: 'english'
-      }
-      
-      console.log('📍 Using stage:', currentChatState.stage)
-      console.log('🌐 Using language:', currentChatState.language)
-      console.log('=' * 60)
-      
-      // DEBUG: Verify userRole value before sending
-      console.log('🔍 DEBUG: FRONTEND ROLE VERIFICATION')
-      console.log('📋 userRole being sent:', userRole)
-      console.log('📋 userRole type:', typeof userRole)
-      console.log('📋 userRole length:', userRole?.length || 0)
-      console.log('📋 Expected: "crop_farmer" or "livestock_owner"')
-      console.log('📋 Is crop_farmer?', userRole === 'crop_farmer')
-      console.log('📋 Is livestock_owner?', userRole === 'livestock_owner')
-      console.log('💬 Chat ID:', chatId)
-      console.log('📍 Chat-specific stage:', currentChatState.stage)
-      console.log('=' * 50)
-      
-      // Prepare structured conversation data for AI analysis
-      const conversationData = {
-        userRole,
-        listingName,
-        messages: chatMessages.map(msg => ({
-          senderId: msg.senderId,
-          senderName: msg.senderName,
-          text: msg.text,
-          timestamp: msg.createdAt,
-          isOwnMessage: msg.senderId === user?.uid
-        })),
-        currentStage: currentChatState.stage,  // Use chat-specific stage
-        detectedLanguage: currentChatState.language,  // Use chat-specific language
-        requestForSummary: currentChatState.stage === 'transportation_discussed' // Request summary in final stage
-      }
-      
-      console.log('📊 Dashboard: Sending conversation data to AI backend:', conversationData)
-      
-      // Call AI backend - this is the ONLY source of suggestions
-      const result = await AIChatService.generateContextualSuggestions(conversationData)
-      
-      console.log('📋 Dashboard: AI Backend Response:', result)
-      
-      if (result.success) {
-        console.log('✅ Dashboard: Transaction stage updated to:', result.stage)
-        console.log('✅ Dashboard: Language detected as:', result.language)
-        console.log('✅ Dashboard: AI suggestions received:', result.suggestions)
-        
-        // Update chat-specific transaction state from AI response
-        const updatedChatState = {
-          stage: result.stage || 'initial',
-          language: result.language || 'english',
-          summary: result.summary || null
-        }
-        
-        console.log('🔍 DEBUG: Stage Update Analysis')
-        console.log('💬 Updating chatId:', chatId)
-        console.log('📊 Previous state:', chatTransactionStates[chatId])
-        console.log('🆕 New state:', updatedChatState)
-        console.log('📈 Stage progression:', chatTransactionStates[chatId]?.stage, '→', updatedChatState.stage)
-        
-        setChatTransactionStates(prev => {
-          const newState = {
-            ...prev,
-            [chatId]: updatedChatState
-          }
-          console.log('✅ Updated all chatTransactionStates:', newState)
-          return newState
-        })
-        
-        // REMOVED: Global states that interfere with chat-specific management
-        // setTransactionStage(result.stage || 'initial')
-        // setDetectedLanguage(result.language || 'english')
-        
-        // Check if transaction is complete and show confirmation modal
-        if (result.stage === 'agreement_confirmed' && userRole === 'livestock_owner') {
-          console.log('🎉 Transaction complete! Showing confirmation modal for listing owner')
-          
-          // Extract listing ID from chat messages or conversation data
-          const listingId = extractListingIdFromChat()
-          
-          setTransactionCompleteChatId(chatId)
-          setTransactionListingId(listingId)
-          setShowTransactionCompleteModal(true)
-        }
-        
-        // Check if AI returned a transaction summary
-        if (result.summary) {
-          console.log('📋 Dashboard: Transaction summary generated by AI')
-          setTransactionSummary(result.summary)
-          setShowSummary(true)
-        }
-        
-        // Set AI suggestions from backend ONLY
-        setAiSuggestions(result.suggestions || [])
-        setShowSuggestions(true)
-        setWaitingForReply(false)
-      } else {
-        console.error('❌ Dashboard: AI backend failed:', result.error)
-        // No fallback - suggestions remain hidden until AI backend works
-        setAiSuggestions([])
-        setShowSuggestions(false)
-        setWaitingForReply(false)
-      }
-    } catch (error) {
-      console.error('❌ Dashboard: Error calling AI backend:', error)
-      // No fallback - suggestions remain hidden until AI backend works
-      setAiSuggestions([])
-      setShowSuggestions(false)
-      setWaitingForReply(false)
-    }
-  }
-
-  // Intelligent message analysis for contextual AI suggestions
-  const analyzeLastMessageAndGenerateSuggestions = (messages, userRole, currentStage) => {
-    if (messages.length === 0) return []
-    
-    // Get the last message from the OTHER user (not current user)
-    const lastMessage = messages[messages.length - 1]
-    if (lastMessage.senderId === user?.uid) return [] // Don't analyze own messages
-    
-    const messageText = lastMessage.text.toLowerCase()
-    console.log('🧠 Dashboard: Analyzing message for intelligent suggestions:', messageText)
-    
-    // Detect language from the message
-    const detectedLanguage = detectLanguage(messageText)
-    console.log('🌐 Dashboard: Detected language:', detectedLanguage)
-    setDetectedLanguage(detectedLanguage)
-    
-    // Detect question type and generate contextual suggestions
-    const suggestions = generateContextualSuggestionsForMessage(messageText, userRole, currentStage, detectedLanguage)
-    
-    // Determine next transaction stage based on conversation context
-    const nextStage = determineNextTransactionStage(messageText, currentStage, userRole)
-    if (nextStage !== currentStage) {
-      console.log('📈 Dashboard: Advancing transaction stage from', currentStage, 'to', nextStage)
-      setTransactionStage(nextStage)
-    }
-    
-    return suggestions
-  }
-
-  // Detect language from message text
-  const detectLanguage = (text) => {
-    const tagalogKeywords = ['magkano', 'tagpila', 'presyo', 'bayad', 'pila', 'meron', 'ilang', 'salamat', 'po', 'opa', 'ba', 'pa']
-    const cebuanoKeywords = ['tagpila', 'pila', 'presyo', 'bayad', 'naay', 'pila ka', 'salamat', 'diay', 'ba', 'pa']
-    
-    const tagalogCount = tagalogKeywords.filter(keyword => text.includes(keyword)).length
-    const cebuanoCount = cebuanoKeywords.filter(keyword => text.includes(keyword)).length
-    
-    if (tagalogCount > cebuanoCount && tagalogCount > 0) {
-      return 'tagalog'
-    } else if (cebuanoCount > tagalogCount && cebuanoCount > 0) {
-      return 'cebuano'
-    } else {
-      return 'english'
-    }
-  }
-
- 
-
-  // Use AI suggestion in popup chat - Intelligent flow with reply waiting
-  const useSuggestion = async (suggestion) => {
-    // Prevent multiple rapid clicks
-    if (isSendingSuggestion) {
-      console.log('🚫 Already sending suggestion, ignoring click')
-      return
-    }
-
-    setIsSendingSuggestion(true)
-    
-    try {
-      // Clear suggestions immediately when user sends a message
-      setAiSuggestions([])
-      setShowSuggestions(false)
-      
-      // Send the suggestion as a message
-      await sendMessage(suggestion)
-      
-      console.log('✅ AI suggestion sent successfully:', suggestion)
-      
-    } catch (error) {
-      console.error('❌ Error sending AI suggestion:', error)
-      setIsSendingSuggestion(false)
-      setWaitingForReply(false)
-    }
-  }
-
-  // Extract request status and listing name from chat messages
-  useEffect(() => {
-    if (!chatMessages.length) {
-      setRequestStatus(null)
-      setListingName(null)
-      return
-    }
-
-    // Find the listing request message
-    const listingRequestMessage = chatMessages.find(msg => msg.isListingRequest)
-    if (listingRequestMessage) {
-      const newStatus = listingRequestMessage.requestStatus || 'pending'
-      setRequestStatus(newStatus)
-      setListingName(listingRequestMessage.listingTitle || listingRequestMessage.listingName || null)
-      
-      // Start waiting for reply when request is approved to trigger initial AI suggestions
-      if (newStatus === 'approved') {
-        console.log('🚀 Dashboard: Request approved - resetting stage for THIS chat only')
-        
-        // CRITICAL FIX: Reset stage ONLY for the current chat, not all chats
-        const currentChatId = selectedChat?.id
-        if (currentChatId) {
-          setChatTransactionStates(prev => ({
-            ...prev,
-            [currentChatId]: {
-              stage: 'initial',
-              language: 'english',
-              summary: null
-            }
-          }))
-          
-          console.log('✅ Reset stage for chat', currentChatId, 'to initial')
-        }
-        
-        // Update global states for backward compatibility ONLY
-        setTransactionStage('initial')
-        setDetectedLanguage('english')
-        setShowSummary(false)
-        setTransactionSummary(null)
-        
-        setWaitingForReply(true)
-      }
-    }
-  }, [chatMessages, selectedChat?.id])
-
-  // Auto-generate AI suggestions when other user replies
-  useEffect(() => {
-    if (requestStatus === 'approved' && userRole && listingName && chatMessages.length > 0) {
-      // Get the last message
-      const lastMessage = chatMessages[chatMessages.length - 1]
-      
-      // Check if the last message is from the OTHER user (not current user)
-      if (lastMessage && lastMessage.senderId !== user?.uid) {
-        console.log('📨 New message received from other user - generating AI suggestions...')
-        console.log('📊 Last message:', {
-          senderId: lastMessage.senderId,
-          senderName: lastMessage.senderName,
-          text: lastMessage.text?.substring(0, 50) + '...'
-        })
-        
-        // Set waiting state and generate AI suggestions
-        setWaitingForReply(true)
-        setLastMessageSenderId(lastMessage.senderId)
-        
-        // Call AI to analyze the reply and generate suggestions
-        generateAISuggestions()
-      }
-    }
-  }, [chatMessages.length, requestStatus, userRole, listingName, user?.uid])
-
-  // Close AI suggestions when current user sends a message or clicks suggestion
-  useEffect(() => {
-    if (chatMessages.length > 0) {
-      const lastMessage = chatMessages[chatMessages.length - 1]
-      
-      // If last message is from current user, close suggestions and wait for reply
-      if (lastMessage && lastMessage.senderId === user?.uid) {
-        console.log('📤 Current user sent message - closing AI suggestions')
-        setShowSuggestions(false)
-        setWaitingForReply(true)
-      }
-    }
-  }, [chatMessages.length, user?.uid])
-
-  // Generate AI suggestions when other user replies (intelligent flow)
-  useEffect(() => {
-    if (chatMessages.length > 0) {
-      const lastMessage = chatMessages[chatMessages.length - 1]
-      const isOtherUserReply = lastMessage.senderId !== user?.uid
-      
-      console.log('🤖 Dashboard Intelligent AI Flow Analysis:', { 
-        messageCount: chatMessages.length,
-        requestStatus, 
-        userRole, 
-        listingName, 
-        currentStage: transactionStage,
-        detectedLanguage: detectedLanguage,
-        waitingForReply,
-        lastMessageSenderId: lastMessage.senderId,
-        isOtherUserReply,
-        shouldTrigger: requestStatus === 'approved' && userRole && listingName && isOtherUserReply
-      })
-      
-      // Track last message sender
-      setLastMessageSenderId(lastMessage.senderId)
-      
-      // Always trigger AI analysis when other user replies (no waiting check needed)
-      if (requestStatus === 'approved' && userRole && listingName && isOtherUserReply) {
-        console.log('🚀 Dashboard: Other user replied - analyzing transaction flow...')
-        generateAISuggestions()
-      }
-    }
-  }, [chatMessages.length, requestStatus, userRole, listingName]) // Remove waitingForReply dependency
+  // Essential state variables
   const [showMenuDropdown, setShowMenuDropdown] = useState(false)
   const [activeMenuItem, setActiveMenuItem] = useState('home')
-  const [showMessageMenu, setShowMessageMenu] = useState(null)
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 })
-  const [menuButtonRef, setMenuButtonRef] = useState(null)
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportType, setReportType] = useState('')
   const [reportDescription, setReportDescription] = useState('')
@@ -606,6 +101,8 @@ export default function Dashboard() {
   const dropdownRef = useRef(null)
   const markAsReadTimeoutRef = useRef(null)
   const router = useRouter()
+  
+  // Transaction completion confirmation modal
 
   // Use post handlers hook
   const { handleLikePost, handleAddComment: addComment, handleAddReply: addReply, formatTimeAgo } = usePostHandlers(user)
@@ -643,7 +140,7 @@ export default function Dashboard() {
 
   // Control body scroll based on active menu item
   useEffect(() => {
-    if (activeMenuItem === 'listings' || activeMenuItem === 'listing-history' || activeMenuItem === 'reports' || activeMenuItem === 'profile') {
+    if (activeMenuItem === 'listings' || activeMenuItem === 'listing-history' || activeMenuItem === 'reports' || activeMenuItem === 'profile' || activeMenuItem === 'chat' || activeMenuItem === 'transactions') {
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = 'auto'
@@ -951,12 +448,7 @@ export default function Dashboard() {
           setShowNotifications(false)
           document.body.style.overflow = 'auto'
         }
-        if (showChat) {
-          setShowChat(false)
-          setSelectedChat(null)
-          setChatMessages([])
-        }
-        if (showProfileMenu) {
+                if (showProfileMenu) {
           setShowProfileMenu(false)
         }
         if (showMobileSearch) {
@@ -972,9 +464,6 @@ export default function Dashboard() {
         if (showMenuDropdown) {
           setShowMenuDropdown(false)
         }
-        if (showMessageMenu) {
-          setShowMessageMenu(null)
-        }
         if (showEditModal) {
           closeEditModal()
         }
@@ -982,24 +471,18 @@ export default function Dashboard() {
     }
 
     const handleClickOutside = (event) => {
-      // Check if click is inside chat popup or messages button
-      const isInsideChatPopup = event.target.closest(`.${styles.chatPopup}`)
-      const isInsideMessagesButton = event.target.closest(`.${styles.messagesButton}`)
-      const isInsideFloatingMessages = event.target.closest(`.${styles.floatingMessages}`)
+      // Check if click is inside notifications dropdown or button
+      const isInsideNotifications = event.target.closest(`.${styles.notificationsDropdown}`)
+      const isInsideNotificationsButton = event.target.closest(`.${styles.notificationsButton}`)
       
       // Close dropdowns when clicking outside
-      if (!isInsideChatPopup && !isInsideMessagesButton && !isInsideFloatingMessages && !event.target.closest('.dropdown-container') && !event.target.closest('.menu-dropdown-container')) {
+      if (!isInsideNotifications && !isInsideNotificationsButton && !event.target.closest('.dropdown-container') && !event.target.closest('.menu-dropdown-container')) {
         setShowDropdown(null)
         if (showNotifications) {
           setShowNotifications(false)
           document.body.style.overflow = 'auto'
         }
-        if (showChat) {
-          setShowChat(false)
-          setSelectedChat(null)
-          setChatMessages([])
-        }
-        setShowProfileMenu(false)
+                setShowProfileMenu(false)
         setShowMobileSearch(false)
         setShowMenuDropdown(false)
       }
@@ -1007,61 +490,16 @@ export default function Dashboard() {
       if (!event.target.closest('.comment-menu-container')) {
         setShowCommentMenu(null)
       }
-      // Close message menu when clicking outside
-      const isInsideMessageButton = event.target.closest('.message-menu-container')
-      const isInsideDropdown = dropdownRef.current?.contains(event.target) || 
-                              event.target.closest('[data-dropdown="message-menu"]')
-      
-      if (showMessageMenu && !isInsideMessageButton && !isInsideDropdown) {
-        setShowMessageMenu(null)
-        setMenuButtonRef(null)
-        // Re-enable scrolling when dropdown closes
-        document.body.style.overflow = 'auto'
-        const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
-        if (chatMessagesContainer) {
-          chatMessagesContainer.style.overflow = 'auto'
-        }
-      }
-    }
-
-    // Function to update dropdown position on scroll
-    const updateDropdownPosition = () => {
-      if (menuButtonRef && showMessageMenu) {
-        const rect = menuButtonRef.getBoundingClientRect()
-        const chatPopup = document.querySelector(`.${styles.chatPopup}`)
-        const chatPopupRect = chatPopup?.getBoundingClientRect()
-        
-        if (chatPopupRect) {
-          // Position relative to chat popup
-          setDropdownPosition({
-            top: rect.top - chatPopupRect.top,
-            left: rect.right - chatPopupRect.left + 8
-          })
-        } else {
-          // Fallback to viewport positioning
-          setDropdownPosition({
-            top: rect.top,
-            left: rect.right + 8
-          })
-        }
-      }
-    }
-
-    // Add scroll listener to update dropdown position
-    const handleScroll = () => {
-      updateDropdownPosition()
     }
 
     document.addEventListener('keydown', handleEscKey)
     document.addEventListener('click', handleClickOutside)
-    document.addEventListener('scroll', handleScroll, true)
 
     return () => {
       document.removeEventListener('keydown', handleEscKey)
       document.removeEventListener('click', handleClickOutside)
-      document.removeEventListener('scroll', handleScroll, true)
     }
-  }, [showCommentModal, showDropdown, showNotifications, showChat, showProfileMenu, showMobileSearch, showCommentMenu, editingComment, showMenuDropdown, showMessageMenu, menuButtonRef, showEditModal])
+  }, [showCommentModal, showDropdown, showNotifications, showProfileMenu, showMobileSearch, showCommentMenu, editingComment, showMenuDropdown, showEditModal])
 
   // Update selectedPost when posts change (for real-time comments)
   useEffect(() => {
@@ -1072,55 +510,6 @@ export default function Dashboard() {
       }
     }
   }, [posts, selectedPost])
-
-  // Cleanup scrolling when dropdown closes or component unmounts
-  useEffect(() => {
-    if (!showMessageMenu) {
-      document.body.style.overflow = 'auto'
-      const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
-      if (chatMessagesContainer) {
-        chatMessagesContainer.style.overflow = 'auto'
-      }
-    }
-    return () => {
-      document.body.style.overflow = 'auto'
-      const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
-      if (chatMessagesContainer) {
-        chatMessagesContainer.style.overflow = 'auto'
-      }
-    }
-  }, [showMessageMenu])
-
-  // Dedicated click-outside handler for message menu dropdown
-  useEffect(() => {
-    if (!showMessageMenu) return
-
-    const handleMessageMenuClickOutside = (event) => {
-      const isInsideButton = event.target.closest('.message-menu-container')
-      const isInsideDropdown = dropdownRef.current?.contains(event.target) || 
-                              event.target.closest('[data-dropdown="message-menu"]')
-      
-      if (!isInsideButton && !isInsideDropdown) {
-        setShowMessageMenu(null)
-        setMenuButtonRef(null)
-        document.body.style.overflow = 'auto'
-        const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
-        if (chatMessagesContainer) {
-          chatMessagesContainer.style.overflow = 'auto'
-        }
-      }
-    }
-
-    // Add event listener with a slight delay to avoid immediate closure
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('click', handleMessageMenuClickOutside, true)
-    }, 100)
-
-    return () => {
-      clearTimeout(timeoutId)
-      document.removeEventListener('click', handleMessageMenuClickOutside, true)
-    }
-  }, [showMessageMenu])
 
   // Listen for auth state changes and real-time posts
   useEffect(() => {
@@ -1387,533 +776,7 @@ export default function Dashboard() {
     loadFeaturedListings()
   }, [user, userRole])
 
-  // Load conversations with real-time listener
-  useEffect(() => {
-    if (!auth || !db || !user || !userRole) return
-
-    const unsubscribe = loadConversations()
-    return () => {
-      if (unsubscribe) unsubscribe()
-    }
-  }, [user, userRole])
-
-  const loadConversations = () => {
-    if (!user || !db || !userRole) return
-
-    console.log('🔍 WEB CHAT: Loading conversations for user role:', userRole)
-
-    // Set up real-time listener for chats
-    const chatsQuery = query(
-      collection(db, 'chats'),
-      where('participants', 'array-contains', user.uid)
-    )
-    
-    const messageListeners = new Map() // Track message listeners to prevent duplicates
-    const conversationsMap = new Map() // Use Map to prevent duplicate conversations
-    
-    const unsubscribe = onSnapshot(chatsQuery, (chatsSnapshot) => {
-      console.log('🔄 WEB CHAT: Received chats snapshot with', chatsSnapshot.size, 'documents')
-      
-      // Process each chat
-      chatsSnapshot.docs.forEach(chatDoc => {
-        const chatId = chatDoc.id
-        const chatData = chatDoc.data()
-        
-        console.log('📋 WEB CHAT: Processing chat', chatId, {
-          chatType: chatData.chatType,
-          participantRoles: chatData.participantRoles,
-          currentUserRole: userRole
-        })
-        
-        // ROLE-BASED FILTERING (matching mobile app logic)
-        const currentUserRoleInChat = chatData.participantRoles?.[user.uid]
-        
-        // Skip if this chat doesn't have role information
-        if (!chatData.chatType || !chatData.participantRoles || !currentUserRoleInChat) {
-          console.log('⚠️ WEB CHAT: Skipping chat - missing role info', chatId)
-          return
-        }
-        
-        // Skip if current user's role in this chat doesn't match their current role
-        if (currentUserRoleInChat !== userRole) {
-          console.log('⚠️ WEB CHAT: Skipping chat - role mismatch', chatId, {
-            currentUserRoleInChat,
-            userRole
-          })
-          return
-        }
-        
-        // Additional filtering based on role
-        if (userRole === 'crop_farmer') {
-          // Crop farmers only see chats where they are the crop farmer initiator
-          if (chatData.chatType !== 'crop_farmer_to_livestock_owner' || 
-              chatData.initiatorRole !== 'crop_farmer' ||
-              !chatData.participants?.includes(user.uid)) {
-            return
-          }
-        } else if (userRole === 'livestock_owner') {
-          // Livestock owners only see chats where they are the livestock owner receiver
-          if (chatData.chatType !== 'crop_farmer_to_livestock_owner' || 
-              chatData.receiverRole !== 'livestock_owner' ||
-              !chatData.participants?.includes(user.uid)) {
-            console.log('⚠️ WEB CHAT: Livestock owner filtering out chat', chatId)
-            return
-          }
-          console.log('✅ WEB CHAT: Livestock owner accepting chat', chatId)
-        } else {
-          // If user has no defined role or unknown role, skip all role-based chats
-          return
-        }
-        
-        const otherUserId = chatData.participants?.find(id => id !== user.uid)
-        
-        if (otherUserId && chatData.participantNames) {
-          let otherUserName = chatData.participantNames[otherUserId] || 'User'
-          const otherUserEmail = chatData.participantEmails?.[otherUserId] || ''
-          const listingName = chatData.listingName || ''
-          
-          // Truncate name if > 15 characters, use first name only
-          if (otherUserName.length > 15) {
-            const firstName = otherUserName.split(' ')[0]
-            otherUserName = firstName.length > 15 ? firstName.substring(0, 15) + '...' : firstName
-          }
-          
-          // Create display name with listing
-          let displayName = otherUserName
-          if (listingName) {
-            const maxTotalLength = 35
-            const separator = ' • '
-            const availableForListing = maxTotalLength - otherUserName.length - separator.length
-            
-            let truncatedListing = listingName
-            if (truncatedListing.length > availableForListing) {
-              truncatedListing = truncatedListing.substring(0, availableForListing - 3) + '...'
-            }
-            
-            displayName = `${otherUserName}${separator}${truncatedListing}`
-          }
-          
-          // Clean up existing listener for this chat if it exists
-          if (messageListeners.has(chatId)) {
-            messageListeners.get(chatId)()
-            messageListeners.delete(chatId)
-          }
-          
-          // Initialize conversation in map first (prevents duplicates)
-          conversationsMap.set(chatId, {
-            id: chatId,
-            otherUserId,
-            otherUserName: displayName,
-            otherUserEmail,
-            listingName,
-            lastMessage: chatData.lastMessage || 'No messages yet',
-            lastMessageTime: chatData.lastMessageTime,
-            lastMessageSenderId: chatData.lastMessageSenderId,
-            unreadCount: 0,
-            isLastMessageFromOther: false
-          })
-          
-          // Set up real-time listener for messages in this chat
-          const messagesQuery = query(
-            collection(db, 'chats', chatId, 'messages'),
-            orderBy('createdAt', 'desc')
-          )
-          
-          const messageUnsubscribe = onSnapshot(messagesQuery, (messagesSnapshot) => {
-            let unreadCount = 0
-            let isLastMessageFromOther = false
-            let actualLastMessage = chatData.lastMessage || 'No messages yet'
-            let actualLastMessageTime = chatData.lastMessageTime
-            let actualLastMessageSenderId = chatData.lastMessageSenderId
-            
-            // Count unread messages from other user
-            messagesSnapshot.docs.forEach(msgDoc => {
-              const msgData = msgDoc.data()
-              if (msgData.senderId !== user.uid && !msgData.read) {
-                unreadCount++
-              }
-            })
-            
-            // Get actual last message
-            if (messagesSnapshot.docs.length > 0) {
-              const lastMsg = messagesSnapshot.docs[0].data()
-              isLastMessageFromOther = lastMsg.senderId !== user.uid
-              actualLastMessage = lastMsg.text
-              actualLastMessageTime = lastMsg.createdAt
-              actualLastMessageSenderId = lastMsg.senderId
-            }
-            
-            // Update conversation in map (this prevents duplicates)
-            conversationsMap.set(chatId, {
-              id: chatId,
-              otherUserId,
-              otherUserName,
-              otherUserEmail,
-              lastMessage: actualLastMessage,
-              lastMessageTime: actualLastMessageTime,
-              lastMessageSenderId: actualLastMessageSenderId,
-              unreadCount,
-              isLastMessageFromOther
-            })
-            
-            // Auto-open chat if there's a new message from someone else
-            if (isLastMessageFromOther && unreadCount > 0) {
-              setShowChat(true)
-              setSelectedChat(null)
-              setChatMessages([])
-              setShowNotifications(false)
-            }
-            
-            // Update conversations state from map (guaranteed no duplicates)
-            const uniqueConversations = Array.from(conversationsMap.values())
-            const sortedConversations = uniqueConversations.sort((a, b) => {
-              if (!a.lastMessageTime && !b.lastMessageTime) return 0
-              if (!a.lastMessageTime) return 1
-              if (!b.lastMessageTime) return -1
-              const aTime = a.lastMessageTime?.toMillis ? a.lastMessageTime.toMillis() : new Date(a.lastMessageTime).getTime()
-              const bTime = b.lastMessageTime?.toMillis ? b.lastMessageTime.toMillis() : new Date(b.lastMessageTime).getTime()
-              return bTime - aTime
-            })
-            
-            setConversations(sortedConversations)
-            setUnreadChats(sortedConversations.filter(conv => conv.unreadCount > 0).length)
-          })
-          
-          // Store the unsubscribe function
-          messageListeners.set(chatId, messageUnsubscribe)
-        }
-      })
-      
-      // Set initial conversations from map (no duplicates possible)
-      const initialConversations = Array.from(conversationsMap.values())
-      setConversations(initialConversations)
-    })
-    
-    // Return cleanup function
-    return () => {
-      unsubscribe()
-      // Clean up all message listeners
-      messageListeners.forEach(unsubscribeFunc => unsubscribeFunc())
-      messageListeners.clear()
-    }
-  }
-
-  const formatTime = (timestamp) => {
-    if (!timestamp) return ''
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
-    const now = new Date()
-    const diffInHours = (now - date) / (1000 * 60 * 60)
-    
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    } else {
-      return date.toLocaleDateString()
-    }
-  }
-
-  const filteredConversations = conversations
-
-  // Load messages for selected chat
-  const loadChatMessages = async (chatId) => {
-    if (!chatId || !db) return
-    
-    try {
-      const messagesQuery = query(
-        collection(db, 'chats', chatId, 'messages'),
-        orderBy('createdAt', 'asc')
-      )
-      
-      const unsubscribe = onSnapshot(messagesQuery, async (snapshot) => {
-        const messages = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        setChatMessages(messages)
-        
-        // Trigger AI suggestions when new message arrives from other user
-        if (messages.length > 0) {
-          const lastMessage = messages[messages.length - 1]
-          if (lastMessage.senderId !== user?.uid) {
-            // New message from other user, generate AI suggestions
-            await triggerAISuggestions(messages)
-          }
-        }
-        
-        // Clear any existing timeout
-        if (markAsReadTimeoutRef.current) {
-          clearTimeout(markAsReadTimeoutRef.current)
-        }
-        
-        // Mark unread messages as read when viewing the chat (with delay to ensure user sees them)
-        markAsReadTimeoutRef.current = setTimeout(async () => {
-          const { updateDoc, doc: firestoreDoc } = await import('firebase/firestore')
-          const unreadMessages = snapshot.docs.filter(doc => {
-            const msgData = doc.data()
-            return msgData.senderId !== user?.uid && !msgData.read
-          })
-          
-          // Mark each unread message as read
-          for (const messageDoc of unreadMessages) {
-            try {
-              await updateDoc(messageDoc.ref, { read: true })
-            } catch (error) {
-              console.error('Error marking message as read:', error)
-            }
-          }
-        }, 1000) // 1 second delay to ensure user actually sees the messages
-        
-        // Auto-scroll to bottom when new messages arrive (instant, no animation)
-        setTimeout(() => {
-          const messagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
-          if (messagesContainer) {
-            messagesContainer.scrollTop = messagesContainer.scrollHeight
-          }
-        }, 100) // Small delay to ensure DOM is updated
-      })
-      
-      return unsubscribe
-    } catch (error) {
-      console.error('Error loading chat messages:', error)
-    }
-  }
-
-  // Send a new message
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat || !user || !db) return
-    
-    // Clear AI suggestions immediately when user sends a message
-    setAiSuggestions([])
-    setShowSuggestions(false)
-    setWaitingForReply(true)
-    
-    // Check if there's an approved request - both users must wait for approval
-    const hasApprovedRequest = chatMessages.some(msg => 
-      msg.isListingRequest && msg.requestStatus === 'approved'
-    )
-    
-    if (!hasApprovedRequest) {
-      console.log('Cannot send message: Request not yet approved')
-      return
-    }
-    
-    try {
-      const messageData = {
-        senderId: user.uid,
-        senderName: `${user.firstName} ${user.lastName}`,
-        text: newMessage.trim(),
-        createdAt: new Date(),
-        read: false
-      }
-      
-      await addDoc(collection(db, 'chats', selectedChat.id, 'messages'), messageData)
-      setNewMessage('')
-      console.log('Message sent successfully')
-    } catch (error) {
-      console.error('Error sending message:', error)
-    }
-  }
-
-  // Send message with pre-formatted text (for summary confirmation)
-  const sendMessageWithText = async (messageText) => {
-    if (!messageText.trim() || !selectedChat || !user || !db) return
-    
-    try {
-      const messageData = {
-        senderId: user.uid,
-        senderName: `${user.firstName} ${user.lastName}`,
-        text: messageText.trim(),
-        createdAt: new Date(),
-        read: false
-      }
-      
-      await addDoc(collection(db, 'chats', selectedChat.id, 'messages'), messageData)
-      console.log('Summary confirmation message sent successfully')
-    } catch (error) {
-      console.error('Error sending summary confirmation message:', error)
-    }
-  }
-
-  // Handle listing request response (Accept/Decline)
-  const handleRequestResponse = async (message, status) => {
-    if (!user || !db || !message.listingId) return
-
-    try {
-      // Update the message status
-      const chatId = selectedChat.id
-      await updateDoc(doc(db, 'chats', chatId, 'messages', message.id), {
-        requestStatus: status
-      })
-
-      // Update the listing request in the database
-      const requestsQuery = query(
-        collection(db, 'listing_requests'),
-        where('listingId', '==', message.listingId),
-        where('requesterId', '==', message.senderId)
-      )
-      
-      const requestSnapshot = await getDocs(requestsQuery)
-      if (!requestSnapshot.empty) {
-        const requestDoc = requestSnapshot.docs[0]
-        await updateDoc(doc(db, 'listing_requests', requestDoc.id), {
-          status: status,
-          respondedAt: serverTimestamp(),
-          respondedBy: user.uid
-        })
-      }
-
-      // Send a response message
-      const responseMessage = status === 'approved' 
-        ? `I have accepted your request for the listing: ${message.text.split(': ')[1] || 'the listing'}`
-        : `I have declined your request for the listing: ${message.text.split(': ')[1] || 'the listing'}`
-
-      const responseData = {
-        text: responseMessage,
-        senderId: user.uid,
-        senderName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
-        createdAt: serverTimestamp(),
-        read: false,
-        isRequestResponse: true,
-        originalRequestId: message.id,
-        requestStatus: status
-      }
-
-      await addDoc(collection(db, 'chats', chatId, 'messages'), responseData)
-
-      // Update chat's last message
-      await updateDoc(doc(db, 'chats', chatId), {
-        lastMessage: responseMessage,
-        lastMessageTime: serverTimestamp(),
-        lastMessageSenderId: user.uid
-      })
-
-      alert(`Request ${status} successfully!`)
-    } catch (error) {
-      console.error('Error handling request response:', error)
-      alert('Failed to process request. Please try again.')
-    }
-  }
-
-  // Go back to conversations list
-  const goBackToConversations = () => {
-    // Clear any pending mark-as-read timeout
-    if (markAsReadTimeoutRef.current) {
-      clearTimeout(markAsReadTimeoutRef.current)
-    }
-    setSelectedChat(null)
-    setChatMessages([])
-    setNewMessage('')
-    setAiSuggestions([])
-    setShowSuggestions(false)
-  }
-
-  // Mark conversation as read
-  const markConversationAsRead = async (conversationId) => {
-    try {
-      // Update the conversation in the conversations state
-      setConversations(prevConversations => {
-        const updatedConversations = prevConversations.map(conv => 
-          conv.id === conversationId 
-            ? { ...conv, unreadCount: 0 }
-            : conv
-        )
-        
-        // Recalculate total unread chats count
-        const totalUnread = updatedConversations.reduce((total, conv) => 
-          total + (conv.unreadCount > 0 ? 1 : 0), 0
-        )
-        setUnreadChats(totalUnread)
-        
-        return updatedConversations
-      })
-    } catch (error) {
-      console.error('Error marking conversation as read:', error)
-    }
-  }
-
-  const handleLogout = async () => {
-    showConfirmPopup(
-      'Logout',
-      'Are you sure you want to logout?',
-      async () => {
-        try {
-          const { signOut } = await import('firebase/auth')
-          await signOut(auth)
-          router.push('/signin')
-        } catch (error) {
-          console.error('Logout error:', error)
-          showErrorPopup('Logout Failed', 'An error occurred while logging out. Please try again.')
-        }
-      },
-      { danger: true }
-    )
-  }
-
-  const handleImageSelect = (e) => {
-    const files = Array.from(e.target.files)
-    const validFiles = files.filter(file => file.type.startsWith('image/'))
-    
-    if (validFiles.length > 0) {
-      // Add new files to existing ones instead of replacing
-      const newImageFiles = [...imageFiles, ...validFiles]
-      setImageFiles(newImageFiles)
-      
-      // Create previews for new images and add to existing previews
-      const newPreviews = []
-      let loadedCount = 0
-      
-      validFiles.forEach((file, index) => {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          newPreviews[index] = e.target.result
-          loadedCount++
-          
-          if (loadedCount === validFiles.length) {
-            setImagePreviews(prev => [...prev, ...newPreviews])
-          }
-        }
-        reader.readAsDataURL(file)
-      })
-    }
-    
-    // Reset the input value so the same file can be selected again
-    e.target.value = ''
-  }
-
-  const removeImage = (index) => {
-    const newFiles = imageFiles.filter((_, i) => i !== index)
-    const newPreviews = imagePreviews.filter((_, i) => i !== index)
-    setImageFiles(newFiles)
-    setImagePreviews(newPreviews)
-  }
-
-  const removeAllImages = () => {
-    setImageFiles([])
-    setImagePreviews([])
-  }
-
-  // Format timestamp for chat messages
-  const formatChatTimestamp = (timestamp) => {
-    if (!timestamp) return ''
-    
-    const now = new Date()
-    const messageTime = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
-    const diffInMs = Math.abs(now - messageTime)
-    const diffInMinutes = Math.floor(diffInMs / (1000 * 60))
-    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60))
-    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24))
-    
-    if (diffInMinutes < 1) {
-      return 'just now'
-    } else if (diffInMinutes < 60) {
-      return `${diffInMinutes}min`
-    } else if (diffInHours < 24) {
-      return `${diffInHours}hr`
-    } else {
-      return `${diffInDays}day`
-    }
-  }
-
-  // Carousel navigation functions with smooth animation
+  // Handle logout functionality
   const nextImage = (postId, maxImages) => {
     const currentIndex = currentImageIndex[postId] || 0
     if (currentIndex < maxImages - 1) {
@@ -3187,38 +2050,9 @@ export default function Dashboard() {
         // Could navigate to friends/profile page when implemented
         break
       case 'listing_request':
-        // Open chat with the crop farmer who made the request
-        if (notification.chatId) {
-          // Open the chat directly
-          setShowChat(true)
-          setShowNotifications(false)
-          // Find the conversation and select it
-          const conversation = conversations.find(conv => conv.id === notification.chatId)
-          if (conversation) {
-            setSelectedChat(conversation)
-            loadChatMessages(notification.chatId)
-          } else {
-            // If conversation not found, try to load it
-            try {
-              const chatDoc = await getDoc(doc(db, 'chats', notification.chatId))
-              if (chatDoc.exists()) {
-                const chatData = { id: chatDoc.id, ...chatDoc.data() }
-                setSelectedChat(chatData)
-                loadChatMessages(notification.chatId)
-              }
-            } catch (error) {
-              console.error('Error loading chat:', error)
-            }
-          }
-        } else if (notification.fromUserId) {
-          // Open chat popup and try to find/create conversation with this user
-          setShowChat(true)
-          setSelectedChat(null)
-          setChatMessages([])
-        } else {
-          // Fallback to listings page
-          setActiveMenuItem('listings')
-        }
+        // Navigate to chat - Chat component will handle the conversation loading
+        setActiveMenuItem('chat')
+        setShowNotifications(false)
         break
       case 'report_status':
         // Show report details in an alert/modal
@@ -3434,6 +2268,15 @@ export default function Dashboard() {
                 <span className={styles.leftMenuText}>Search</span>
               </div>
               
+              <div className={`${styles.leftMenuItem} ${activeMenuItem === 'chat' ? styles.active : ''}`} onClick={() => {
+                setActiveMenuItem('chat')
+                setShowSearchPanel(false)
+                console.log('Chat clicked')
+              }}>
+                <img src={activeMenuItem === 'chat' ? "/assets/icons/chat-white.png" : "/assets/icons/chat.png"} alt="Chat" className={styles.leftMenuIcon} />
+                <span className={styles.leftMenuText}>Chat</span>
+              </div>
+              
               <div className={`${styles.leftMenuItem} ${activeMenuItem === 'listings' ? styles.active : ''}`} onClick={() => {
                 setSelectedFeaturedListing(null) // Clear any selected featured listing
                 setActiveMenuItem('listings')
@@ -3453,6 +2296,15 @@ export default function Dashboard() {
                 <span className={styles.leftMenuText}>
                   {userRole === 'crop_farmer' ? 'Request Listing History' : 'Listing History'}
                 </span>
+              </div>
+              
+              <div className={`${styles.leftMenuItem} ${activeMenuItem === 'transactions' ? styles.active : ''}`} onClick={() => {
+                setActiveMenuItem('transactions')
+                setShowSearchPanel(false)
+                console.log('Transactions clicked')
+              }}>
+                <img src={activeMenuItem === 'transactions' ? "/assets/icons/scroll-text-white.png" : "/assets/icons/scroll-text.png"} alt="Transactions" className={styles.leftMenuIcon} />
+                <span className={styles.leftMenuText}>Transactions</span>
               </div>
               
               
@@ -3595,399 +2447,15 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Floating Messages Button */}
-        <div className={styles.floatingMessages}>
-          <div 
-            className={styles.messagesButton}
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              if (showChat) {
-                // Close chat and reset state
-                setShowChat(false)
-                setSelectedChat(null)
-                setChatMessages([])
-              } else {
-                // Close notifications if open, then open chat
-                if (showNotifications) {
-                  setShowNotifications(false)
-                  document.body.style.overflow = 'auto'
-                }
-                // Open chat and ensure we're at conversations list
-                setShowChat(true)
-                setSelectedChat(null)
-                setChatMessages([])
-              }
-            }}
-            onMouseEnter={() => {
-              document.body.style.overflow = 'hidden'
-            }}
-            onMouseLeave={() => {
-              document.body.style.overflow = 'auto'
-            }}
-          >
-            <img src="/assets/icons/chat.png" alt="Messages" className={styles.messageIcon} />
-            <span className={styles.messageText}>Messages</span>
-            {unreadChats > 0 && (
-              <span className={styles.messageBadge}>
-                {unreadChats > 99 ? '99+' : unreadChats}
-              </span>
-            )}
-          </div>
-          
-          {/* Chat Popup */}
-          {showChat && (
-            <div 
-              className={styles.chatPopup} 
-              onClick={(e) => e.stopPropagation()}
-              onWheel={(e) => {
-                e.stopPropagation()
-                e.preventDefault()
-              }}
-              onMouseEnter={() => {
-                document.body.style.overflow = 'hidden'
-              }}
-              onMouseLeave={() => {
-                document.body.style.overflow = 'auto'
-              }}
-            >
-              <div className={styles.chatPopupHeader}>
-                {selectedChat ? (
-                  <>
-                    <button 
-                      className={styles.backButton}
-                      onClick={goBackToConversations}
-                    >
-                      <img src="/assets/icons/back.png" alt="Back" style={{width: '16px', height: '16px'}} />
-                    </button>
-                    <h3 className={styles.chatPopupTitle}>{selectedChat.otherUserName}</h3>
-                  </>
-                ) : (
-                  <h3 className={styles.chatPopupTitle}>Chats</h3>
-                )}
-                <button 
-                  className={styles.chatPopupCloseBtn}
-                  onClick={() => {
-                    setShowChat(false)
-                    setSelectedChat(null)
-                    setChatMessages([])
-                  }}
-                >
-                  <img src="/assets/icons/cross-small.png" alt="Close" style={{width: '16px', height: '16px'}} />
-                </button>
-              </div>
-              
-              {selectedChat ? (
-                /* Chat Messages View */
-                <>
-                  <div 
-                    className={styles.chatMessagesContainer}
-                    onWheel={(e) => e.stopPropagation()}
-                  >
-                    {chatMessages.map((message) => (
-                      <div 
-                        key={message.id} 
-                        className={`${styles.chatMessage} ${message.senderId === user?.uid ? styles.sentMessage : styles.receivedMessage}`}
-                      >
-                        <div className={styles.messageContent}>
-                          <p className={styles.messageText}>{message.text}</p>
-                          
-                          {/* Accept/Decline buttons for listing requests */}
-                          {message.isListingRequest && message.senderId !== user?.uid && message.requestStatus === 'pending' && !message.isCancelled && (
-                            <div className={styles.requestActions}>
-                              <button 
-                                className={styles.acceptButton}
-                                onClick={() => handleRequestResponse(message, 'approved')}
-                              >
-                                Accept
-                              </button>
-                              <button 
-                                className={styles.declineButton}
-                                onClick={() => handleRequestResponse(message, 'declined')}
-                              >
-                                Decline
-                              </button>
-                            </div>
-                          )}
-                          
-                          {/* Status indicator for processed requests */}
-                          {message.isListingRequest && message.requestStatus && message.requestStatus !== 'pending' && (
-                            <div className={styles.requestStatus}>
-                              <span className={`${styles.statusBadge} ${styles[message.requestStatus]}`}>
-                                {message.requestStatus.charAt(0).toUpperCase() + message.requestStatus.slice(1)}
-                              </span>
-                            </div>
-                          )}
-                          
-                          {/* 3-dots menu for received messages only */}
-                          {message.senderId !== user?.uid && (
-                            <div className="message-menu-container">
-                              <div className={`${styles.messageMenu} ${showMessageMenu === message.id ? styles.menuOpen : ''}`}>
-                                <button 
-                                  className={styles.messageMenuBtn}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    if (showMessageMenu === message.id) {
-                                      setShowMessageMenu(null)
-                                      setMenuButtonRef(null)
-                                    } else {
-                                      const rect = e.target.getBoundingClientRect()
-                                      const chatPopup = document.querySelector(`.${styles.chatPopup}`)
-                                      const chatPopupRect = chatPopup?.getBoundingClientRect()
-                                      
-                                      if (chatPopupRect) {
-                                        // Position relative to chat popup
-                                        setDropdownPosition({
-                                          top: rect.top - chatPopupRect.top,
-                                          left: rect.right - chatPopupRect.left + 8
-                                        })
-                                      } else {
-                                        // Fallback to viewport positioning
-                                        setDropdownPosition({
-                                          top: rect.top,
-                                          left: rect.right + 8
-                                        })
-                                      }
-                                      setMenuButtonRef(e.target)
-                                      setShowMessageMenu(message.id)
-                                    }
-                                  }}
-                                >
-                                  <span>⋯</span>
-                                </button>
-                                
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <span className={styles.messageTime}>
-                          {formatTime(message.createdAt)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* AI Suggestions - Toggle Button and Container */}
-                  {aiSuggestions.length > 0 && (
-                    <>
-                      {/* AI Suggestions Toggle Button - Always visible when suggestions exist */}
-                      <div className={aiStyles.aiSuggestionsToggle}>
-                        <span>AI suggestions</span>
-                        <button 
-                          className={aiStyles.toggleSuggestionsBtn}
-                          onClick={() => setShowSuggestions(!showSuggestions)}
-                        >
-                          <img 
-                            src={showSuggestions ? "/assets/icons/chevron-up.png" : "/assets/icons/chevron-down.png"}
-                            alt="Toggle suggestions"
-                          />
-                        </button>
-                      </div>
-                      
-                      {/* AI Suggestions Container - Only show when expanded */}
-                      {showSuggestions && (
-                        <div className={aiStyles.aiSuggestionsContainer}>
-                          <div className={aiStyles.aiSuggestionsList}>
-                            {aiSuggestions.map((suggestion, index) => (
-                              <button
-                                key={index}
-                                className={aiStyles.suggestionBtn}
-                                onClick={() => useSuggestion(suggestion)}
-                                title="Click to auto-send this suggestion"
-                              >
-                                {suggestion}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  
-                  {/* Transaction Summary Component */}
-                  {showSummary && transactionSummary && (
-                    <div className={aiStyles.transactionSummaryContainer}>
-                      <div className={aiStyles.summaryHeader}>
-                        <span>📋 Transaction Summary</span>
-                        <button 
-                          className={aiStyles.closeSummaryBtn}
-                          onClick={() => setShowSummary(false)}
-                        >
-                          ×
-                        </button>
-                      </div>
-                      <div className={aiStyles.summaryContent}>
-                        <div className={aiStyles.summaryItem}>
-                          <strong>Name:</strong> {transactionSummary.name}
-                        </div>
-                        <div className={aiStyles.summaryItem}>
-                          <strong>Price:</strong> {transactionSummary.price}
-                        </div>
-                        <div className={aiStyles.summaryItem}>
-                          <strong>Mode of Payment:</strong> {transactionSummary.paymentMethod}
-                        </div>
-                        <div className={aiStyles.summaryItem}>
-                          <strong>Location:</strong> 
-                          {transactionSummary.needsLocationInput ? (
-                            <input
-                              type="text"
-                              className={aiStyles.locationInput}
-                              placeholder={userRole === 'livestock_owner' ? 'Enter pickup location' : 'Enter delivery location'}
-                              value={transactionSummary.location || ''}
-                              onChange={(e) => setTransactionSummary({
-                                ...transactionSummary,
-                                location: e.target.value
-                              })}
-                            />
-                          ) : (
-                            transactionSummary.location
-                          )}
-                        </div>
-                      </div>
-                      <div className={aiStyles.summaryActions}>
-                        <button
-                          className={aiStyles.copySummaryBtn}
-                          onClick={() => {
-                            const summaryText = `Name: ${transactionSummary.name}\nPrice: ${transactionSummary.price}\nMode of Payment: ${transactionSummary.paymentMethod}\nLocation: ${transactionSummary.location || 'To be filled'}`
-                            navigator.clipboard.writeText(summaryText)
-                            alert('Summary copied to clipboard!')
-                          }}
-                        >
-                          📋 Copy Summary
-                        </button>
-                        <button
-                          className={aiStyles.confirmSummaryBtn}
-                          onClick={() => {
-                            // Send confirmation message and proceed to final step
-                            const confirmationMessage = `Transaction confirmed! Summary:\nName: ${transactionSummary.name}\nPrice: ${transactionSummary.price}\nPayment: ${transactionSummary.paymentMethod}\nLocation: ${transactionSummary.location || 'To be filled'}`
-                            sendMessageWithText(confirmationMessage)
-                            setShowSummary(false)
-                            setTransactionStage('agreement_confirmed')
-                          }}
-                        >
-                          ✅ Confirm & Complete
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div 
-                    className={styles.chatInputContainer}
-                    onWheel={(e) => e.stopPropagation()}
-                  >
-                    {(() => {
-                      // Check if there's an approved request between these users
-                      const hasApprovedRequest = chatMessages.some(msg => 
-                        msg.isListingRequest && msg.requestStatus === 'approved'
-                      )
-                      
-                      // Check if current user is the listing owner (can always chat)
-                      const isListingOwner = userRole === 'livestock_owner'
-                      
-                      // BOTH users must wait for approval - chat is disabled for everyone until approved
-                      const canChat = hasApprovedRequest
-                      
-                      if (!canChat) {
-                        return (
-                          <div className={styles.chatRestricted}>
-                            <p className={styles.restrictedText}>
-                              {isListingOwner 
-                                ? '💬 Chat will be available after you approve the request. Use the Accept/Decline buttons above.'
-                                : '💬 Chat will be available after the listing owner approves your request'
-                              }
-                            </p>
-                          </div>
-                        )
-                      }
-                      
-                      return (
-                        <>
-                          <input
-                            type="text"
-                            placeholder="Type a message..."
-                            className={styles.chatInput}
-                            value={newMessage}
-                            onChange={(e) => setNewMessage(e.target.value)}
-                            onKeyPress={(e) => {
-                              if (e.key === 'Enter') {
-                                sendMessage()
-                              }
-                            }}
-                            onWheel={(e) => e.stopPropagation()}
-                          />
-                          <button 
-                            className={styles.sendButton}
-                            onClick={sendMessage}
-                            disabled={!newMessage.trim()}
-                            onWheel={(e) => e.stopPropagation()}
-                          >
-                            Send
-                          </button>
-                        </>
-                      )
-                    })()}
-                  </div>
-                </>
-              ) : (
-                /* Conversations List */
-                <div 
-                  className={styles.conversationsList}
-                  onWheel={(e) => e.stopPropagation()}
-                >
-                  {filteredConversations.length > 0 ? (
-                    filteredConversations.map((conversation) => (
-                      <div 
-                        key={conversation.id} 
-                        className={`${styles.conversationItem} ${conversation.unreadCount > 0 ? styles.hasUnread : ''} ${selectedChat?.id === conversation.id ? styles.selectedConversation : ''}`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedChat(conversation)
-                          loadChatMessages(conversation.id)
-                          // Mark conversation as read when clicked
-                          if (conversation.unreadCount > 0) {
-                            markConversationAsRead(conversation.id)
-                          }
-                        }}
-                      >
-                        <div className={styles.conversationAvatar}>
-                          {conversation.otherUserName ? conversation.otherUserName[0].toUpperCase() : 'U'}
-                        </div>
-                        <div className={styles.conversationInfo}>
-                          <div className={styles.conversationHeader}>
-                            <span className={`${styles.conversationName} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
-                              {conversation.otherUserName || 'User'}
-                            </span>
-                            {conversation.lastMessageTime && (
-                              <span className={`${styles.conversationTime} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
-                                {formatTime(conversation.lastMessageTime)}
-                              </span>
-                            )}
-                          </div>
-                          <div className={styles.conversationPreview}>
-                            <span className={`${styles.lastMessage} ${conversation.unreadCount > 0 ? styles.unread : ''}`}>
-                              {conversation.lastMessage}
-                            </span>
-                            {conversation.unreadCount > 0 && (
-                              <div className={styles.unreadBadge}></div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className={styles.emptyChats}>
-                      <img src="/assets/icons/chat.png" alt="No chats" className={styles.emptyChatIcon} />
-                      <p className={styles.emptyChatText}>No conversations yet</p>
-                      <p className={styles.emptyChatSubtext}>
-                        Request livestock listings to start chatting with owners
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        {/* Chat Screen - Full Screen */}
+        {activeMenuItem === 'chat' && (
+          <Chat 
+            user={user} 
+            userRole={userRole} 
+            setActiveMenuItem={setActiveMenuItem} 
+            onUnreadChatsUpdate={setUnreadChats} 
+          />
+        )}
 
         {/* Floating Notifications Button */}
         <div className={styles.floatingNotifications}>
@@ -4001,13 +2469,9 @@ export default function Dashboard() {
                 setShowNotifications(false)
                 document.body.style.overflow = 'auto'
               } else {
-                // Close chat if open, then open notifications
-                if (showChat) {
-                  setShowChat(false)
-                  setSelectedChat(null)
-                  setChatMessages([])
-                }
-                setShowNotifications(true)
+                // Close other panels if open, then open notifications
+                setActiveMenuItem('')
+                document.body.style.overflow = 'auto'
               }
             }}
             onMouseEnter={() => {
@@ -4120,11 +2584,11 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Main Feed - Hide when listings, listing-history, reports, or profile is active */}
-        {activeMenuItem !== 'listings' && activeMenuItem !== 'listing-history' && activeMenuItem !== 'reports' && activeMenuItem !== 'profile' && (
+        {/* Main Feed - Hide when listings, listing-history, reports, profile, or chat is active */}
+        {activeMenuItem !== 'listings' && activeMenuItem !== 'listing-history' && activeMenuItem !== 'reports' && activeMenuItem !== 'profile' && activeMenuItem !== 'chat' && (
         <main className={styles.mainFeed}>
-          {/* Post Creation Prompt - Only show when not viewing reports, listings, profile, or search results */}
-          {activeMenuItem !== 'reports' && activeMenuItem !== 'listings' && activeMenuItem !== 'profile' && !searchSubmitted && (
+          {/* Post Creation Prompt - Only show when not viewing reports, listings, profile, chat, or search results */}
+          {activeMenuItem !== 'reports' && activeMenuItem !== 'listings' && activeMenuItem !== 'profile' && activeMenuItem !== 'chat' && !searchSubmitted && (
             <div className={styles.postPromptContainer}>
               <div className={styles.postPrompt}>
                 <div className={styles.userAvatar}>
@@ -5084,60 +3548,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Portal-based Message Menu Dropdown */}
-      {showMessageMenu && typeof window !== 'undefined' && showChat && createPortal(
-        <div 
-          ref={dropdownRef}
-          className={styles.messageMenuDropdown}
-          data-dropdown="message-menu"
-          style={{
-            position: 'absolute',
-            top: dropdownPosition.top,
-            left: dropdownPosition.left,
-            zIndex: 500
-          }}
-          onClick={(e) => {
-            // Prevent click events from bubbling up
-            e.stopPropagation()
-          }}
-          onMouseEnter={(e) => {
-            // Prevent scrolling when mouse is over dropdown
-            const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
-            if (chatMessagesContainer) {
-              chatMessagesContainer.style.overflow = 'hidden'
-            }
-          }}
-          onMouseLeave={(e) => {
-            // Re-enable scrolling when mouse leaves dropdown
-            const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
-            if (chatMessagesContainer) {
-              chatMessagesContainer.style.overflow = 'auto'
-            }
-          }}
-        >
-          <div className={styles.messageTimestampDisplay}>
-            {formatChatTimestamp(chatMessages.find(m => m.id === showMessageMenu)?.createdAt)}
-          </div>
-          
-          <div 
-            className={styles.messageMenuOption}
-            onClick={() => {
-              console.log('Report message:', showMessageMenu)
-              setShowMessageMenu(null)
-              setMenuButtonRef(null)
-              // Re-enable scrolling when dropdown closes
-              const chatMessagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
-              if (chatMessagesContainer) {
-                chatMessagesContainer.style.overflow = 'auto'
-              }
-            }}
-          >
-            <span>Report</span>
-          </div>
-        </div>,
-        document.querySelector(`.${styles.chatPopup}`)
-      )}
-
       {/* Report Modal */}
       <ReportModal
         visible={showReportModal}
@@ -5322,43 +3732,6 @@ export default function Dashboard() {
         </div>
       )}
       
-      {/* Transaction Completion Confirmation Modal */}
-      {showTransactionCompleteModal && (
-        <div className={styles.transactionCompleteModalOverlay}>
-          <div className={styles.transactionCompleteModal}>
-            <div className={styles.transactionCompleteHeader}>
-              <h3>🎉 Transaction Complete!</h3>
-              <button 
-                className={styles.closeModalBtn}
-                onClick={() => setShowTransactionCompleteModal(false)}
-              >
-                ×
-              </button>
-            </div>
-            
-            <div className={styles.transactionCompleteContent}>
-              <p>Great! Your transaction has been successfully completed.</p>
-              <p><strong>Done transaction?</strong></p>
-              
-              <div className={styles.transactionCompleteActions}>
-                <button 
-                  className={styles.transactionCompleteBtnNo}
-                  onClick={() => handleTransactionComplete(false)}
-                >
-                  No - Continue Discussion
-                </button>
-                
-                <button 
-                  className={styles.transactionCompleteBtnYes}
-                  onClick={() => handleTransactionComplete(true)}
-                >
-                  Yes - Transaction Complete
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      </div>
   )
 }

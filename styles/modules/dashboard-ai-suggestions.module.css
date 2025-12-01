@@ -3,8 +3,8 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  margin: 12px 0; /* Increased margin for better spacing */
-  padding: 8px 12px;
+  margin: 0;
+  padding: 0;
   background: transparent;
   border: none;
 }

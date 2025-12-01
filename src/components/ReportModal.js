@@ -124,7 +124,7 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
       console.log('📝 Report saved to Firebase:', reportRef.id)
 
       // Call AI validation backend
-      const backendUrl = process.env.NEXT_PUBLIC_FLASK_BACKEND_URL || 'http://192.168.0.104:5000'
+      const backendUrl = process.env.NEXT_PUBLIC_FLASK_BACKEND_URL || 'https://ai-backend-1-1nw2.onrender.com'
 
       // Wait 2 seconds before showing success
       await new Promise(resolve => setTimeout(resolve, 2000))

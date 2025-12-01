@@ -107,10 +107,12 @@ export default function Dashboard() {
   // Use post handlers hook
   const { handleLikePost, handleAddComment: addComment, handleAddReply: addReply, formatTimeAgo } = usePostHandlers(user)
 
-  // Handle image selection for post creation
+  // Handle image selection for post creation - accumulate like social media
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files)
     setImageFiles(prev => [...prev, ...files])
+    // Clear the input value to allow selecting the same file again if needed
+    e.target.value = ''
   }
 
   // Remove all images for post creation
@@ -119,11 +121,14 @@ export default function Dashboard() {
     setImagePreviews([])
   }
 
-  // Generate image previews when imageFiles change
+  // Generate image previews when imageFiles change - accumulate like social media
   useEffect(() => {
-    if (imageFiles.length > 0) {
-      const newPreviews = imageFiles.map(file => URL.createObjectURL(file))
-      setImagePreviews(prev => [...prev, ...newPreviews])
+    const newPreviews = imageFiles.map(file => URL.createObjectURL(file))
+    setImagePreviews(newPreviews)
+    
+    // Cleanup function to revoke object URLs when component unmounts or files change
+    return () => {
+      newPreviews.forEach(url => URL.revokeObjectURL(url))
     }
   }, [imageFiles])
 

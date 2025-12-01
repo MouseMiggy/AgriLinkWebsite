@@ -110,8 +110,22 @@ export default function Dashboard() {
   // Handle image selection for post creation
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files)
-    setPostImages(prev => [...prev, ...files])
+    setImageFiles(prev => [...prev, ...files])
   }
+
+  // Remove all images for post creation
+  const removeAllImages = () => {
+    setImageFiles([])
+    setImagePreviews([])
+  }
+
+  // Generate image previews when imageFiles change
+  useEffect(() => {
+    if (imageFiles.length > 0) {
+      const newPreviews = imageFiles.map(file => URL.createObjectURL(file))
+      setImagePreviews(prev => [...prev, ...newPreviews])
+    }
+  }, [imageFiles])
 
   // Wrapper for handleAddComment with required parameters
   const handleAddComment = async () => {

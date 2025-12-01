@@ -196,11 +196,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       }
     } catch (error) {
       console.error('❌ AI validation error:', error)
-      if (error.name === 'AbortError') {
-        showErrorPopup('Validation Timeout', 'The AI service is taking longer than expected to respond. This is normal on first use. Please try again in a moment.')
-      } else {
-        showErrorPopup('Validation Error', `Failed to validate image: ${error.message}. You can still create your listing without AI verification.`)
-      }
+      // Silently fail validation - user doesn't want error popups
       return null
     } finally {
       setIsImageValidating(false)

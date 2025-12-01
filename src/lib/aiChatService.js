@@ -1,5 +1,5 @@
 // AI Chat Service for AgriLink - Handles AI-powered chat features
-const AI_BASE_URL = process.env.NEXT_PUBLIC_FLASK_BACKEND_URL || 'https://ai-backend-6-565d.onrender.com'
+const AI_BASE_URL = 'https://ai-backend-6-565d.onrender.com'
 
 class AIChatService {
   // Generate contextual suggestions based on transaction flow and language analysis

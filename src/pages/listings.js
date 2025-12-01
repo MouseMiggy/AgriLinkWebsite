@@ -146,8 +146,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       
       // Call AI validation backend
       console.log('🤖 Calling AI validation service...')
-      const baseUrl = process.env.NEXT_PUBLIC_AI_VALIDATION_URL || 'https://ai-backend-6-565d.onrender.com'
-      const aiValidationUrl = baseUrl.endsWith('/validate-listing-image') ? baseUrl : `${baseUrl}/validate-listing-image`
+      const aiValidationUrl = 'https://ai-backend-6-565d.onrender.com/validate-listing-image'
+      console.log('🔗 Full validation URL:', aiValidationUrl)
       
       // Create AbortController for timeout
       const controller = new AbortController()

@@ -107,6 +107,12 @@ export default function Dashboard() {
   // Use post handlers hook
   const { handleLikePost, handleAddComment: addComment, handleAddReply: addReply, formatTimeAgo } = usePostHandlers(user)
 
+  // Handle image selection for post creation
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files)
+    setPostImages(prev => [...prev, ...files])
+  }
+
   // Wrapper for handleAddComment with required parameters
   const handleAddComment = async () => {
     if (!selectedPost || !commentText.trim()) return
@@ -3202,7 +3208,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <div className={styles.modalPostAuthor}>{selectedPost.userName}</div>
-                    <div className={styles.modalPostTime}>{formatTime(selectedPost.createdAt)}</div>
+                    <div className={styles.modalPostTime}>{formatTimeAgo(selectedPost.createdAt)}</div>
                   </div>
                 </div>
                 {selectedPost.text && (

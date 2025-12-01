@@ -13,7 +13,7 @@ import { usePostHandlers } from '../components/PostHandlers'
 
 import { usePopup } from '../contexts/PopupContext'
 import { auth, db } from '../lib/firebase'
-import { onAuthStateChanged } from 'firebase/auth'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { 
   collection, 
   addDoc, 
@@ -52,6 +52,7 @@ export default function Dashboard() {
   const [editLoading, setEditLoading] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [postToDelete, setPostToDelete] = useState(null)
+  const [showLogoutModal, setShowLogoutModal] = useState(false)
   const [showDropdown, setShowDropdown] = useState(null)
   const [imageFiles, setImageFiles] = useState([])
   const [imagePreviews, setImagePreviews] = useState([])
@@ -131,6 +132,25 @@ export default function Dashboard() {
       newPreviews.forEach(url => URL.revokeObjectURL(url))
     }
   }, [imageFiles])
+
+  // Handle logout with custom confirmation modal
+  const handleLogout = () => {
+    setShowLogoutModal(true)
+  }
+
+  // Confirm logout
+  const confirmLogout = () => {
+    signOut(auth).then(() => {
+      router.push('/signin')
+    }).catch((error) => {
+      console.error('Error signing out:', error)
+    })
+  }
+
+  // Cancel logout
+  const cancelLogout = () => {
+    setShowLogoutModal(false)
+  }
 
   // Wrapper for handleAddComment with required parameters
   const handleAddComment = async () => {
@@ -1261,15 +1281,21 @@ export default function Dashboard() {
     })
   }
 
+  // Handle delete post with scroll position preservation
   const handleDeletePost = (postId) => {
+    // Save current scroll position
+    const scrollPosition = window.scrollY
+    window.currentScrollPosition = scrollPosition
+    
     setPostToDelete(postId)
     setShowDeleteModal(true)
     setShowDropdown(null)
-    // Prevent all scrolling
+    // Prevent all scrolling and maintain visual position
     document.body.style.overflow = 'hidden'
     document.documentElement.style.overflow = 'hidden'
     document.body.style.position = 'fixed'
     document.body.style.width = '100%'
+    document.body.style.top = `-${scrollPosition}px`
   }
 
   const confirmDeletePost = async () => {
@@ -1284,6 +1310,17 @@ export default function Dashboard() {
       document.documentElement.style.overflow = 'unset'
       document.body.style.position = 'unset'
       document.body.style.width = 'unset'
+      document.body.style.top = 'unset'
+      
+      // Restore scroll position using requestAnimationFrame for better timing
+      if (window.currentScrollPosition !== undefined) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            window.scrollTo(0, window.currentScrollPosition)
+            delete window.currentScrollPosition
+          })
+        })
+      }
     } catch (error) {
       console.error('Error deleting post:', error)
       alert('Failed to delete post. Please try again.')
@@ -1298,6 +1335,13 @@ export default function Dashboard() {
     document.documentElement.style.overflow = 'unset'
     document.body.style.position = 'unset'
     document.body.style.width = 'unset'
+    document.body.style.top = 'unset'
+    
+    // Restore scroll position immediately since no re-render needed
+    if (window.currentScrollPosition !== undefined) {
+      window.scrollTo(0, window.currentScrollPosition)
+      delete window.currentScrollPosition
+    }
   }
 
   // Comment management functions
@@ -2482,21 +2526,22 @@ export default function Dashboard() {
           />
         )}
 
-        {/* Floating Notifications Button */}
-        <div className={styles.floatingNotifications}>
-          <div 
-            className={styles.notificationsButton}
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              if (showNotifications) {
-                // Close notifications and restore scrolling
-                setShowNotifications(false)
-                document.body.style.overflow = 'auto'
-              } else {
-                // Close other panels if open, then open notifications
-                setActiveMenuItem('')
-                document.body.style.overflow = 'auto'
+        {/* Floating Notifications Button - Hidden when chat is active */}
+        {activeMenuItem !== 'chat' && (
+          <div className={styles.floatingNotifications}>
+            <div 
+              className={styles.notificationsButton}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (showNotifications) {
+                  // Close notifications and restore scrolling
+                  setShowNotifications(false)
+                  document.body.style.overflow = 'auto'
+                } else {
+                  // Close other panels if open, then open notifications
+                  setActiveMenuItem('')
+                  document.body.style.overflow = 'auto'
               }
             }}
             onMouseEnter={() => {
@@ -2607,7 +2652,8 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-        </div>
+          </div>
+        )}
 
         {/* Main Feed - Hide when listings, listing-history, reports, profile, or chat is active */}
         {activeMenuItem !== 'listings' && activeMenuItem !== 'listing-history' && activeMenuItem !== 'reports' && activeMenuItem !== 'profile' && activeMenuItem !== 'chat' && (
@@ -3193,6 +3239,51 @@ export default function Dashboard() {
                   className={styles.deleteConfirmBtn}
                 >
                   Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Logout Confirmation Modal */}
+        {showLogoutModal && (
+          <div 
+            className={styles.modalOverlay} 
+            onClick={cancelLogout}
+            onWheel={(e) => e.preventDefault()}
+            onTouchMove={(e) => e.preventDefault()}
+            onKeyDown={(e) => {
+              // Prevent arrow keys, page up/down, home/end, space from scrolling
+              if ([32, 33, 34, 35, 36, 37, 38, 39, 40].includes(e.keyCode)) {
+                e.preventDefault()
+              }
+            }}
+          >
+            <div 
+              className={styles.deleteModal} 
+              onClick={(e) => e.stopPropagation()}
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <div className={styles.deleteModalHeader}>
+                <h3>Confirm Logout</h3>
+              </div>
+              <div className={styles.deleteModalContent}>
+                <p>Are you sure you want to logout?</p>
+              </div>
+              <div className={styles.deleteModalActions}>
+                <button
+                  onClick={cancelLogout}
+                  className={styles.cancelBtn}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmLogout}
+                  className={styles.modalPostButton}
+                >
+                  Logout
                 </button>
               </div>
             </div>

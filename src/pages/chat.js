@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { db, auth } from '../lib/firebase'
 import { collection, doc, getDoc, getDocs, query, where, orderBy, onSnapshot, addDoc, updateDoc, serverTimestamp, getDocsFromCache } from 'firebase/firestore'
-import styles from '../../styles/modules/dashboard.module.css'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { storage } from '../lib/firebase'
+import styles from '../../styles/modules/chat.module.css'
 import aiStyles from '../../styles/modules/dashboard-ai-suggestions.module.css'
 import AIChatService from '../lib/aiChatService'
 
@@ -21,9 +23,33 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   const [requestStatus, setRequestStatus] = useState(null)
   const [listingName, setListingName] = useState(null)
   const [markAsReadTimeoutRef, setMarkAsReadTimeoutRef] = useState(null)
+  const [sendingMessageId, setSendingMessageId] = useState(null)
+  const [deliveredMessageId, setDeliveredMessageId] = useState(null)
+  const [selectedImage, setSelectedImage] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [fullscreenImage, setFullscreenImage] = useState(null)
+
   
   // Ref for auto-scrolling to bottom
   const messagesEndRef = useRef(null)
+  const fileInputRef = useRef(null)
+
+  // Handle ESC key for fullscreen modal
+  useEffect(() => {
+    const handleEscKey = (e) => {
+      if (e.key === 'Escape' && fullscreenImage) {
+        setFullscreenImage(null)
+      }
+    }
+    
+    if (fullscreenImage) {
+      document.addEventListener('keydown', handleEscKey)
+      return () => {
+        document.removeEventListener('keydown', handleEscKey)
+      }
+    }
+  }, [fullscreenImage])
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -41,6 +67,92 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       setTimeout(scrollToBottom, 100)
     }
   }, [selectedChat])
+
+  // Handle image selection
+  const handleImageSelect = (e) => {
+    const file = e.target.files[0]
+    if (file && file.type.startsWith('image/')) {
+      setSelectedImage(file)
+      const reader = new FileReader()
+      reader.onload = (e) => setImagePreview(e.target.result)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  // Clear image selection
+  const clearImageSelection = () => {
+    setSelectedImage(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  // Upload image to Firebase Storage
+  const uploadImageToFirebase = async (file) => {
+    console.log('🖼️ Starting Firebase Storage upload:', file?.name, file?.size)
+    
+    if (!file || !user || !selectedChat) {
+      console.error('❌ Missing required data:', { file: !!file, user: !!user, selectedChat: !!selectedChat })
+      return null
+    }
+    
+    try {
+      // Create a unique filename with timestamp
+      const timestamp = Date.now()
+      const filename = `${timestamp}_${file.name}`
+      console.log('📁 Creating storage path:', `chatImages/${selectedChat.chatId}/${filename}`)
+      
+      // Create storage reference
+      const storageRef = ref(storage, `chatImages/${selectedChat.chatId}/${filename}`)
+      console.log('🔗 Storage reference created:', storageRef)
+      
+      // Upload file to Firebase Storage
+      console.log('📤 Uploading file to Firebase Storage...')
+      await uploadBytes(storageRef, file)
+      console.log('✅ File uploaded successfully')
+      
+      // Get download URL
+      console.log('🔗 Getting download URL...')
+      const downloadURL = await getDownloadURL(storageRef)
+      console.log('✅ Download URL obtained:', downloadURL)
+      
+      return downloadURL
+    } catch (error) {
+      console.error('❌ Firebase Storage upload error:', error)
+      console.error('❌ Error details:', {
+        code: error.code,
+        message: error.message,
+        serverResponse: error.serverResponse
+      })
+      throw error
+    }
+  }
+
+  // Format display name for chat list with truncation
+  const formatChatListDisplayName = (otherUserName, listingName) => {
+    if (!otherUserName) return 'User'
+    
+    let displayName = otherUserName
+    
+    // If full name is greater than 15 characters, use first name only
+    if (otherUserName.length > 15) {
+      const nameParts = otherUserName.split(' ')
+      displayName = nameParts[0] || otherUserName
+    }
+    
+    // Add listing name if available
+    if (listingName) {
+      // Truncate listing name if too long
+      let truncatedListingName = listingName
+      if (listingName.length > 30) {
+        truncatedListingName = listingName.substring(0, 30) + '...'
+      }
+      displayName += ` • ${truncatedListingName}`
+    }
+    
+    return displayName
+  }
 
   // Format timestamp for chat messages
   const formatChatTimestamp = (timestamp) => {
@@ -450,16 +562,33 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
               const actualLastMessageSenderId = actualLastMessage?.senderId
               const isLastMessageFromOther = actualLastMessageSenderId !== user.uid
               
+              // Format last message text for chat list
+              let lastMessageText = ''
+              if (actualLastMessage?.imageUrl && !actualLastMessage?.text) {
+                // Image-only message
+                if (actualLastMessageSenderId === user.uid) {
+                  lastMessageText = 'You sent an image'
+                } else {
+                  lastMessageText = `${actualLastMessage.senderName || 'Someone'} sent you an image`
+                }
+              } else if (actualLastMessage?.text) {
+                // Text message (or text + image)
+                lastMessageText = actualLastMessage.text
+              } else if (actualLastMessage?.imageUrl && actualLastMessage?.text) {
+                // Text + image message - show text with image indicator
+                lastMessageText = actualLastMessage.text
+              }
+              
               // Update conversation in map (this prevents duplicates)
               conversationsMap.set(chatId, {
                 id: chatId,
                 otherUserId,
                 otherUserName,
                 otherUserEmail,
-                lastMessage: actualLastMessage?.text || '',
+                lastMessage: lastMessageText,
                 lastMessageTime: actualLastMessageTime,
                 lastMessageSenderId: actualLastMessageSenderId,
-                unreadCount,
+                unreadCount: isLastMessageFromOther ? unreadCount : 0,
                 isLastMessageFromOther,
                 listingName,
                 chatId: messageChatId
@@ -468,8 +597,11 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
               // Auto-open chat if there's a new message from someone else
               if (isLastMessageFromOther && unreadCount > 0) {
                 setActiveMenuItem('chat')
-                setSelectedChat(null)
-                setChatMessages([])
+                // Don't clear messages - let user see existing conversation
+                if (!selectedChat) {
+                  setSelectedChat(null)
+                  setChatMessages([])
+                }
                 // setShowNotifications(false) - This will be handled by parent
               }
               
@@ -516,23 +648,22 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
 
   const filteredConversations = conversations
 
-  // Load messages for selected chat
-  const loadChatMessages = async (chatId) => {
-    if (!chatId || !db) return
+  // Load messages for selected chat with real-time listener
+  const loadChatMessages = (chatId) => {
+    if (!chatId || !db) return null
     
-    try {
-      console.log('💬 Loading messages for chat:', chatId)
-      
-      const messagesQuery = query(
-        collection(db, 'chats', chatId, 'messages'),
-        orderBy('createdAt', 'asc')
-      )
-      
-      const messagesSnapshot = await getDocs(messagesQuery)
+    const messagesQuery = query(
+      collection(db, 'chats', chatId, 'messages'),
+      orderBy('createdAt', 'asc')
+    )
+    
+    const unsubscribe = onSnapshot(messagesQuery, (messagesSnapshot) => {
       const messages = messagesSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }))
+      
+      // Replace all messages with new conversation's messages
       setChatMessages(messages)
       
       // Trigger AI suggestions when new message arrives from other user
@@ -541,35 +672,56 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         triggerAISuggestions(messages)
       }
       
-      // Auto-scroll to bottom when new messages arrive ( instant, no animation)
+      // Auto-scroll to bottom when new messages arrive (instant, no animation)
       setTimeout(() => {
         const messagesContainer = document.querySelector(`.${styles.chatMessagesContainer}`)
         if (messagesContainer) {
           messagesContainer.scrollTop = messagesContainer.scrollHeight
         }
       }, 100)
-      
-    } catch (error) {
-      console.error('Error loading chat messages:', error)
-    }
+    })
+    
+    return unsubscribe
   }
+
+  // Manage real-time message listener for selected chat
+  useEffect(() => {
+    if (!selectedChat) {
+      setChatMessages([])
+      return
+    }
+
+    // Use chatId if available, otherwise fallback to id
+    const chatIdToUse = selectedChat.chatId || selectedChat.id
+
+    const unsubscribe = loadChatMessages(chatIdToUse)
+    
+    return () => {
+      if (unsubscribe) {
+        unsubscribe()
+      }
+    }
+  }, [selectedChat?.id, selectedChat?.chatId])
 
   // Send a new message
   const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat || !user || !db) return
+    if ((!newMessage.trim() && !selectedImage) || !selectedChat || !user || !db) return
     
-    // Clear AI suggestions immediately when user sends a message
+    const messageText = newMessage.trim()
+    setNewMessage('')
+    
+    setDeliveredMessageId(null)
     setShowSuggestions(false)
     setAiSuggestions([])
     
-    // Check if there's an approved request - both users must wait for approval
+    // Use chatId if available, otherwise fallback to id
+    const chatIdToUse = selectedChat.chatId || selectedChat.id
+    
     const hasApprovedRequest = chatMessages.some(msg => 
       msg.isListingRequest && msg.requestStatus === 'approved'
     )
     
     const isListingOwner = userRole === 'livestock_owner'
-    
-    // BOTH users must wait for approval - chat is disabled for everyone until approved
     const canChat = hasApprovedRequest
     
     if (!canChat) {
@@ -581,20 +733,77 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       return
     }
     
+    setSendingMessageId('sending')
+    
     try {
-      const messageData = {
-        senderId: user.uid,
-        senderName: user.firstName || 'User',
-        text: newMessage.trim(),
-        createdAt: serverTimestamp(),
-        read: false
+      let imageUrl = null
+      
+      // Upload image if present
+      if (selectedImage) {
+        setUploadingImage(true)
+        try {
+          imageUrl = await uploadImageToFirebase(selectedImage)
+        } catch (uploadError) {
+          console.error('❌ Image upload failed:', uploadError)
+          alert('Failed to upload image. Please try again.')
+          setUploadingImage(false)
+          setSendingMessageId(null)
+          return
+        }
+        setUploadingImage(false)
+        clearImageSelection()
       }
       
-      await addDoc(collection(db, 'chats', selectedChat.id, 'messages'), messageData)
-      setNewMessage('')
-      console.log('Message sent successfully')
+      // Split into separate messages if both image and text exist
+      if (imageUrl && messageText) {
+        // Send image message first
+        const imageMessageData = {
+          senderId: user.uid,
+          senderName: user.firstName || 'User',
+          text: '',
+          imageUrl: imageUrl,
+          createdAt: serverTimestamp(),
+          read: false
+        }
+        
+        const imageDocRef = await addDoc(collection(db, 'chats', chatIdToUse, 'messages'), imageMessageData)
+        
+        // Send text message immediately after
+        const textMessageData = {
+          senderId: user.uid,
+          senderName: user.firstName || 'User',
+          text: messageText,
+          imageUrl: null,
+          createdAt: serverTimestamp(),
+          read: false
+        }
+        
+        const textDocRef = await addDoc(collection(db, 'chats', chatIdToUse, 'messages'), textMessageData)
+        
+        setSendingMessageId(null)
+        setDeliveredMessageId(textDocRef.id)
+        
+      } else {
+        // Send single message (image-only or text-only)
+        const messageData = {
+          senderId: user.uid,
+          senderName: user.firstName || 'User',
+          text: messageText,
+          imageUrl: imageUrl,
+          createdAt: serverTimestamp(),
+          read: false
+        }
+        
+        const docRef = await addDoc(collection(db, 'chats', chatIdToUse, 'messages'), messageData)
+        
+        setSendingMessageId(null)
+        setDeliveredMessageId(docRef.id)
+      }
     } catch (error) {
-      console.error('Error sending message:', error)
+      console.error('❌ Error sending message:', error)
+      setSendingMessageId(null)
+      setUploadingImage(false)
+      alert('Failed to send message. Please try again.')
     }
   }
 
@@ -694,21 +903,22 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   }
 
   return (
-    <div className={styles.chatDashboard}>
+    <>
+      <div className={styles.chatDashboard}>
       {/* Chat List Panel */}
       <div className={styles.chatListPanel}>
         <div className={styles.chatListHeader}>
-          <h2 className={styles.chatListTitle}>Chats</h2>
-          <div className={styles.chatSearchBar}>
-            <input
-              type="text"
-              placeholder="Search conversations..."
-              className={styles.chatSearchInput}
-            />
-            <svg className={styles.chatSearchIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
+          <h1 className={styles.title}>Chats</h1>
+        </div>
+        <div className={styles.chatSearchBar}>
+          <input
+            type="text"
+            placeholder="Search conversations..."
+            className={styles.chatSearchInput}
+          />
+          <svg className={styles.chatSearchIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
         </div>
         
         <div className={styles.conversationsList}>
@@ -719,7 +929,6 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                 className={`${styles.conversationCard} ${selectedChat?.id === conversation.id ? styles.selected : ''}`}
                 onClick={() => {
                   setSelectedChat(conversation)
-                  loadChatMessages(conversation.id)
                   if (conversation.unreadCount > 0) {
                     markConversationAsRead(conversation.id)
                   }
@@ -731,7 +940,7 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                 <div className={styles.conversationInfo}>
                   <div className={styles.conversationHeader}>
                     <span className={styles.conversationName}>
-                      {conversation.otherUserName || 'User'}
+                      {formatChatListDisplayName(conversation.otherUserName, conversation.listingName)}
                     </span>
                     {conversation.lastMessageTime && (
                       <span className={styles.conversationTime}>
@@ -766,7 +975,7 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
             {/* Chat Header */}
             <div className={styles.chatHeader}>
               <div className={styles.chatHeaderInfo}>
-                <h3 className={styles.chatHeaderName}>{selectedChat.otherUserName}</h3>
+                <h3 className={styles.chatHeaderName}>{formatChatListDisplayName(selectedChat.otherUserName, selectedChat.listingName)}</h3>
               </div>
             </div>
 
@@ -775,43 +984,111 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
               {chatMessages.map((message) => (
                 <div 
                   key={message.id} 
-                  className={`${styles.messageBubble} ${message.senderId === user?.uid ? styles.sent : styles.received}`}
+                  className={`${message.senderId === user?.uid ? styles.sentMessageWrapper : styles.receivedMessageWrapper}`}
                 >
-                  <div className={styles.messageContent}>
-                    <p className={styles.messageText}>{message.text}</p>
-                    
-                    {/* Accept/Decline buttons for listing requests */}
-                    {message.isListingRequest && message.senderId !== user?.uid && message.requestStatus === 'pending' && !message.isCancelled && (
-                      <div className={aiStyles.requestActions}>
-                        <button 
-                          className={aiStyles.acceptButton}
-                          onClick={() => handleRequestResponse(message, 'approved')}
-                        >
-                          Accept
-                        </button>
-                        <button 
-                          className={aiStyles.declineButton}
-                          onClick={() => handleRequestResponse(message, 'declined')}
-                        >
-                          Decline
-                        </button>
+                  {/* For image-only messages (both sent and received), render completely outside messageBubble */}
+                  {message.imageUrl && message.imageUrl !== 'pending' && !message.text && (
+                    <img 
+                      src={message.imageUrl} 
+                      alt="Shared image" 
+                      className={styles.standaloneMessageImage}
+                      onClick={() => setFullscreenImage(message.imageUrl)}
+                    />
+                  )}
+                  
+                  {/* For messages with text or pending uploads, use messageBubble wrapper */}
+                  {(message.text || message.imageUrl === 'pending') && (
+                    <div className={`${styles.messageBubble} ${message.senderId === user?.uid ? styles.sent : styles.received}`}>
+                      <div className={styles.messageContent}>
+                        {/* Display text if present */}
+                        {message.text && (
+                          <p className={styles.messageText}>{message.text}</p>
+                        )}
+                        
+                        {/* Display image if present alongside text */}
+                        {message.imageUrl === 'pending' && (
+                          <div className={styles.imageLoadingPlaceholder}>
+                            <div className={styles.uploadingSpinner}>⏳</div>
+                            <span>Uploading image...</span>
+                          </div>
+                        )}
+                        
+                        {message.imageUrl && message.imageUrl !== 'pending' && message.text && (
+                          <img 
+                            src={message.imageUrl} 
+                            alt="Shared image" 
+                            className={styles.messageImage}
+                            onClick={() => setFullscreenImage(message.imageUrl)}
+                          />
+                        )}
+                        
+                        {/* Show placeholder if no text or image */}
+                        {!message.text && !message.imageUrl && (
+                          <p className={styles.messageText}>Empty message</p>
+                        )}
+                        
+                        {/* Accept/Decline buttons for listing requests */}
+                        {message.isListingRequest && message.senderId !== user?.uid && message.requestStatus === 'pending' && !message.isCancelled && (
+                          <div className={aiStyles.requestActions}>
+                            <button 
+                              className={aiStyles.acceptButton}
+                              onClick={() => handleRequestResponse(message, 'approved')}
+                            >
+                              Accept
+                            </button>
+                            <button 
+                              className={aiStyles.declineButton}
+                              onClick={() => handleRequestResponse(message, 'declined')}
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        )}
+                        
+                        {/* Status indicator for processed requests */}
+                        {message.isListingRequest && message.requestStatus && message.requestStatus !== 'pending' && (
+                          <div className={aiStyles.requestStatus}>
+                            <span className={`${aiStyles.statusBadge} ${aiStyles[message.requestStatus]}`}>
+                              {message.requestStatus.charAt(0).toUpperCase() + message.requestStatus.slice(1)}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    
-                    {/* Status indicator for processed requests */}
-                    {message.isListingRequest && message.requestStatus && message.requestStatus !== 'pending' && (
-                      <div className={aiStyles.requestStatus}>
-                        <span className={`${aiStyles.statusBadge} ${aiStyles[message.requestStatus]}`}>
-                          {message.requestStatus.charAt(0).toUpperCase() + message.requestStatus.slice(1)}
-                        </span>
-                      </div>
-                    )}
-                    
-                    {/* Message time */}
+                    </div>
+                  )}
+                  
+                  {/* Accept/Decline buttons for standalone images */}
+                  {message.senderId !== user?.uid && message.imageUrl && message.imageUrl !== 'pending' && !message.text && message.isListingRequest && message.requestStatus === 'pending' && !message.isCancelled && (
+                    <div className={aiStyles.requestActions}>
+                      <button 
+                        className={aiStyles.acceptButton}
+                        onClick={() => handleRequestResponse(message, 'approved')}
+                      >
+                        Accept
+                      </button>
+                      <button 
+                        className={aiStyles.declineButton}
+                        onClick={() => handleRequestResponse(message, 'declined')}
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* Message time - positioned beside bubble on hover */}
+                  {(message.text || message.imageUrl === 'pending') && (
                     <div className={styles.messageTime}>
                       {formatChatTimestamp(message.createdAt)}
                     </div>
-                  </div>
+                  )}
+                  
+                  {/* Sending/Delivered status indicator - positioned below bubble */}
+                  {message.senderId === user?.uid && (
+                    <div className={styles.deliveredText}>
+                      {sendingMessageId === 'sending' && chatMessages[chatMessages.length - 1]?.id === message.id && 'sending'}
+                      {deliveredMessageId === message.id && 'delivered'}
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -859,6 +1136,16 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
 
             {/* Chat Input Area */}
             <div className={styles.chatInputArea}>
+              {/* Image Preview - moved above input */}
+              {imagePreview && (
+                <div className={styles.imagePreviewContainer}>
+                  <div className={styles.imagePreviewWrapper}>
+                    <img src={imagePreview} alt="Preview" className={styles.imagePreview} />
+                    <button onClick={clearImageSelection} className={styles.removeImageButton}>×</button>
+                  </div>
+                </div>
+              )}
+              
               {(() => {
                 // Check if there's an approved request between these users
                 const hasApprovedRequest = chatMessages.some(msg => 
@@ -886,29 +1173,43 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                 
                 return (
                   <div className={styles.chatInputContainer}>
-                    <button className={styles.chatInputButton}>
-                      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                      </svg>
-                    </button>
                     <input
-                      type="text"
+                      type="file"
+                      ref={fileInputRef}
+                      accept="image/*"
+                      onChange={handleImageSelect}
+                      style={{ display: 'none' }}
+                    />
+                    <button 
+                      className={styles.chatInputButton}
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingImage}
+                    >
+                      <img src="/assets/icons/add-image.png" alt="Add Image" width="20" height="20" />
+                    </button>
+                    <textarea
                       placeholder="Type a message..."
                       className={styles.chatInputField}
                       value={newMessage}
                       onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
                           sendMessage()
                         }
                       }}
+                      rows={1}
                     />
                     <button 
                       className={styles.chatSendButton}
                       onClick={sendMessage}
-                      disabled={!newMessage.trim()}
+                      disabled={!newMessage.trim() && !selectedImage || uploadingImage}
                     >
-                      <img src="/assets/icons/send.png" alt="Send" width="20" height="20" />
+                      {uploadingImage ? (
+                        <div className={styles.uploadingSpinner}>⏳</div>
+                      ) : (
+                        <img src="/assets/icons/send.png" alt="Send" width="20" height="20" />
+                      )}
                     </button>
                   </div>
                 )
@@ -926,6 +1227,30 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         )}
       </div>
     </div>
+    
+    {/* Fullscreen Image Modal - Outside chatDashboard to escape stacking context */}
+    {fullscreenImage && (
+      <div 
+        className={styles.fullscreenModal}
+        onClick={() => setFullscreenImage(null)}
+      >
+        <img 
+          src={fullscreenImage} 
+          alt="Fullscreen image" 
+          className={styles.fullscreenImage}
+        />
+        <button 
+          className={styles.fullscreenCloseButton}
+          onClick={(e) => {
+            e.stopPropagation()
+            setFullscreenImage(null)
+          }}
+        >
+          ×
+        </button>
+      </div>
+    )}
+    </>
   )
 }
 

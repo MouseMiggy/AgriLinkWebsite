@@ -1,5 +1,5 @@
 // AI Chat Service for AgriLink - Handles AI-powered chat features
-const AI_BACKEND_URL = process.env.NEXT_PUBLIC_FLASK_BACKEND_URL || 'https://ai-backend-6-565d.onrender.com'
+const AI_BASE_URL = process.env.NEXT_PUBLIC_FLASK_BACKEND_URL || 'https://ai-backend-6-565d.onrender.com'
 
 class AIChatService {
   // Generate contextual suggestions based on transaction flow and language analysis
@@ -13,7 +13,7 @@ class AIChatService {
         detectedLanguage: conversationData.detectedLanguage
       })
       
-      const response = await fetch(`${AI_BACKEND_URL}/generate-contextual-suggestions`, {
+      const response = await fetch(`${AI_BASE_URL}/generate-contextual-suggestions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -64,7 +64,7 @@ class AIChatService {
     try {
       console.log('🤖 Generating chat suggestions for:', { userRole, listingName })
       
-      const response = await fetch(`${AI_BACKEND_URL}/generate-chat-suggestions`, {
+      const response = await fetch(`${AI_BASE_URL}/generate-chat-suggestions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -125,7 +125,7 @@ class AIChatService {
         livestockOwnerId
       })
       
-      const response = await fetch(`${AI_BACKEND_URL}/analyze-chat-transaction`, {
+      const response = await fetch(`${AI_BASE_URL}/analyze-chat-transaction`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -178,7 +178,7 @@ class AIChatService {
     try {
       console.log('⏰ Checking chat inactivity:', { chatId, lastMessageTime })
       
-      const response = await fetch(`${AI_BACKEND_URL}/check-chat-inactivity`, {
+      const response = await fetch(`${AI_BASE_URL}/check-chat-inactivity`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

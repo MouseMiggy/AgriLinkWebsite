@@ -4,7 +4,6 @@ import { collection, doc, getDoc, getDocs, query, where, orderBy, onSnapshot, ad
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { storage } from '../lib/firebase'
 import styles from '../../styles/modules/chat.module.css'
-import aiStyles from '../../styles/modules/dashboard-ai-suggestions.module.css'
 import AIChatService from '../lib/aiChatService'
 
 const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
@@ -13,9 +12,11 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   const [chatMessages, setChatMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
   const [conversations, setConversations] = useState([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [unreadChats, setUnreadChats] = useState(0)
   const [aiSuggestions, setAiSuggestions] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(true)
   const [showSummary, setShowSummary] = useState(false)
   const [transactionSummary, setTransactionSummary] = useState(null)
   const [transactionStage, setTransactionStage] = useState('initial')
@@ -67,6 +68,20 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       setTimeout(scrollToBottom, 100)
     }
   }, [selectedChat])
+
+  // Toggle AI suggestions open/closed
+  const toggleSuggestions = () => {
+    setIsSuggestionsOpen(!isSuggestionsOpen)
+  }
+
+  // Auto-scroll when AI suggestions appear
+  useEffect(() => {
+    if (showSuggestions && aiSuggestions.length > 0 && isSuggestionsOpen) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }, 300) // Small delay to ensure suggestions are rendered
+    }
+  }, [showSuggestions, aiSuggestions.length, isSuggestionsOpen])
 
   // Handle image selection
   const handleImageSelect = (e) => {
@@ -349,8 +364,8 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       console.log('🔍 DEBUG: Using AI suggestion:', suggestion)
       
       // Clear suggestions when user uses one
-      setShowSuggestions(false)
       setAiSuggestions([])
+      setShowSuggestions(false)
       
       // Send the suggestion as a message using sendMessageWithText
       console.log('🔍 DEBUG: Calling sendMessageWithText with:', suggestion)
@@ -457,6 +472,19 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       }
     }
   }, [chatMessages.length, requestStatus, userRole, listingName]) // Remove waitingForReply dependency
+
+  // Handle search input change
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value)
+  }
+
+  // Filter conversations based on search query
+  const filteredConversations = conversations.filter(conversation => {
+    const searchLower = searchQuery.toLowerCase()
+    const userNameMatch = conversation.otherUserName?.toLowerCase().includes(searchLower)
+    const listingNameMatch = conversation.listingName?.toLowerCase().includes(searchLower)
+    return userNameMatch || listingNameMatch
+  })
 
   // Load conversations with real-time listener
   useEffect(() => {
@@ -646,8 +674,6 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     }
   }
 
-  const filteredConversations = conversations
-
   // Load messages for selected chat with real-time listener
   const loadChatMessages = (chatId) => {
     if (!chatId || !db) return null
@@ -665,6 +691,11 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       
       // Replace all messages with new conversation's messages
       setChatMessages(messages)
+      
+      // Ensure scroll to bottom when conversation loads ( fix inconsistent scrolling)
+      setTimeout(() => {
+        scrollToBottom()
+      }, 100)
       
       // Trigger AI suggestions when new message arrives from other user
       const lastMessage = messages[messages.length - 1]
@@ -811,6 +842,10 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   const sendMessageWithText = async (messageText) => {
     if (!messageText.trim() || !selectedChat || !user || !db) return
     
+    // Clear AI suggestions when user sends a message
+    setAiSuggestions([])
+    setShowSuggestions(false)
+    
     try {
       const messageData = {
         senderId: user.uid,
@@ -915,6 +950,8 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
             type="text"
             placeholder="Search conversations..."
             className={styles.chatSearchInput}
+            value={searchQuery}
+            onChange={handleSearchChange}
           />
           <svg className={styles.chatSearchIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -922,12 +959,16 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         </div>
         
         <div className={styles.conversationsList}>
-          {conversations.length > 0 ? (
-            conversations.map((conversation) => (
+          {filteredConversations.length > 0 ? (
+            filteredConversations.map((conversation) => (
               <div 
                 key={conversation.id} 
                 className={`${styles.conversationCard} ${selectedChat?.id === conversation.id ? styles.selected : ''}`}
                 onClick={() => {
+                  // Clear AI suggestions when switching conversations
+                  setAiSuggestions([])
+                  setShowSuggestions(false)
+                  
                   setSelectedChat(conversation)
                   if (conversation.unreadCount > 0) {
                     markConversationAsRead(conversation.id)
@@ -956,11 +997,13 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                 </div>
               </div>
             ))
+          ) : searchQuery ? (
+            <div className={styles.emptyChatState}>
+              <h3 className={styles.emptyChatTitle}>No conversations found</h3>
+              <p className={styles.emptyChatSubtitle}>Try searching with different keywords</p>
+            </div>
           ) : (
             <div className={styles.emptyChatState}>
-              <svg className={styles.emptyChatIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
               <h3 className={styles.emptyChatTitle}>No conversations yet</h3>
               <p className={styles.emptyChatSubtitle}>Start a conversation to see it here</p>
             </div>
@@ -1029,15 +1072,15 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                         
                         {/* Accept/Decline buttons for listing requests */}
                         {message.isListingRequest && message.senderId !== user?.uid && message.requestStatus === 'pending' && !message.isCancelled && (
-                          <div className={aiStyles.requestActions}>
+                          <div className={styles.requestActions}>
                             <button 
-                              className={aiStyles.acceptButton}
+                              className={styles.acceptButton}
                               onClick={() => handleRequestResponse(message, 'approved')}
                             >
                               Accept
                             </button>
                             <button 
-                              className={aiStyles.declineButton}
+                              className={styles.declineButton}
                               onClick={() => handleRequestResponse(message, 'declined')}
                             >
                               Decline
@@ -1047,8 +1090,8 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                         
                         {/* Status indicator for processed requests */}
                         {message.isListingRequest && message.requestStatus && message.requestStatus !== 'pending' && (
-                          <div className={aiStyles.requestStatus}>
-                            <span className={`${aiStyles.statusBadge} ${aiStyles[message.requestStatus]}`}>
+                          <div className={styles.requestStatus}>
+                            <span className={`${styles.statusBadge} ${styles[message.requestStatus]}`}>
                               {message.requestStatus.charAt(0).toUpperCase() + message.requestStatus.slice(1)}
                             </span>
                           </div>
@@ -1059,15 +1102,15 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                   
                   {/* Accept/Decline buttons for standalone images */}
                   {message.senderId !== user?.uid && message.imageUrl && message.imageUrl !== 'pending' && !message.text && message.isListingRequest && message.requestStatus === 'pending' && !message.isCancelled && (
-                    <div className={aiStyles.requestActions}>
+                    <div className={styles.requestActions}>
                       <button 
-                        className={aiStyles.acceptButton}
+                        className={styles.acceptButton}
                         onClick={() => handleRequestResponse(message, 'approved')}
                       >
                         Accept
                       </button>
                       <button 
-                        className={aiStyles.declineButton}
+                        className={styles.declineButton}
                         onClick={() => handleRequestResponse(message, 'declined')}
                       >
                         Decline
@@ -1076,7 +1119,7 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                   )}
                   
                   {/* Message time - positioned beside bubble on hover */}
-                  {(message.text || message.imageUrl === 'pending') && (
+                  {(message.text || message.imageUrl) && (
                     <div className={styles.messageTime}>
                       {formatChatTimestamp(message.createdAt)}
                     </div>
@@ -1093,37 +1136,59 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
               ))}
 
               {/* AI Suggestions Section */}
-              {aiSuggestions.length > 0 && showSuggestions && (
-                <div className={aiStyles.aiSuggestionsContainer}>
-                  <div className={aiStyles.aiSuggestionsList}>
-                    {aiSuggestions.map((suggestion, index) => (
-                      <button
-                        key={index}
-                        className={aiStyles.suggestionBtn}
-                        onClick={() => useSuggestion(suggestion)}
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
+              {aiSuggestions.length > 0 && showSuggestions && requestStatus === 'approved' && (
+                <div className={`${styles.aiSuggestionsContainer} ${!isSuggestionsOpen ? styles.collapsed : ''}`}>
+                  {/* Collapsible Header */}
+                  <div className={styles.aiSuggestionsHeader} onClick={toggleSuggestions}>
+                    <div className={styles.aiSuggestionsTitle}>
+                      <span className={styles.aiIcon}>🤖</span>
+                      AI message suggestions
+                    </div>
+                    <button className={styles.toggleSuggestionsBtn}>
+                      {isSuggestionsOpen ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 15l-6-6-6 6"/>
+                        </svg>
+                      )}
+                    </button>
                   </div>
+                  
+                  {/* Collapsible Content */}
+                  {isSuggestionsOpen && (
+                    <div className={styles.aiSuggestionsList}>
+                      {aiSuggestions.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          className={styles.suggestionBtn}
+                          onClick={() => useSuggestion(suggestion)}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Transaction Summary */}
               {showSummary && transactionSummary && (
-                <div className={aiStyles.transactionSummaryContainer}>
-                  <div className={aiStyles.summaryHeader}>
+                <div className={styles.transactionSummaryContainer}>
+                  <div className={styles.summaryHeader}>
                     <span>📋 Transaction Summary</span>
                     <button onClick={() => setShowSummary(false)}>×</button>
                   </div>
-                  <div className={aiStyles.summaryContent}>
-                    <div className={aiStyles.summaryItem}>
+                  <div className={styles.summaryContent}>
+                    <div className={styles.summaryItem}>
                       <strong>Name:</strong> {transactionSummary.name}
                     </div>
-                    <div className={aiStyles.summaryItem}>
+                    <div className={styles.summaryItem}>
                       <strong>Price:</strong> {transactionSummary.price}
                     </div>
-                    <div className={aiStyles.summaryItem}>
+                    <div className={styles.summaryItem}>
                       <strong>Payment:</strong> {transactionSummary.paymentMethod}
                     </div>
                   </div>

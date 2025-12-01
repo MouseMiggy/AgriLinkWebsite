@@ -32,10 +32,8 @@ import {
   setDoc
 } from 'firebase/firestore'
 import { uploadImageToFirebaseStorage, uploadMultipleImagesToFirebaseStorage } from '../lib/firebaseStorage'
-import AIChatService from '../lib/aiChatService'
 import { listenToNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadNotificationCount, sendPostLikeNotification, sendCommentNotification, sendCommentReplyNotification, debugNotifications } from '../lib/notificationService'
 import styles from '../../styles/modules/dashboard.module.css'
-import aiStyles from '../../styles/modules/dashboard-ai-suggestions.module.css'
 
 export default function Dashboard() {
   const { showInfoPopup, showSuccessPopup, showErrorPopup, showConfirmPopup } = usePopup()

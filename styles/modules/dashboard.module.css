@@ -4001,10 +4001,34 @@
 .cancelBtn {
   background-color: #e4e6ea;
   color: #1c1e21;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-family: 'Poppins', sans-serif;
 }
 
 .cancelBtn:hover {
   background-color: #d8dadf;
+}
+
+.deleteBtn {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-family: 'Poppins', sans-serif;
+}
+
+.deleteBtn:hover {
+  background-color: #c82333;
 }
 
 /* Action Icons */

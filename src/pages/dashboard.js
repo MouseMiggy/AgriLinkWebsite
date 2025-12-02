@@ -3232,12 +3232,14 @@ export default function Dashboard() {
               onKeyDown={(e) => e.stopPropagation()}
             >
               <div className={styles.deleteModalHeader}>
-                <h3>Confirm Logout</h3>
+                <h3>Logout</h3>
               </div>
+              
               <div className={styles.deleteModalContent}>
                 <p>Are you sure you want to logout?</p>
               </div>
-              <div className={styles.deleteModalActions}>
+              
+              <div className={styles.deleteModalFooter}>
                 <button
                   onClick={cancelLogout}
                   className={styles.cancelBtn}
@@ -3246,7 +3248,7 @@ export default function Dashboard() {
                 </button>
                 <button
                   onClick={confirmLogout}
-                  className={styles.modalPostButton}
+                  className={styles.deleteBtn}
                 >
                   Logout
                 </button>

@@ -64,6 +64,7 @@ export default function Dashboard() {
   const [currentPost, setCurrentPost] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [unreadChats, setUnreadChats] = useState(0) // Re-added for navigation badge
   const [showNotifications, setShowNotifications] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
@@ -72,7 +73,6 @@ export default function Dashboard() {
   const [showCommentMenu, setShowCommentMenu] = useState(null)
   const [previousUnreadCount, setPreviousUnreadCount] = useState(0)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
-  const [unreadChats, setUnreadChats] = useState(0) // Keep for navigation badge
   
   // Essential state variables
   const [showMenuDropdown, setShowMenuDropdown] = useState(false)
@@ -247,41 +247,8 @@ export default function Dashboard() {
     }
   }
 
-  // Load user chats and count unread messages
-  const loadUserChats = async (userId) => {
-    try {
-      const chatsQuery = query(
-        collection(db, 'chats'),
-        where('participants', 'array-contains', userId)
-      )
-      
-      const chatsSnapshot = await getDocs(chatsQuery)
-      let totalUnreadChats = 0
-      
-      for (const chatDoc of chatsSnapshot.docs) {
-        const chatData = chatDoc.data()
-        const chatId = chatDoc.id
-        
-        // Check for unread messages in this chat
-        const messagesQuery = query(
-          collection(db, 'chats', chatId, 'messages'),
-          where('senderId', '!=', userId),
-          where('read', '==', false)
-        )
-        
-        const unreadMessages = await getDocs(messagesQuery)
-        if (unreadMessages.size > 0) {
-          totalUnreadChats++
-        }
-      }
-      
-      setUnreadChats(totalUnreadChats)
-      console.log('💬 Found', totalUnreadChats, 'chats with unread messages')
-      
-    } catch (error) {
-      console.error('Error loading chats:', error)
-    }
-  }
+  // Chat unread loading functionality removed - no longer needed
+  // const loadUserChats = async (userId) => { ... }
 
   // Force correct chronological order
   const forceCorrectOrder = async () => {
@@ -612,7 +579,7 @@ export default function Dashboard() {
         setUserRole(null)
         setNotifications([])
         setUnreadCount(0)
-        setUnreadChats(0)
+        setUnreadChats(0) // Re-added for proper cleanup
         setIsInitialLoad(true)
       }
     })

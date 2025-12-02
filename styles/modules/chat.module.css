@@ -1,3 +1,151 @@
+/* White Container Rating Prompt */
+.whiteRatingPromptContainer {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  margin: 16px 0;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ratingPromptContent {
+  padding: 20px;
+  text-align: center;
+}
+
+.whiteRatingPromptContainer .ratingPromptText {
+  color: #333333;
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 16px 0;
+  line-height: 1.4;
+}
+
+.whiteRateUserBtn {
+  background: #ffede2;
+  color: #ff9100;
+  border: 1px solid #ff9100;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(255, 145, 0, 0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.whiteRateUserBtn:hover {
+  background: #ffd4b3;
+  box-shadow: 0 4px 8px rgba(255, 145, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+.whiteRateUserBtn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(255, 145, 0, 0.2);
+}
+
+/* Facebook-style Rating Prompt Section */
+.ratingPromptSection {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  padding: 16px;
+  margin: 12px 0;
+  text-align: center;
+}
+
+.ratingPromptText {
+  color: #333333;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0 0 12px 0;
+}
+
+.inlineRateUserBtn {
+  background: #ffede2;
+  color: #ff9100;
+  border: 1px solid #ff9100;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(255, 145, 0, 0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inlineRateUserBtn:hover {
+  background: #ffd4b3;
+  box-shadow: 0 4px 8px rgba(255, 145, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+.inlineRateUserBtn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(255, 145, 0, 0.2);
+}
+
+/* Rate User Header Button */
+.rateUserHeaderBtn {
+  background: #ffede2;
+  color: #ff9100;
+  border: 1px solid #ff9100;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(255, 145, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rateUserHeaderBtn:hover {
+  background: #ffd4b3;
+  box-shadow: 0 4px 8px rgba(255, 145, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+.rateUserHeaderBtn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(255, 145, 0, 0.2);
+}
+
+/* Transaction Done Separator */
+.transactionDoneSeparator {
+  width: 100%;
+  height: 1px;
+  background: #e9ecef;
+  margin: 16px 0;
+  border-top: 1px solid #e9ecef;
+  position: relative;
+}
+
+.transactionDoneSeparator::after {
+  content: 'done transaction';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #f8f9fa;
+  padding: 0 16px;
+  color: #6c757d;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
 /* Chat Module CSS - All chat-specific styles moved from dashboard.module.css */
 
 /* Modern Chat Dashboard CSS */
@@ -93,21 +241,38 @@
   display: flex;
   align-items: center;
   padding: 12px 16px;
-  border-radius: 12px;
-  margin-bottom: 4px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  border-bottom: 1px solid #f0f0f0;
+  background: #ffffff;
   position: relative;
 }
 
 .conversationCard:hover {
   background: #f8f9fa;
-  transform: translateX(2px);
+  border-radius: 15px;
 }
 
 .conversationCard.selected {
-  background: #fff4ec;
-  border-left: 3px solid #ff8c42;
+  background: #ffede2;
+  border-left: 3px solid #ff9100;
+  border-radius: 15px;
+  margin: 4px 4px;
+}
+
+.conversationCard.unread {
+  background: #fff1e9;
+  border-radius: 15px;
+  margin: 4px 4px;
+}
+
+.conversationCard.unread .conversationName {
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.conversationCard.unread .lastMessage {
+  font-weight: 600;
+  color: #333333;
 }
 
 /* Conversation Avatar */
@@ -132,11 +297,18 @@
   min-width: 0;
 }
 
+/* Conversation Header */
 .conversationHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
+}
+
+.conversationHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .conversationName {
@@ -153,7 +325,35 @@
   font-size: 12px;
   color: #8492a6;
   white-space: nowrap;
-  margin-left: 8px;
+}
+
+/* Unread Counter - Red Circle */
+.unreadCounter {
+  background: #ff3b30;
+  color: white;
+  border-radius: 10px;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 6px;
+  box-shadow: 0 2px 4px rgba(255, 59, 48, 0.3);
+  animation: unreadPulse 2s infinite;
+}
+
+@keyframes unreadPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .conversationPreview {
@@ -187,6 +387,135 @@
   flex-direction: column;
   background: #ffffff;
   position: relative;
+}
+
+/* Chat Header Actions */
+.chatHeaderActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.doneTransactionBtn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.doneTransactionBtn:hover {
+  background: #218838;
+}
+
+.reportBtn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
+  transition: all 0.2s ease;
+}
+
+.reportBtn:hover {
+  background: #c82333;
+  box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+  transform: translateY(-1px);
+}
+
+.reportBtn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
+}
+
+/* Transaction Completion Actions */
+.transactionCompletionActions {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+  text-align: center;
+}
+
+.transactionQuestion {
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: #495057;
+}
+
+.transactionButtons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.transactionBtn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.transactionBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.yesBtn {
+  background: #28a745;
+  color: white;
+}
+
+.yesBtn:hover:not(:disabled) {
+  background: #218838;
+}
+
+.yesBtn.selected {
+  background: #155724;
+  box-shadow: 0 0 0 2px #28a745;
+}
+
+.noBtn {
+  background: #dc3545;
+  color: white;
+}
+
+.noBtn:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.noBtn.selected {
+  background: #721c24;
+  box-shadow: 0 0 0 2px #dc3545;
+}
+
+.transactionStatus {
+  font-size: 12px;
+  color: #6c757d;
+  margin: 0;
+}
+
+/* Transaction Done Message */
+.messageBubble:has(.isTransactionDone) {
+  background: #d4edda;
+  border-color: #28a745;
+}
+
+.isTransactionDone {
+  color: #155724;
+  font-weight: 600;
 }
 
 /* Chat Header */
@@ -474,33 +803,92 @@
 }
 
 /* Empty States */
-.emptyChatContainer {
+.emptyChatState {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  color: #65676ba2;
+  padding: 40px 20px;
   text-align: center;
-  padding: 40px;
+  height: 100%;
+  min-height: 300px;
 }
 
-.emptyChatIcon {
-  font-size: 64px;
-  margin-bottom: 16px;
-  opacity: 0.5;
+.emptyChatIcon,
+.emptySearchIcon {
+  width: 80px;
+  height: 80px;
+  color: #cbd5e0;
+  margin-bottom: 20px;
+  opacity: 0.8;
 }
 
 .emptyChatTitle {
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 18px;
+  font-weight: 600;
+  color: #4a5568;
   margin: 0 0 8px 0;
-  color: #1c1e21;
 }
 
 .emptyChatSubtitle {
   font-size: 14px;
-  margin: 0;
+  color: #718096;
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+}
+
+.browseListingsBtn {
+  background: #4299e1;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(66, 153, 225, 0.3);
+}
+
+.browseListingsBtn:hover {
+  background: #3182ce;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(66, 153, 225, 0.4);
+}
+
+/* Done Transaction Button States */
+.doneTransactionBtn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.doneTransactionBtn:hover:not(:disabled) {
+  background: #218838;
+  transform: scale(1.02);
+}
+
+.doneTransactionBtn.disabled {
+  background: #6c757d;
+  color: #fff;
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+}
+
+.doneTransactionBtn:disabled {
+  background: #6c757d;
+  color: #fff;
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
 }
 
 /* Input Area */
@@ -1001,6 +1389,315 @@
 .statusBadge.pending {
   background-color: #ffc107;
   color: #212529;
+}
+
+/* Rate User Section */
+.rateUserSection {
+  background: #e8f5e8;
+  border: 1px solid #28a745;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+  text-align: center;
+}
+
+.rateUserPrompt {
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: #155724;
+}
+
+.rateUserBtn {
+  background: #ffc107;
+  color: #212529;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(255, 193, 7, 0.3);
+}
+
+.rateUserBtn:hover {
+  background: #e0a800;
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(255, 193, 7, 0.4);
+}
+
+/* Mandatory Transaction Completion Modal */
+.mandatoryModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99998;
+  animation: fadeIn 0.3s ease;
+}
+
+.mandatoryModal {
+  background: white;
+  border-radius: 12px;
+  max-width: 450px;
+  width: 90%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+.mandatoryModalHeader {
+  padding: 20px 20px 10px 20px;
+  text-align: center;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.mandatoryModalHeader h3 {
+  margin: 0 0 8px 0;
+  color: #dc3545;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.mandatoryModalSubtitle {
+  margin: 0;
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.mandatoryModalContent {
+  padding: 20px;
+  text-align: center;
+}
+
+.mandatoryModalContent p {
+  margin: 0 0 12px 0;
+  color: #495057;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.mandatoryModalWarning {
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 16px 0;
+  color: #721c24;
+  font-weight: 500;
+}
+
+.mandatoryModalNote {
+  color: #6c757d;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.mandatoryModalActions {
+  padding: 15px 20px 20px 20px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.confirmTransactionBtn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.confirmTransactionBtn:hover {
+  background: #218838;
+  transform: scale(1.02);
+}
+
+.cancelTransactionBtn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancelTransactionBtn:hover {
+  background: #5a6268;
+  transform: scale(1.02);
+}
+
+/* Rating Modal */
+.ratingModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  animation: fadeIn 0.3s ease;
+}
+
+.ratingModal {
+  background: white;
+  border-radius: 12px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+.ratingModalHeader {
+  padding: 20px 20px 10px 20px;
+  text-align: center;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.ratingModalHeader h3 {
+  margin: 0 0 8px 0;
+  color: #fa9100;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.ratingModalSubtitle {
+  margin: 0;
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.ratingModalContent {
+  padding: 20px;
+  text-align: center;
+}
+
+.starRatingContainer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.starButton {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  transition: all 0.2s ease;
+  border-radius: 50%;
+}
+
+.starButton:hover {
+  transform: scale(1.1);
+}
+
+.starButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.starIcon {
+  font-size: 32px;
+  color: #ddd;
+  transition: all 0.2s ease;
+  display: block;
+}
+
+.starActive .starIcon {
+  color: #ffc107;
+  transform: scale(1.1);
+}
+
+.ratingDescription {
+  min-height: 24px;
+  font-size: 14px;
+  color: #495057;
+  font-weight: 500;
+  margin: 0;
+}
+
+.ratingModalActions {
+  padding: 15px 20px 20px 20px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.cancelRatingBtn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancelRatingBtn:hover:not(:disabled) {
+  background: #5a6268;
+  transform: scale(1.02);
+}
+
+.cancelRatingBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.submitRatingBtn {
+  background: #fa9100;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.submitRatingBtn:hover:not(:disabled) {
+  background: #e68100;
+  transform: scale(1.02);
+}
+
+.submitRatingBtn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Scrollbar Styling */

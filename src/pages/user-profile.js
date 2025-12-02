@@ -501,11 +501,14 @@ export default function UserProfile() {
             </p>
             <div className={styles.userRating}>
               <span className={styles.ratingStars}>
-                {'★'.repeat(Math.floor(userProfile?.rating || 0))}
-                {'☆'.repeat(5 - Math.floor(userProfile?.rating || 0))}
+                {'★'.repeat(Math.floor(userProfile?.averageRating || 0))}
+                {'☆'.repeat(5 - Math.floor(userProfile?.averageRating || 0))}
               </span>
               <span className={styles.ratingValue}>
-                {typeof userProfile?.rating === 'number' ? userProfile.rating.toFixed(1) : '0.0'}
+                {typeof userProfile?.averageRating === 'number' ? userProfile.averageRating.toFixed(1) : '0.0'}
+              </span>
+              <span className={styles.ratingCount}>
+                ({userProfile?.totalRatings || 0} rating{(userProfile?.totalRatings || 0) !== 1 ? 's' : ''})
               </span>
             </div>
           </div>

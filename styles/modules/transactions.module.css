@@ -1,0 +1,540 @@
+/* Transactions Page Styles */
+.container {
+  height: 100vh;
+  background-color: #f0f0f0;
+  padding: 0;
+  font-family: 'Poppins', sans-serif;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Header Container */
+.headerContainer {
+  background: white;
+  padding: 20px 20px;
+  border-bottom: 1px solid #e4e6ea;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-left: 260px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding-left: 40px;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.transactionCount {
+  background: #f8f9fa;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6c757d;
+}
+
+/* Main Content Area - Account for fixed header */
+.mainContent {
+  padding-top: 100px;
+  min-height: 100vh;
+  margin-left: 260px;
+  padding-left: 40px;
+  padding-right: 40px;
+}
+
+/* Loading State */
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  padding: 20px 16px;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  max-width: fit-content;
+  position: fixed;
+  top: 50%;
+  left: calc(50% + 120px);
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+}
+
+.loadingSpinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #f3f4f6;
+  border-top: 3px solid #fa9100;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loadingText {
+  margin: 0;
+  color: #6c757d;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+/* Error State */
+.errorContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  text-align: center;
+}
+
+.errorText {
+  color: #dc3545;
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+.retryButton {
+  background: #fa9100;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.retryButton:hover {
+  background: #e58300;
+}
+
+/* Empty State */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  text-align: center;
+  padding: 40px;
+}
+
+.emptyIcon {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 24px;
+  opacity: 0.3;
+}
+
+.emptyIcon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.emptyTitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
+}
+
+.emptyDescription {
+  font-size: 14px;
+  color: #6c757d;
+  margin: 0;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+/* Transactions Table */
+.transactionsTableContainer {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  border: 1px solid #e4e6ea;
+}
+
+.transactionsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.tableHeader {
+  background: #f8f9fa;
+  border-bottom: 2px solid #e4e6ea;
+}
+
+.columnHeader {
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #1a1a1a;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #e4e6ea;
+}
+
+.tableRow {
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tableRow:hover {
+  background-color: #f8f9fa;
+}
+
+.tableCell {
+  padding: 16px;
+  vertical-align: middle;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.listingName {
+  font-weight: 500;
+  color: #1a1a1a;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listingDetails {
+  color: #6c757d;
+  font-size: 13px;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.price {
+  font-weight: 600;
+  color: #fa9100;
+  font-size: 15px;
+}
+
+.buyerName {
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+.date {
+  color: #6c757d;
+  font-size: 13px;
+}
+
+/* Empty Table Cell */
+.emptyTableCell {
+  padding: 40px 20px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.emptyTableMessage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.emptyTableMessage .emptyIcon {
+  width: 60px;
+  height: 60px;
+  margin-bottom: 0;
+  opacity: 0.3;
+}
+
+.emptyTableMessage .emptyTitle {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.emptyTableMessage .emptyDescription {
+  font-size: 14px;
+  color: #6c757d;
+  margin: 0;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+/* Receipt Modal */
+.receiptModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.receiptModalContent {
+  background: white;
+  border-radius: 12px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  position: relative;
+}
+
+.receiptHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 24px 20px;
+  border-bottom: 2px solid #f0f0f0;
+  background: linear-gradient(135deg, #fa9100 0%, #e58300 100%);
+  color: white;
+}
+
+.receiptTitle {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.receiptCloseButton {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: white;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+.receiptCloseButton:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.receiptBody {
+  padding: 24px;
+}
+
+.receiptSection {
+  margin-bottom: 24px;
+}
+
+.receiptSection:last-child {
+  margin-bottom: 0;
+}
+
+.receiptSectionTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #fa9100;
+}
+
+.receiptInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.receiptRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f8f9fa;
+}
+
+.receiptRow:last-child {
+  border-bottom: none;
+}
+
+.receiptLabel {
+  font-size: 14px;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.receiptValue {
+  font-size: 14px;
+  color: #1a1a1a;
+  font-weight: 500;
+  text-align: right;
+  max-width: 60%;
+  word-break: break-word;
+}
+
+.receiptFooter {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 2px solid #f0f0f0;
+}
+
+.totalAmount {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 2px solid #fa9100;
+}
+
+.totalLabel {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.totalValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fa9100;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .headerContainer {
+    margin-left: 0;
+    padding: 20px;
+    padding-left: 40px;
+  }
+  
+  .mainContent {
+    margin-left: 0;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .headerContainer {
+    padding: 16px 20px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+  
+  .mainContent {
+    padding-top: 80px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  
+  .transactionsTableContainer {
+    overflow-x: auto;
+  }
+  
+  .transactionsTable {
+    min-width: 600px;
+  }
+  
+  .columnHeader {
+    padding: 12px 8px;
+    font-size: 12px;
+  }
+  
+  .tableCell {
+    padding: 12px 8px;
+  }
+  
+  .receiptModalContent {
+    width: 95%;
+    margin: 16px;
+  }
+  
+  .receiptBody {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 600px) {
+  .title {
+    font-size: 20px;
+  }
+  
+  .emptyState {
+    padding: 20px;
+  }
+  
+  .emptyIcon {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .emptyTitle {
+    font-size: 18px;
+  }
+  
+  .receiptHeader {
+    padding: 20px;
+  }
+  
+  .receiptTitle {
+    font-size: 18px;
+  }
+  
+  .receiptBody {
+    padding: 16px;
+  }
+  
+  .receiptRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .receiptValue {
+    text-align: left;
+    max-width: 100%;
+  }
+}

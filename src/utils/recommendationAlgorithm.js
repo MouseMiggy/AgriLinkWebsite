@@ -1,6 +1,42 @@
 import { db } from '../lib/firebase'
 import { getDoc, doc, getDocs, collection } from 'firebase/firestore'
 
+// User profile cache to optimize performance
+const userProfileCache = new Map()
+const CACHE_EXPIRY = 5 * 60 * 1000 // 5 minutes
+
+// Cache helper functions
+const getCachedUserProfile = async (userId) => {
+  if (userProfileCache.has(userId)) {
+    const cached = userProfileCache.get(userId)
+    if (Date.now() - cached.timestamp < CACHE_EXPIRY) {
+      console.log('📦 Using cached user profile for:', userId)
+      return cached.data
+    } else {
+      userProfileCache.delete(userId)
+    }
+  }
+  
+  console.log('🔍 Fetching user profile for:', userId)
+  const userDoc = await getDoc(doc(db, 'Users', userId))
+  if (userDoc.exists()) {
+    const userData = userDoc.data()
+    userProfileCache.set(userId, {
+      data: userData,
+      timestamp: Date.now()
+    })
+    return userData
+  }
+  
+  return null
+}
+
+// Clear cache helper
+const clearUserProfileCache = () => {
+  userProfileCache.clear()
+  console.log('🗑️ User profile cache cleared')
+}
+
 // Crop-waste compatibility mapping
 const CROP_WASTE_COMPATIBILITY = {
   rice: ['cattle', 'buffalo', 'pigs'],
@@ -240,36 +276,69 @@ export const getCropFarmerProfile = async (userId) => {
 }
 
 export const getEnhancedLivestockListings = async () => {
+  console.log('🔍 Fetching ALL livestock listings from Firebase...')
   const listingsSnapshot = await getDocs(collection(db, 'livestock_listings'))
   const listings = []
 
+  console.log(`📊 Total documents found in livestock_listings collection: ${listingsSnapshot.size}`)
+
+  // Collect unique owner IDs for batch processing
+  const uniqueOwnerIds = new Set()
+  for (const listingDoc of listingsSnapshot.docs) {
+    const listingData = listingDoc.data()
+    if (listingData.ownerId) {
+      uniqueOwnerIds.add(listingData.ownerId)
+    }
+  }
+
+  console.log(`👥 Found ${uniqueOwnerIds.size} unique owners to fetch`)
+
+  // Batch fetch user profiles with caching
+  const ownerProfiles = new Map()
+  const profilePromises = Array.from(uniqueOwnerIds).map(async (ownerId) => {
+    const profile = await getCachedUserProfile(ownerId)
+    if (profile) {
+      ownerProfiles.set(ownerId, profile)
+    }
+  })
+
+  await Promise.all(profilePromises)
+  console.log('✅ User profiles fetched and cached')
+
+  // Process listings with cached owner data
   for (const listingDoc of listingsSnapshot.docs) {
     const listingData = listingDoc.data()
 
     // Skip sold listings
     if (listingData.status === 'sold') {
+      console.log('⏭️ Skipping sold listing:', listingDoc.id)
       continue
     }
 
+    // Skip deleted listings
+    if (listingData.status === 'deleted') {
+      console.log('⏭️ Skipping deleted listing:', listingDoc.id)
+      continue
+    }
+
+    console.log('✅ Processing listing:', listingDoc.id, 'Status:', listingData.status || 'undefined')
+
     try {
-      // Get owner data to include location and rating
+      // Get owner data from cache
       let ownerLocation = null
       let livestockTypes = []
       let ownerRating = null
       
-      if (listingData.ownerId) {
-        const ownerDoc = await getDoc(doc(db, 'Users', listingData.ownerId))
-        if (ownerDoc.exists()) {
-          const ownerData = ownerDoc.data()
-          ownerLocation = ownerData.location || null
-          ownerRating = ownerData.rating ?? ownerData.averageRating ?? null
-          
-          // Get livestock types from owner profile
-          if (ownerData.livestock?.animals) {
-            livestockTypes = ownerData.livestock.animals
-          } else if (ownerData.onboarding?.livestockTypes) {
-            livestockTypes = ownerData.onboarding.livestockTypes
-          }
+      if (listingData.ownerId && ownerProfiles.has(listingData.ownerId)) {
+        const ownerData = ownerProfiles.get(listingData.ownerId)
+        ownerLocation = ownerData.location || null
+        ownerRating = ownerData.rating ?? ownerData.averageRating ?? null
+        
+        // Get livestock types from owner profile
+        if (ownerData.livestock?.animals) {
+          livestockTypes = ownerData.livestock.animals
+        } else if (ownerData.onboarding?.livestockTypes) {
+          livestockTypes = ownerData.onboarding.livestockTypes
         }
       }
 
@@ -283,7 +352,7 @@ export const getEnhancedLivestockListings = async () => {
         location: ownerLocation // Also add as location for compatibility
       })
     } catch (e) {
-      console.error('Error fetching owner data for listing:', listingDoc.id, e)
+      console.error('Error processing listing:', listingDoc.id, e)
       // Add listing without owner data
       listings.push({
         id: listingDoc.id,
@@ -292,12 +361,16 @@ export const getEnhancedLivestockListings = async () => {
     }
   }
 
+  console.log(`✅ Final processed listings count: ${listings.length}`)
+  console.log('📋 Listing statuses:', listings.map(l => ({ id: l.id, status: l.status || 'undefined' })))
+  
   return listings
 }
 
 export const getRecommendedListings = async (cropFarmerId, options = {}) => {
   try {
-    const { limit = 50 } = options
+    // Remove artificial limit - return all available listings for pagination
+    const { limit = null, minScore = 0.0, searchQuery = null } = options
     
     // Get crop farmer profile
     const cropFarmer = await getCropFarmerProfile(cropFarmerId)
@@ -334,19 +407,88 @@ export const getRecommendedListings = async (cropFarmerId, options = {}) => {
     // Sort by recommendation score (highest first)
     listingsWithScores.sort((a, b) => b.recommendationScore - a.recommendationScore)
     
+    // Apply search filtering if searchQuery is provided
+    let searchResults = []
+    let outsideSearchResults = []
+    
+    if (searchQuery) {
+      const searchLower = searchQuery.toLowerCase()
+      
+      // Find direct search matches
+      searchResults = listingsWithScores.filter(listing =>
+        listing.name?.toLowerCase().includes(searchLower) ||
+        listing.details?.toLowerCase().includes(searchLower) ||
+        listing.ownerName?.toLowerCase().includes(searchLower)
+      )
+      
+      // Find "outside search" recommendations (high scoring non-matches)
+      outsideSearchResults = listingsWithScores.filter(listing =>
+        !listing.name?.toLowerCase().includes(searchLower) &&
+        !listing.details?.toLowerCase().includes(searchLower) &&
+        !listing.ownerName?.toLowerCase().includes(searchLower) &&
+        listing.recommendationScore >= minScore
+      )
+    } else {
+      // No search query - all listings are main results
+      searchResults = listingsWithScores.filter(listing => 
+        listing.recommendationScore >= minScore
+      )
+      outsideSearchResults = []
+    }
+    
+    // Apply limit if specified (for backward compatibility)
+    if (limit) {
+      return {
+        searchResults: searchResults.slice(0, limit),
+        outsideSearchResults: outsideSearchResults.slice(0, limit),
+        hasSearchQuery: !!searchQuery
+      }
+    }
+    
+    // Return all results for dual pagination
     return {
-      searchResults: listingsWithScores.slice(0, limit),
-      outsideSearchResults: [],
-      hasSearchQuery: false
+      searchResults: searchResults,
+      outsideSearchResults: outsideSearchResults,
+      hasSearchQuery: !!searchQuery
     }
   } catch (error) {
     console.error('Error in getRecommendedListings:', error)
     // Fallback: return all listings without scoring
     const allListings = await getEnhancedLivestockListings()
+    
+    // Apply search filtering if searchQuery is provided
+    let searchResults = allListings
+    let outsideSearchResults = []
+    
+    if (options.searchQuery) {
+      const searchLower = options.searchQuery.toLowerCase()
+      
+      searchResults = allListings.filter(listing =>
+        listing.name?.toLowerCase().includes(searchLower) ||
+        listing.details?.toLowerCase().includes(searchLower) ||
+        listing.ownerName?.toLowerCase().includes(searchLower)
+      )
+      
+      outsideSearchResults = allListings.filter(listing =>
+        !listing.name?.toLowerCase().includes(searchLower) &&
+        !listing.details?.toLowerCase().includes(searchLower) &&
+        !listing.ownerName?.toLowerCase().includes(searchLower)
+      )
+    }
+    
+    // Apply limit if specified (for backward compatibility)
+    if (options.limit) {
+      return {
+        searchResults: searchResults.slice(0, options.limit),
+        outsideSearchResults: outsideSearchResults.slice(0, options.limit),
+        hasSearchQuery: !!options.searchQuery
+      }
+    }
+    
     return {
-      searchResults: allListings.slice(0, options.limit || 50),
-      outsideSearchResults: [],
-      hasSearchQuery: false
+      searchResults: searchResults,
+      outsideSearchResults: outsideSearchResults,
+      hasSearchQuery: !!options.searchQuery
     }
   }
 }

@@ -5,6 +5,7 @@ import Listings from './listings'
 import RequestListingHistory from './request-listing-history'
 import ListingHistory from './listing-history'
 import Reports from './reports'
+import Transactions from './transactions'
 import UserProfile from './user-profile'
 import ReportModal from '../components/ReportModal'
 import Chat from './chat'
@@ -2620,8 +2621,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Main Feed - Hide when listings, listing-history, reports, profile, or chat is active */}
-        {activeMenuItem !== 'listings' && activeMenuItem !== 'listing-history' && activeMenuItem !== 'reports' && activeMenuItem !== 'profile' && activeMenuItem !== 'chat' && (
+        {/* Main Feed - Hide when listings, listing-history, reports, profile, chat, or transactions is active */}
+        {activeMenuItem !== 'listings' && activeMenuItem !== 'listing-history' && activeMenuItem !== 'reports' && activeMenuItem !== 'profile' && activeMenuItem !== 'chat' && activeMenuItem !== 'transactions' && (
         <main className={styles.mainFeed}>
           {/* Post Creation Prompt - Only show when not viewing reports, listings, profile, chat, or search results */}
           {activeMenuItem !== 'reports' && activeMenuItem !== 'listings' && activeMenuItem !== 'profile' && activeMenuItem !== 'chat' && !searchSubmitted && (
@@ -2955,6 +2956,20 @@ export default function Dashboard() {
             position: 'relative'
           }}>
             <Reports />
+          </div>
+        )}
+
+        {/* Transactions Screen - Separate from main feed */}
+        {activeMenuItem === 'transactions' && (
+          <div style={{ 
+            width: '100%', 
+            height: '100vh', 
+            display: 'flex', 
+            flexDirection: 'column',
+            marginLeft: '0',
+            position: 'relative'
+          }}>
+            <Transactions user={user} />
           </div>
         )}
 

@@ -51,6 +51,12 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   const [selectedImage, setSelectedImage] = useState(null)
   const [selectedImageAlt, setSelectedImageAlt] = useState('')
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [outsideSearchPage, setOutsideSearchPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(40) // Dynamic: 40 for main, 20 for outside search
+  const [isPaginating, setIsPaginating] = useState(false)
+  
   // AI Validation states
   const [isImageValidating, setIsImageValidating] = useState(false)
   const [imageValidationResult, setImageValidationResult] = useState(null)
@@ -297,6 +303,9 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   }
 
   const openEditModal = (listing) => {
+    // Get the correct image URL using the same logic as display
+    const imageUrl = listing.images?.[0] || listing.imageUrls?.[0] || listing.imageUrl || listing.image || listing.photo || listing.photoUrl || listing.photos?.[0] || null
+    
     setFormData({
       name: listing.name || '',
       details: listing.details || '',
@@ -304,8 +313,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       measurementUnit: listing.measurementUnit || 'kg',
       price: listing.isFree ? '' : (listing.price === 'Free' ? '' : listing.price || ''),
       isFree: listing.isFree || listing.price === 'Free',
-      image: listing.image || null,
-      imagePreview: listing.image || null
+      image: imageUrl,
+      imagePreview: imageUrl
     })
     setEditingListing(listing)
     setShowAddModal(true)
@@ -499,12 +508,14 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       // Use validated image URL if available to avoid re-uploading
       if (validatedImageUrl) {
         console.log('📤 Reusing validated image URL:', validatedImageUrl)
-        imageUrl = validatedImageUrl
-      } else if (formData.image && formData.image instanceof File) {
-        console.log('📤 Uploading image to Firebase Storage...')
+      }
+      // Handle image upload or preservation
+      if (formData.image && formData.image instanceof File) {
+        // New image file uploaded - upload to Firebase
+        console.log('📤 Uploading new image to Firebase Storage...')
         try {
           imageUrl = await uploadImageToFirebaseStorage(formData.image, 'Images/Listing', user.uid)
-          console.log('✅ Image uploaded successfully:', imageUrl)
+          console.log('✅ New image uploaded successfully:', imageUrl)
         } catch (uploadError) {
           console.error('❌ Image upload failed:', uploadError)
           setIsCreatingListing(false)
@@ -516,9 +527,20 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
           return
         }
       } else if (formData.image && typeof formData.image === 'string') {
-        // Handle base64 fallback (should not happen with new implementation)
-        console.warn('⚠️ Image is base64 string, should be File object')
+        // Existing Firebase URL - preserve it during edit
+        console.log('🔄 Preserving existing image URL:', formData.image)
         imageUrl = formData.image
+      } else if (formData.image === null) {
+        // Image was removed - set imageUrl to null
+        console.log('🗑️ Image removed - setting imageUrl to null')
+        imageUrl = null
+      } else {
+        // Handle base64 fallback (should not happen with new implementation)
+        console.warn('⚠️ Unexpected image format, checking for base64...')
+        if (typeof formData.image === 'string' && formData.image.startsWith('data:')) {
+          console.warn('⚠️ Image is base64 string, should be File object or Firebase URL')
+          imageUrl = formData.image
+        }
       }
 
       const listingData = {
@@ -1423,29 +1445,34 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
           searchQuery: searchQuery || 'none'
         })
 
+        // Remove artificial limit to load all listings for pagination
         const result = await getRecommendedListings(user.uid, {
-          limit: 100,
+          limit: null, // Load all listings
           minScore: 0.0,
           searchQuery: searchQuery.trim() || null
         })
 
         console.log('✅ Recommended listings loaded:', {
-          searchResults: result.searchResults?.length || 0,
+          totalListings: result.searchResults?.length || 0,
           outsideSearchResults: result.outsideSearchResults?.length || 0,
           hasSearchQuery: result.hasSearchQuery
         })
 
-        let combinedListings = []
-
-        if (result.hasSearchQuery && result.searchResults.length === 0) {
-          // No direct matches - show context-based outside search recommendations
-          combinedListings = result.outsideSearchResults || []
-        } else {
-          combinedListings = result.searchResults || []
-        }
-
-        setListings(combinedListings)
-        setFilteredListings(combinedListings)
+        // Set separate result arrays for dual pagination
+        setSearchResults(result.searchResults || [])
+        setOutsideSearchResults(result.outsideSearchResults || [])
+        
+        // Reset pagination pages when new data loads
+        setCurrentPage(1)
+        setOutsideSearchPage(1)
+        
+        // Filter out sold and deleted listings from main listings
+        const allListings = result.searchResults || []
+        const activeListings = allListings.filter(listing => 
+          listing.status !== 'sold' && listing.status !== 'deleted'
+        )
+        setListings(activeListings)
+        setFilteredListings(activeListings)
       } catch (err) {
         console.error('❌ Error loading recommended listings for crop farmer:', err)
         setError('Failed to load listings')
@@ -1551,6 +1578,122 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       setFilteredListings(filtered)
     }
   }, [searchQuery, listings, userRole])
+
+  // Calculate pagination values for main listings
+  const totalMainPages = Math.ceil(filteredListings.length / itemsPerPage)
+  const mainStartIndex = (currentPage - 1) * itemsPerPage
+  const mainEndIndex = mainStartIndex + itemsPerPage
+  const currentMainListings = filteredListings.slice(mainStartIndex, mainEndIndex)
+
+  // Calculate pagination values for outside search results (20 per page)
+  const outsideItemsPerPage = 20
+  const totalOutsidePages = Math.ceil(outsideSearchResults.length / outsideItemsPerPage)
+  const outsideStartIndex = (outsideSearchPage - 1) * outsideItemsPerPage
+  const outsideEndIndex = outsideStartIndex + outsideItemsPerPage
+  const currentOutsideListings = outsideSearchResults.slice(outsideStartIndex, outsideEndIndex)
+
+  // Dynamic items per page based on search state
+  useEffect(() => {
+    const newItemsPerPage = searchQuery.trim() ? 40 : 40 // Always 40 for main listings now
+    setItemsPerPage(newItemsPerPage)
+    setCurrentPage(1) // Reset to first page when items per page changes
+    setOutsideSearchPage(1) // Reset outside search page too
+  }, [searchQuery])
+
+  // Calculate page numbers to show
+  const getVisiblePageNumbers = (totalPages, currentPage) => {
+    const pages = []
+    const maxVisible = 4
+
+    if (totalPages <= maxVisible) {
+      // Show all pages if less than or equal to maxVisible
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i)
+      }
+    } else {
+      // Show smart page range based on current page
+      if (currentPage <= 2) {
+        // Show first 3 pages, ellipsis, and last page
+        for (let i = 1; i <= 3; i++) {
+          pages.push(i)
+        }
+        if (totalPages > 3) {
+          pages.push('...')
+          pages.push(totalPages)
+        }
+      } else if (currentPage >= totalPages - 1) {
+        // Show first page, ellipsis, and last 3 pages
+        pages.push(1)
+        if (totalPages > 4) {
+          pages.push('...')
+        }
+        for (let i = totalPages - 2; i <= totalPages; i++) {
+          pages.push(i)
+        }
+      } else {
+        // Show first page, ellipsis, current-1, current, current+1, ellipsis, and last page
+        pages.push(1)
+        if (currentPage - 1 > 2) {
+          pages.push('...')
+        }
+        pages.push(currentPage - 1)
+        pages.push(currentPage)
+        pages.push(currentPage + 1)
+        if (currentPage + 1 < totalPages - 1) {
+          pages.push('...')
+        }
+        pages.push(totalPages)
+      }
+    }
+
+    return pages
+  }
+
+  // Pagination functions for main listings
+  const handleMainPageChange = (page) => {
+    setIsPaginating(true)
+    setCurrentPage(page)
+    // Scroll to top of listings
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    // Remove loading state after a short delay for smooth transition
+    setTimeout(() => setIsPaginating(false), 300)
+  }
+
+  const handleMainNextPage = () => {
+    if (currentPage < totalMainPages) {
+      handleMainPageChange(currentPage + 1)
+    }
+  }
+
+  const handleMainPrevPage = () => {
+    if (currentPage > 1) {
+      handleMainPageChange(currentPage - 1)
+    }
+  }
+
+  // Pagination functions for outside search results
+  const handleOutsideSearchPageChange = (page) => {
+    setIsPaginating(true)
+    setOutsideSearchPage(page)
+    // Scroll to top of outside search section
+    const outsideSection = document.getElementById('outside-search-section')
+    if (outsideSection) {
+      outsideSection.scrollIntoView({ behavior: 'smooth' })
+    }
+    setTimeout(() => setIsPaginating(false), 300)
+  }
+
+  const handleOutsideSearchNextPage = () => {
+    if (outsideSearchPage < totalOutsidePages) {
+      handleOutsideSearchPageChange(outsideSearchPage + 1)
+    }
+  }
+
+  const handleOutsideSearchPrevPage = () => {
+    if (outsideSearchPage > 1) {
+      handleOutsideSearchPageChange(outsideSearchPage - 1)
+    }
+  }
 
   const formatPrice = (price, isFree) => {
     if (isFree || price === 'Free') return 'Free'
@@ -1658,7 +1801,6 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                 src={imageUrl} 
                 alt={listing.name || listing.title || 'Listing'}
                 className={styles.listingImage}
-                onClick={() => openImageModal(imageUrl, listing.name || listing.title || 'Listing')}
                 onError={(e) => {
                   e.target.style.display = 'none'
                   e.target.nextSibling.style.display = 'flex'
@@ -1840,8 +1982,9 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         </div>
         
         {/* Loading Content */}
-        <div className={styles.emptyState}>
-          <div className={styles.loadingSpinner}></div>
+        <div className={styles.listingsLoadingContainer}>
+          <div className={styles.listingsLoadingSpinner}></div>
+          <p className={styles.listingsLoadingText}>Loading listings...</p>
         </div>
       </div>
     )
@@ -1953,24 +2096,22 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
             </button>
           </div>
         )}
-        {/* Search Results Section */}
+        {/* Search Results Section - Dual Pagination */}
         {searchQuery && userRole === 'crop_farmer' ? (
           <>
             {/* Search Results Header */}
-            <div className={styles.searchResultsHeader}>
+            <div className={styles.searchSection}>
               <h3 className={styles.sectionTitle}>
-                Search Results for "{searchQuery}"
+                Search Results ({searchResults.length} found)
               </h3>
-              <p className={styles.searchResultsCount}>
-                {searchResults.length} {searchResults.length === 1 ? 'result' : 'results'} found
-              </p>
-            </div>
-
-            {/* Matching Search Results */}
-            {searchResults.length > 0 ? (
-              <div className={styles.searchSection}>
-                <div className={styles.listingsGrid}>
-                  {searchResults.map((listing) => (
+              <div className={styles.listingsGrid}>
+                {isPaginating ? (
+                  <div className={styles.listingsLoadingContainer}>
+                    <div className={styles.listingsLoadingSpinner}></div>
+                    <p className={styles.listingsLoadingText}>Loading listings...</p>
+                  </div>
+                ) : (
+                  currentMainListings.map((listing) => (
                     <div 
                       key={listing.id} 
                       className={styles.listingCard}
@@ -1979,63 +2120,149 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                     >
                       {renderListingCard(listing)}
                     </div>
-                  ))}
-                </div>
+                  ))
+                )}
               </div>
-            ) : (
-              <div className={styles.noSearchResults}>
-                <div className={styles.noResultsIcon}>🔍</div>
-                <h4>No matching listings found</h4>
-                <p>We couldn't find any listings matching "{searchQuery}"</p>
+            </div>
+
+            {/* Pagination for Search Results - At the end */}
+            {!isPaginating && totalMainPages > 1 && (
+              <div className={styles.paginationContainer}>
+                <div className={styles.paginationControls}>
+                  {/* Previous Button */}
+                  <button
+                    className={`${styles.paginationButton} ${currentPage === 1 ? styles.disabled : ''}`}
+                    onClick={handleMainPrevPage}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </button>
+
+                  {/* Page Numbers */}
+                  <div className={styles.pageNumbers}>
+                    {getVisiblePageNumbers(totalMainPages, currentPage).map((pageNum, index) => {
+                      if (pageNum === '...') {
+                        return (
+                          <span key={`ellipsis-${index}`} className={styles.ellipsis}>
+                            ...
+                          </span>
+                        )
+                      }
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          className={`${styles.pageNumber} ${currentPage === pageNum ? styles.active : ''}`}
+                          onClick={() => handleMainPageChange(pageNum)}
+                        >
+                          {pageNum}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Next Button */}
+                  <button
+                    className={`${styles.paginationButton} ${currentPage === totalMainPages ? styles.disabled : ''}`}
+                    onClick={handleMainNextPage}
+                    disabled={currentPage === totalMainPages}
+                  >
+                    Next &gt;
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* Other Listings You May Like - Always show if available */}
-            {outsideSearchResults.length > 0 && (
-              <div className={styles.searchSection}>
-                <h3 className={styles.sectionTitle}>
-                  Other Listings You May Like
-                </h3>
-                <div className={styles.listingsGrid}>
-                  {outsideSearchResults.map((listing) => (
-                    <div 
-                      key={listing.id} 
-                      className={styles.listingCard}
-                      onClick={() => openDetailsModal(listing)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {renderListingCard(listing)}
-                    </div>
-                  ))}
-                </div>
+            {/* End of Results Message */}
+            {searchResults.length > 0 && (
+              <div className={styles.endOfResults}>
+                <p>End of results</p>
+              </div>
+            )}
+
+            {/* No Search Results Message */}
+            {searchResults.length === 0 && (
+              <div className={styles.noSearchResults}>
+                <p>no listing found</p>
               </div>
             )}
           </>
         ) : (
-          /* Regular Listings Display */
+          /* Regular Listings Display - Non-search mode */
           filteredListings.length === 0 ? (
             <div className={styles.emptyState}>
-              <h3>No listings found</h3>
-              <p>
-                {userRole === 'livestock_owner' ?
-                  'You haven\'t created any listings yet. Click "Add Listing" to get started!' :
-                  'No listings available at the moment. Check back later for new listings.'
-                }
-              </p>
+              <p>no listing found</p>
             </div>
           ) : (
-            <div className={styles.listingsGrid}>
-              {filteredListings.map((listing) => (
-                <div 
-                  key={listing.id} 
-                  className={styles.listingCard}
-                  onClick={() => openDetailsModal(listing)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {renderListingCard(listing)}
+            <>
+              <div className={styles.listingsGrid}>
+                {isPaginating ? (
+                  <div className={styles.listingsLoadingContainer}>
+                    <div className={styles.listingsLoadingSpinner}></div>
+                    <p className={styles.listingsLoadingText}>Loading listings...</p>
+                  </div>
+                ) : (
+                  currentMainListings.map((listing) => (
+                    <div 
+                      key={listing.id} 
+                      className={styles.listingCard}
+                      onClick={() => openDetailsModal(listing)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {renderListingCard(listing)}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Pagination Controls - Regular Listings (40 per page) - At the end */}
+              {!isPaginating && !searchQuery && userRole === 'crop_farmer' && totalMainPages > 1 && (
+                <div className={styles.paginationContainer}>
+                  <div className={styles.paginationControls}>
+                    {/* Previous Button */}
+                    <button
+                      className={`${styles.paginationButton} ${currentPage === 1 ? styles.disabled : ''}`}
+                      onClick={handleMainPrevPage}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </button>
+
+                    {/* Page Numbers */}
+                    <div className={styles.pageNumbers}>
+                      {getVisiblePageNumbers(totalMainPages, currentPage).map((pageNum, index) => {
+                        if (pageNum === '...') {
+                          return (
+                            <span key={`ellipsis-${index}`} className={styles.ellipsis}>
+                              ...
+                            </span>
+                          )
+                        }
+                        
+                        return (
+                          <button
+                            key={pageNum}
+                            className={`${styles.pageNumber} ${currentPage === pageNum ? styles.active : ''}`}
+                            onClick={() => handleMainPageChange(pageNum)}
+                          >
+                            {pageNum}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* Next Button */}
+                    <button
+                      className={`${styles.paginationButton} ${currentPage === totalMainPages ? styles.disabled : ''}`}
+                      onClick={handleMainNextPage}
+                      disabled={currentPage === totalMainPages}
+                    >
+                      Next &gt;
+                    </button>
+                  </div>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )
         )}
       </div>

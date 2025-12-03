@@ -215,7 +215,6 @@
   max-width: 1400px;
   margin: 0 auto;
   background-color: #f0f0f0;
-  margin-bottom: 80px;
 }
 
 @media (max-width: 1200px) {
@@ -2507,5 +2506,216 @@
 .revalidateButton:disabled {
   background: #6c757d;
   cursor: not-allowed;
-  opacity: 0.6;
+}
+
+/* Pagination Styles */
+.paginationContainer {
+  margin-top: 24px;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.paginationInfo {
+  font-size: 14px;
+  color: #6c757d;
+  font-weight: 500;
+  text-align: center;
+}
+
+.paginationControls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.paginationButton {
+  padding: 8px 16px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  color: #495057;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.paginationButton:hover:not(.disabled) {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.paginationButton.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f8f9fa;
+}
+
+.pageNumbers {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pageNumber {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  color: #495057;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pageNumber:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.pageNumber.active {
+  background: #fa9100;
+  border-color: #fa9100;
+  color: white;
+}
+
+.ellipsis {
+  padding: 0 8px;
+  color: #6c757d;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Responsive pagination */
+@media (max-width: 768px) {
+  .paginationContainer {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+  }
+  
+  .paginationControls {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
+  .paginationInfo {
+    text-align: center;
+  }
+}
+
+/* Listings Loading Styles - Compact and Elegant */
+.listingsLoadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  padding: 20px 16px;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  max-width: fit-content;
+  position: fixed;
+  top: 50%;
+  left: calc(50% + 120px);
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+}
+
+.listingsLoadingSpinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #f3f4f6;
+  border-top: 3px solid #fa9100;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 12px;
+}
+
+.listingsLoadingText {
+  margin: 0;
+  color: #6c757d;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+/* Optimized spinner animation for smoother performance */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive loading */
+@media (max-width: 768px) {
+  .listingsLoadingContainer {
+    margin: 8px;
+    min-height: 80px;
+    padding: 16px 12px;
+  }
+  
+  .listingsLoadingSpinner {
+    width: 24px;
+    height: 24px;
+    border-width: 2px;
+  }
+  
+  .listingsLoadingText {
+    font-size: 12px;
+  }
+}
+
+/* End of Results Message */
+.endOfResults {
+  text-align: center;
+  padding: 20px;
+  margin: 20px 0;
+  color: #6c757d;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.endOfResults p {
+  margin: 0;
+}
+
+/* Pagination Loading Styles - For page transitions */
+.paginationLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  grid-column: 1 / -1;
+}
+
+.paginationSpinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #fa9100;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 16px;
+}
+
+.paginationLoading p {
+  margin: 0;
+  color: #6c757d;
+  font-size: 14px;
+  font-weight: 500;
 }

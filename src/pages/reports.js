@@ -84,7 +84,17 @@ export default function Reports() {
   const getStatusColor = (report) => {
     const aiResult = report.aiValidationResult || report.aiValidation
     if (aiResult) {
-      return aiResult.verdict === 'VALID' ? '#4caf50' : '#9e9e9e'
+      // Handle inverted verdict for listing reports
+      if (aiResult.verdict === 'VALID') {
+        return '#4caf50' // Green for valid reports (justified reports)
+      } else if (aiResult.verdict === 'INVALID') {
+        return '#9e9e9e' // Gray for invalid reports (unnecessary reports about legitimate livestock waste)
+      } else if (aiResult.verdict === 'VERIFIED_LEGITIMATE') {
+        // This might appear in older reports before inversion logic
+        return '#9e9e9e' // Gray for legitimate livestock waste (report is invalid)
+      } else {
+        return '#9e9e9e' // Gray for any other invalid status
+      }
     }
     return '#ff9100' // Processing
   }
@@ -92,7 +102,17 @@ export default function Reports() {
   const getStatusText = (report) => {
     const aiResult = report.aiValidationResult || report.aiValidation
     if (aiResult) {
-      return aiResult.verdict === 'VALID' ? 'Valid' : 'Invalid'
+      // Handle inverted verdict for listing reports
+      if (aiResult.verdict === 'VALID') {
+        return 'Valid' // Report is justified (non-livestock waste content)
+      } else if (aiResult.verdict === 'INVALID') {
+        return 'Invalid' // Report is unnecessary (legitimate livestock waste)
+      } else if (aiResult.verdict === 'VERIFIED_LEGITIMATE') {
+        // This might appear in older reports before inversion logic
+        return 'Invalid' // Legitimate livestock waste means report is invalid
+      } else {
+        return 'Invalid' // Any other invalid status
+      }
     }
     return 'Processing'
   }
@@ -348,17 +368,34 @@ export default function Reports() {
                   if (aiResult) {
                     return (
                       <>
-                        {aiResult.reason && (
-                          <div className={styles.analysisBox}>
-                            {aiResult.reason}
+                        {/* AI Text Analysis Section */}
+                        <div className={styles.analysisContainer}>
+                          <h4 className={styles.analysisHeader}>Text Analysis</h4>
+                          <div className={styles.analysisContent}>
+                            {selectedReport.textAnalysis || selectedReport.aiValidationResult?.reason || 'No text analysis available'}
                           </div>
-                        )}
-                        {/* Only show category if report is valid */}
-                        {aiResult.verdict === 'VALID' && (
+                        </div>
+
+                        {/* AI Image Analysis Section */}
+                        <div className={styles.analysisContainer}>
+                          <h4 className={styles.analysisHeader}>Image Analysis</h4>
+                          <div className={styles.analysisContent}>
+                            {selectedReport.imageAnalysis || selectedReport.aiValidationResult?.reason || 'No image analysis available'}
+                          </div>
+                        </div>
+
+                        {/* Category Information */}
+                        {(aiResult.verdict === 'VALID' || aiResult.verdict === 'VERIFIED_LEGITIMATE') && (
                           <div className={styles.modalRow}>
                             <span className={styles.modalLabel}>Category:</span>
                             <span className={styles.modalValue}>
-                              {aiResult.category?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'N/A'}
+                              {selectedReport.contentType === 'listing' ? (
+                                // For listing reports, show livestock waste category
+                                selectedReport.isValidLivestockWaste ? 'Livestock Waste' : 'Not Livestock Waste'
+                              ) : (
+                                // For other reports, show AI category
+                                aiResult.category?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'N/A'
+                              )}
                             </span>
                           </div>
                         )}

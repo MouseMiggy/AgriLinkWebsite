@@ -56,6 +56,18 @@ const NotificationSystem = ({ user, unreadCount, setUnreadCount, notifications, 
     
     // Navigate based on notification type
     switch (notification.type) {
+      case 'listing_hidden':
+        // Navigate to listings screen when user clicks listing hidden notification
+        if (notification.data?.navigateTo) {
+          console.log('🧭 Navigating to:', notification.data.navigateTo);
+          // Use window.location for navigation to ensure full page reload
+          window.location.href = notification.data.navigateTo;
+        } else {
+          // Fallback to listings page
+          console.log('🧭 Navigating to fallback /listings');
+          window.location.href = '/listings';
+        }
+        break;
       case 'post_like':
       case 'post_comment':
       case 'comment_reply':

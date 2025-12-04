@@ -34,6 +34,73 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
     }
   }, [visible])
 
+  // Helper function to parse AI response into separate text and image analysis
+  const parseAIResponse = (reason) => {
+    if (!reason) {
+      return { textAnalysis: 'No analysis available', imageAnalysis: 'No analysis available' }
+    }
+
+    console.log('🔍 Parsing AI response:', reason.substring(0, 200))
+
+    // Try different parsing strategies
+    let textAnalysis = ''
+    let imageAnalysis = ''
+
+    // Strategy 1: Look for "Listing Name/Details Analysis:" and extract only that content
+    const textMatch = reason.match(/Listing Name\/Details Analysis:[\s\S]*?(?=Image \d+ Analysis:|Overall Assessment:|$)/i)
+    const imageMatch = reason.match(/Image \d+ Analysis:[\s\S]*?(?=Overall Assessment:|$)/i)
+    
+    if (textMatch && imageMatch) {
+      textAnalysis = textMatch[0].replace('Listing Name/Details Analysis:', '').replace('Text Analysis:', '').replace('Text content analysis:', '').trim()
+      imageAnalysis = imageMatch[0].replace(/Image \d+ Analysis:/i, '').trim()
+    } else {
+      // Strategy 2: Look for "Text content analysis:" and exclude image content
+      const textContentMatch = reason.match(/Text content analysis:[\s\S]*?(?=Image \d+ Analysis:|Overall Assessment:|$)/i)
+      const imageContentMatch = reason.match(/Image \d+ Analysis:[\s\S]*?(?=Overall Assessment:|$)/i)
+      
+      if (textContentMatch && imageContentMatch) {
+        textAnalysis = textContentMatch[0].replace('Text content analysis:', '').replace('Text Analysis:', '').trim()
+        imageAnalysis = imageContentMatch[0].replace(/Image \d+ Analysis:/i, '').trim()
+      } else {
+        // Strategy 3: Look for "Text Analysis:" and "Image Analysis:" markers
+        const textAnalysisMatch = reason.match(/Text Analysis:[\s\S]*?(?=Image Analysis:|Overall Assessment:|$)/i)
+        const imageAnalysisMatch = reason.match(/Image Analysis:[\s\S]*?(?=Overall Assessment:|$)/i)
+        
+        if (textAnalysisMatch && imageAnalysisMatch) {
+          textAnalysis = textAnalysisMatch[0].replace('Text Analysis:', '').trim()
+          imageAnalysis = imageAnalysisMatch[0].replace('Image Analysis:', '').trim()
+        } else {
+          // Strategy 4: Fallback - split at first "Image" mention
+          const imageIndex = reason.search(/Image \d+ Analysis:/i)
+          if (imageIndex > 0) {
+            textAnalysis = reason.substring(0, imageIndex).trim()
+            imageAnalysis = reason.substring(imageIndex).replace(/Image \d+ Analysis:/i, '').trim()
+          } else {
+            // Final fallback: split the response
+            const sentences = reason.split('. ')
+            const midPoint = Math.ceil(sentences.length / 2)
+            
+            textAnalysis = sentences.slice(0, midPoint).join('. ').trim()
+            imageAnalysis = sentences.slice(midPoint).join('. ').trim()
+            
+            // Add context since we're splitting
+            if (textAnalysis && !textAnalysis.includes('text')) {
+              textAnalysis = 'Text content analysis: ' + textAnalysis
+            }
+            if (imageAnalysis && !imageAnalysis.includes('image')) {
+              imageAnalysis = 'Visual content analysis: ' + imageAnalysis
+            }
+          }
+        }
+      }
+    }
+    
+    return {
+      textAnalysis: textAnalysis || 'No text analysis available',
+      imageAnalysis: imageAnalysis || 'No image analysis available'
+    }
+  }
+
   const handleReport = async () => {
     // Validate reporterId before proceeding
     if (!reporterId) {
@@ -123,49 +190,68 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
       const reportRef = await addDoc(collection(db, 'reports'), reportData)
       console.log('📝 Report saved to Firebase:', reportRef.id)
 
-      // Call AI validation backend
-      const backendUrl = 'https://ai-backend-6-565d.onrender.com/validate-report'
-      console.log('🔗 Full report validation URL:', backendUrl)
+      // Call AI validation backend - use different endpoint for listing reports
+      let backendUrl, requestBody;
+      
+      if (contentType === 'listing') {
+        // Use listing report validation endpoint for listing reports
+        backendUrl = 'https://ai-backend-6-565d.onrender.com/validate-listing-report'
+        
+        // Prepare listing name and details for validation
+        const listingName = content?.caption || content?.name || content?.title || ''
+        const listingDetails = content?.text || content?.details || content?.description || content?.content || ''
+        
+        requestBody = {
+          imageUrl: cleanMediaUrl || cleanImageUrl || (cleanImageUrls.length > 0 ? cleanImageUrls[0] : ''),
+          listingName: listingName,
+          listingDetails: listingDetails,
+          reportType: 'spam',
+          additionalNote: ''
+        }
+        
+        console.log('🔗 Full listing report validation URL:', backendUrl)
+      } else {
+        // Use general report validation endpoint for other content
+        backendUrl = 'https://ai-backend-6-565d.onrender.com/validate-report'
+        
+        // Prepare caption based on content type
+        let caption = ''
+        if (contentType === 'listing') {
+          const listingName = content?.caption || content?.name || content?.title || ''
+          const listingDetails = content?.text || content?.details || content?.description || content?.content || ''
+          caption = listingName + (listingDetails ? ` - ${listingDetails}` : '')
+        } else {
+          caption = content?.caption || content?.text || content?.content || ''
+        }
+        
+        requestBody = {
+          reporterId,
+          reportedUserId: targetUser?.id || targetUser,
+          contentType,
+          contentId: content?.id || '',
+          caption: caption,
+          mediaType: hasValidMedia ? 'image' : 'text',
+          mediaUrl: cleanMediaUrl || cleanImageUrl,
+          imageUrls: cleanImageUrls,
+          reportType: contentType === 'listing' ? 'spam' : 'offensive',
+          additionalNote: '',
+          timestamp
+        }
+        
+        console.log('🔗 Full report validation URL:', backendUrl)
+      }
 
       // Wait 2 seconds before showing success
       await new Promise(resolve => setTimeout(resolve, 2000))
 
       // Call AI validation backend asynchronously (don't wait for it)
       console.log('🔄 Calling AI validation backend:', backendUrl)
-      
-      // Prepare caption based on content type
-      let caption = ''
-      if (contentType === 'listing') {
-        // For listings, combine name and details into caption
-        const listingName = content?.caption || content?.name || content?.title || ''
-        const listingDetails = content?.text || content?.details || content?.description || content?.content || ''
-        caption = listingName + (listingDetails ? ` - ${listingDetails}` : '')
-      } else {
-        // For posts, comments, messages - use existing caption/text
-        caption = content?.caption || content?.text || content?.content || ''
-      }
-      
-      // Unified request body for all report types
-      const requestBody = {
-        reporterId,
-        reportedUserId: targetUser?.id || targetUser,
+      console.log('📤 Sending validation data:', {
         contentType,
-        contentId: content?.id || '',
-        caption: caption,
-        mediaType: hasValidMedia ? 'image' : 'text',
-        mediaUrl: cleanMediaUrl || cleanImageUrl,
-        imageUrls: cleanImageUrls,
-        reportType: contentType === 'listing' ? 'spam' : 'offensive',
-        additionalNote: '',
-        timestamp
-      }
-      
-      console.log('📤 Sending report data:', {
-        contentType,
-        caption: requestBody.caption?.substring(0, 100),
-        mediaUrl: requestBody.mediaUrl ? 'present' : 'none',
-        imageUrls: requestBody.imageUrls,
-        imageUrlsCount: requestBody.imageUrls?.length || 0
+        endpoint: backendUrl.includes('listing-image') ? 'listing-validation' : 'report-validation',
+        imageUrl: requestBody.imageUrl ? 'present' : 'none',
+        listingName: requestBody.listingName?.substring(0, 50) || 'none',
+        listingDetails: requestBody.listingDetails?.substring(0, 50) || 'none'
       })
 
       fetch(backendUrl, {
@@ -182,16 +268,99 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
         }
         return response.json()
       })
-      .then(result => {
+      .then(async (result) => {
         console.log('🤖 AI validation result:', result)
+        console.log('🔍 Raw AI reason for debugging:', result?.result?.reason)
+        console.log('🎯 RAW AI VERDICT BEFORE PROCESSING:', result?.result?.verdict)
+        console.log('🏷️ RAW AI CATEGORY:', result?.result?.category)
+        
         // Update report with AI validation results - use both field names for compatibility
         if (result && result.result) {
-          return updateDoc(doc(db, 'reports', reportRef.id), {
+          const updateData = {
             aiValidation: result.result,        // Mobile app uses this
             aiValidationResult: result.result,   // Web uses this
             status: 'reviewed',
             reviewedAt: new Date()
-          })
+          }
+          
+          // For listing reports, add specific validation metadata
+          console.log('🔍 Content type for report validation:', contentType)
+          if (contentType === 'listing') {
+            updateData.validationType = 'livestock_waste_check'
+            
+            // Check the AI's original verdict
+            const originalVerdict = result.result.verdict
+            console.log('🔍 ORIGINAL AI VERDICT:', originalVerdict)
+            
+            // Determine if this is legitimate livestock waste based on AI analysis
+            // The AI should return 'INVALID' for legitimate livestock waste (meaning report is unnecessary)
+            const isLegitimateLivestockWaste = originalVerdict === 'INVALID'
+            updateData.isValidLivestockWaste = isLegitimateLivestockWaste
+            
+            console.log('📋 Is legitimate livestock waste (AI said INVALID):', isLegitimateLivestockWaste)
+            
+            // For listing reports, we preserve the AI's verdict directly
+            // AI returns 'INVALID' for legitimate livestock waste (report is unnecessary)
+            // AI returns 'VALID' for non-livestock waste (report is justified)
+            updateData.aiValidation = { ...result.result }
+            updateData.aiValidationResult = { ...result.result }
+            
+            console.log('✅ FINAL VERDICT (no inversion):', result.result.verdict)
+            console.log('✅ FINAL CATEGORY:', result.result.category)
+          } else {
+            console.log('📋 Non-listing report, keeping original verdict:', result.result.verdict)
+          }
+          
+          // Parse AI response for separate analysis
+          if (result.result.reason) {
+            const parsed = parseAIResponse(result.result.reason)
+            console.log('📝 Parsed text analysis:', parsed.textAnalysis)
+            console.log('🖼️ Parsed image analysis:', parsed.imageAnalysis)
+            updateData.textAnalysis = parsed.textAnalysis
+            updateData.imageAnalysis = parsed.imageAnalysis
+          }
+          
+          // Hide listing if report is VALID (violation found)
+          const finalVerdict = updateData.aiValidationResult?.verdict || result.result.verdict
+          if (finalVerdict === 'VALID' && contentType === 'listing') {
+            console.log('🚫 Report is VALID - hiding listing')
+            try {
+              // Update listing status to hidden
+              const listingRef = doc(db, 'livestock_listings', content.id)
+              await updateDoc(listingRef, {
+                status: 'hidden',
+                hiddenAt: new Date(),
+                hiddenBy: 'report_validation',
+                reportId: reportRef.id
+              })
+              
+              // Send notification to listing owner
+              const listingOwnerId = content.ownerId || content.userId
+              if (listingOwnerId) {
+                const notificationData = {
+                  userId: listingOwnerId,
+                  title: 'Listing Hidden',
+                  message: `Your listing "${content.name || content.title || content.caption}" has been hidden due to a valid report.`,
+                  type: 'listing_hidden',
+                  data: {
+                    listingId: content.id,
+                    reportId: reportRef.id,
+                    navigateTo: '/listings'
+                  },
+                  isRead: false,
+                  createdAt: new Date(),
+                  timestamp: new Date()
+                }
+                
+                await addDoc(collection(db, 'notifications'), notificationData)
+                console.log('📬 Notification sent to listing owner')
+              }
+            } catch (hideError) {
+              console.error('❌ Error hiding listing:', hideError)
+            }
+          }
+          
+          return updateDoc(doc(db, 'reports', reportRef.id), updateData)
         } else {
           console.error('❌ Invalid AI response format:', result)
         }
@@ -201,10 +370,11 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
         console.error('Error details:', aiError.message)
         // Report still saved, just without AI validation
       })
-
-      // Show success after loading
-      setLoading(false)
-      setShowSuccess(true)
+      .finally(() => {
+        // Show success after loading
+        setLoading(false)
+        setShowSuccess(true)
+      })
 
     } catch (error) {
       console.error('❌ Report submission error:', error)

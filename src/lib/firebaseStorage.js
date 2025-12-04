@@ -3,6 +3,77 @@ import { storage } from './firebase';
 import { getAuth } from 'firebase/auth';
 
 /**
+ * Convert image file to JPEG format using Canvas API
+ * @param {File} imageFile - Original image file
+ * @param {number} quality - JPEG quality ( 0.0 to 1.0)
+ * @returns {Promise<File>} - Converted JPEG file
+ */
+export const convertImageToJPEG = async (imageFile, quality = 0.9) => {
+  return new Promise((resolve, reject) => {
+    try {
+      // If file is already JPEG, return as-is
+      if (imageFile.type === 'image/jpeg' || imageFile.type === 'image/jpg') {
+        resolve(imageFile);
+        return;
+      }
+
+      const img = new Image();
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      img.onload = () => {
+        // Set canvas dimensions to match image
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        // Draw image on canvas
+        ctx.drawImage(img, 0, 0);
+
+        // Convert to JPEG blob
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              // Create new File object with JPEG type
+              const jpegFile = new File(
+                [blob],
+                imageFile.name.replace(/\.[^/.]+$/, '.jpg'),
+                {
+                  type: 'image/jpeg',
+                  lastModified: Date.now()
+                }
+              );
+              console.log(`✅ Converted ${imageFile.type} to JPEG:`, jpegFile);
+              resolve(jpegFile);
+            } else {
+              reject(new Error('Failed to convert image to JPEG'));
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+
+      img.onerror = () => {
+        reject(new Error('Failed to load image for conversion'));
+      };
+
+      // Load image from file
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.src = e.target.result;
+      };
+      reader.onerror = () => {
+        reject(new Error('Failed to read image file'));
+      };
+      reader.readAsDataURL(imageFile);
+
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+
+/**
  * Upload image to Firebase Storage
  * @param {File} imageFile - File object from file input
  * @param {string} folder - Storage folder (e.g., 'Images/Feed', 'Images/Profile', 'Images/Listings')
@@ -38,22 +109,20 @@ export const uploadImageToFirebaseStorage = async (imageFile, folder = 'Images',
       throw new Error('Firebase Storage is not initialized');
     }
 
-    // Validate file type
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!validTypes.includes(imageFile.type)) {
-      throw new Error('Invalid file type. Please upload JPEG, PNG, or WebP images.');
-    }
+    // Convert image to JPEG format for AI compatibility
+    console.log('🔄 Converting image to JPEG format...');
+    const jpegFile = await convertImageToJPEG(imageFile, 0.9);
+    console.log('✅ Image converted to JPEG:', jpegFile.name, jpegFile.type);
 
-    // Validate file size (max 10MB)
+    // Validate file size (max 10MB) - check converted file
     const maxSize = 10 * 1024 * 1024; // 10MB
-    if (imageFile.size > maxSize) {
+    if (jpegFile.size > maxSize) {
       throw new Error('File size too large. Please upload images smaller than 10MB.');
     }
 
     // Create a unique filename with timestamp
     const timestamp = Date.now();
-    const fileExtension = imageFile.name.split('.').pop().toLowerCase();
-    const filename = `${userId}_${timestamp}.${fileExtension}`;
+    const filename = `${userId}_${timestamp}.jpg`; // Always .jpg now
     const storagePath = `${folder}/${filename}`;
     
     console.log('📍 Storage path:', storagePath);
@@ -66,13 +135,15 @@ export const uploadImageToFirebaseStorage = async (imageFile, folder = 'Images',
 
     // Prepare metadata
     const metadata = {
-      contentType: imageFile.type,
+      contentType: 'image/jpeg', // Always JPEG now
       customMetadata: {
         uploadedBy: userId,
         uploadedAt: new Date().toISOString(),
         folder: folder,
         originalName: imageFile.name,
         originalSize: imageFile.size.toString(),
+        convertedFrom: imageFile.type,
+        convertedSize: jpegFile.size.toString(),
         source: 'web'
       }
     };
@@ -87,7 +158,7 @@ export const uploadImageToFirebaseStorage = async (imageFile, folder = 'Images',
     
     while (retryCount < maxRetries) {
       try {
-        snapshot = await uploadBytes(storageRef, imageFile, metadata);
+        snapshot = await uploadBytes(storageRef, jpegFile, metadata);
         console.log('Upload successful, snapshot metadata:', snapshot.metadata);
         break; // Success, exit retry loop
       } catch (uploadError) {

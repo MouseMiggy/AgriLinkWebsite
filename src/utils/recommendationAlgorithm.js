@@ -282,12 +282,28 @@ export const getEnhancedLivestockListings = async () => {
 
   console.log(`📊 Total documents found in livestock_listings collection: ${listingsSnapshot.size}`)
 
-  // Collect unique owner IDs for batch processing
-  const uniqueOwnerIds = new Set()
+  // Filter out hidden listings for crop farmers
+  let hiddenCount = 0
   for (const listingDoc of listingsSnapshot.docs) {
     const listingData = listingDoc.data()
-    if (listingData.ownerId) {
-      uniqueOwnerIds.add(listingData.ownerId)
+    // Skip hidden listings (only show to owners)
+    if (listingData.status === 'hidden') {
+      hiddenCount++
+      continue
+    }
+    listings.push({
+      id: listingDoc.id,
+      ...listingData
+    })
+  }
+
+  console.log(`🚫 Filtered out ${hiddenCount} hidden listings. Showing ${listings.length} visible listings`)
+
+  // Collect unique owner IDs for batch processing
+  const uniqueOwnerIds = new Set()
+  for (const listing of listings) {
+    if (listing.ownerId) {
+      uniqueOwnerIds.add(listing.ownerId)
     }
   }
 

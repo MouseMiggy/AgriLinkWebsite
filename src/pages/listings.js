@@ -134,6 +134,25 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     }
   }
 
+  // Helper function to parse AI response into separate text and image analysis
+  const parseAIResponse = (reason) => {
+    if (!reason) {
+      return { textAnalysis: 'No analysis available', imageAnalysis: 'No analysis available' }
+    }
+
+    // Try to split the response into text and image sections
+    const textMatch = reason.match(/Text Analysis:[\s\S]*?(?=Image Analysis:|$)/i)
+    const imageMatch = reason.match(/Image Analysis:[\s\S]*?(?=Overall Assessment:|$)/i)
+    
+    const textAnalysis = textMatch ? textMatch[0].replace('Text Analysis:', '').trim() : reason
+    const imageAnalysis = imageMatch ? imageMatch[0].replace('Image Analysis:', '').trim() : reason
+    
+    return {
+      textAnalysis: textAnalysis || 'No text analysis available',
+      imageAnalysis: imageAnalysis || 'No image analysis available'
+    }
+  }
+
   // Modal functions
   // AI Validation function
   const validateImageWithAI = async (imageFile, listingName, listingDetails, existingImageUrl = null) => {
@@ -1816,6 +1835,13 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                   <span className={styles.verifiedText}>Verified by AI</span>
                 </div>
               )}
+              
+              {/* Hidden Status Badge - only show to listing owner */}
+              {listing.status === 'hidden' && userRole === 'livestock_owner' && listing.ownerId === user?.uid && (
+                <div className={styles.hiddenBadge}>
+                  <span className={styles.hiddenText}>Hidden</span>
+                </div>
+              )}
             </>
           ) : (
             <div className={styles.imagePlaceholder}>
@@ -2460,22 +2486,27 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                                 <span>AI is verifying your image...</span>
                               </div>
                             ) : imageValidationResult ? (
-                              <div className={`${styles.verificationResult} ${
-                                imageValidationResult.verdict === 'VERIFIED_LEGITIMATE' ? styles.verifiedLegitimate :
-                                imageValidationResult.verdict === 'VERIFIED_NOT_LEGITIMATE' ? styles.verifiedNotLegitimate :
-                                styles.unableToVerify
-                              }`}>
-                                <div className={styles.verificationIcon}>
-                                  {imageValidationResult.verdict === 'VERIFIED_LEGITIMATE' ? '✅' :
-                                   imageValidationResult.verdict === 'VERIFIED_NOT_LEGITIMATE' ? 'ℹ️' : '⚠️'}
+                              <>
+                                {/* AI Text Analysis Section */}
+                                <div className={styles.analysisContainer}>
+                                  <h4 className={styles.analysisHeader}>Text Analysis</h4>
+                                  <div className={styles.analysisContent}>
+                                    {imageValidationResult ? (() => {
+                                      const parsed = parseAIResponse(imageValidationResult.reason)
+                                      return parsed.textAnalysis
+                                    })() : 'No text analysis available'}
+                                  </div>
                                 </div>
-                                <div className={styles.verificationText}>
-                                  <strong>
-                                    {imageValidationResult.verdict === 'VERIFIED_LEGITIMATE' ? 'Verified by AI - Legitimate Livestock Waste' :
-                                     imageValidationResult.verdict === 'VERIFIED_NOT_LEGITIMATE' ? 'Verified by AI - Not Livestock Waste' :
-                                     'Unable to Verify'}
-                                  </strong>
-                                  <p>{imageValidationResult.reason}</p>
+
+                                {/* AI Image Analysis Section */}
+                                <div className={styles.analysisContainer}>
+                                  <h4 className={styles.analysisHeader}>Image Analysis</h4>
+                                  <div className={styles.analysisContent}>
+                                    {imageValidationResult ? (() => {
+                                      const parsed = parseAIResponse(imageValidationResult.reason)
+                                      return parsed.imageAnalysis
+                                    })() : 'No image analysis available'}
+                                  </div>
                                   <button 
                                     className={styles.revalidateButton}
                                     onClick={revalidateImage}
@@ -2484,7 +2515,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                                     {isImageValidating ? 'Re-validating...' : 'Re-validate Image'}
                                   </button>
                                 </div>
-                              </div>
+                              </>
                             ) : null}
                           </div>
                         )}

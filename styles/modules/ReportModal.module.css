@@ -232,7 +232,7 @@
 .confirmButton {
   flex: 1;
   padding: 12px 24px;
-  background: #fa9100;
+  background: #dc3545;
   border: none;
   border-radius: 8px;
   font-size: 16px;
@@ -243,7 +243,7 @@
 }
 
 .confirmButton:hover {
-  background: #e68200;
+  background: #c82333;
 }
 
 /* Loading Modal */

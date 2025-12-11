@@ -769,7 +769,18 @@ export default function SignIn() {
                   <input type="checkbox" className={styles.checkbox} />
                   <span className={styles.checkboxLabel}>Remember me</span>
                 </label>
-                <a href="#" className={styles.forgotLink}>Forgot password?</a>
+                <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    router.push('/forgot-password')
+                  }} 
+                  className={styles.forgotLink}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                >
+                  Forgot password?
+                </button>
               </div>
 
               <button 

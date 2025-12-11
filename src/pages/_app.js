@@ -8,7 +8,7 @@ export default function App({ Component, pageProps }) {
   const router = useRouter()
   
   // Public pages that don't need authentication
-  const publicPages = ['/onboarding', '/', '/signin', '/signup', '/verify-code', '/phone-number-verification']
+  const publicPages = ['/onboarding', '/', '/signin', '/signup', '/verify-code', '/phone-number-verification', '/forgot-password', '/verify-reset-code', '/reset-password']
   const isPublicPage = publicPages.includes(router.pathname)
   
   if (isPublicPage) {

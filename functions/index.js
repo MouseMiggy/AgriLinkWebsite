@@ -1595,14 +1595,99 @@ app.post("/verify-reset-code", async (req, res) => {
 app.post("/reset-password", async (req, res) => {
   try {
     // Handle both old and new API formats
-    const { email, code, emailOrPhone, newPassword, resetMethod } = req.body;
+    const { email, code, emailOrPhone, newPassword, resetMethod, identifier, type, resetToken } = req.body;
     
     // Determine which format is being used
     const isOldFormat = email && code && newPassword;
     const isNewFormat = emailOrPhone && newPassword;
+    const isNewestFormat = identifier && type && resetToken && newPassword; // New forgot password flow
     
-    if (!isOldFormat && !isNewFormat) {
-      return res.status(400).json({ success: false, error: "Email, code, and new password are required" });
+    if (!isOldFormat && !isNewFormat && !isNewestFormat) {
+      return res.status(400).json({ success: false, error: "Required fields are missing" });
+    }
+    
+    // If using newest format (forgot password flow), delegate to the new endpoint logic
+    if (isNewestFormat) {
+      console.log(`🔐 Newest format - delegating to new password reset logic for ${type}: ${identifier}`);
+      
+      // Validate password length
+      if (newPassword.length < 6) {
+        return res.status(400).json({ success: false, error: "Password must be at least 6 characters long" });
+      }
+
+      const resetDocRef = db.collection("password_resets").doc(identifier);
+      const resetDoc = await resetDocRef.get();
+
+      if (!resetDoc.exists) {
+        return res.status(400).json({ success: false, error: "Invalid reset session" });
+      }
+
+      const resetData = resetDoc.data();
+
+      // Verify reset token
+      if (resetData.resetToken !== resetToken) {
+        return res.status(400).json({ success: false, error: "Invalid reset token" });
+      }
+
+      // Check if already used
+      if (resetData.used) {
+        return res.status(400).json({ success: false, error: "Reset code has already been used" });
+      }
+
+      // Check expiration
+      const now = Date.now();
+      if (now > resetData.expiresAt) {
+        await resetDocRef.delete();
+        return res.status(400).json({ success: false, error: "Reset session has expired" });
+      }
+
+      // Get user document
+      const userId = resetData.userId;
+      const userRef = db.collection("Users").doc(userId);
+      const userDoc = await userRef.get();
+
+      if (!userDoc.exists) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      // Update password in Firebase Auth
+      try {
+        await admin.auth().updateUser(userId, {
+          password: newPassword
+        });
+        console.log(`✅ Password updated in Firebase Auth for user: ${userId}`);
+      } catch (authError) {
+        console.error("❌ Error updating Firebase Auth password:", authError);
+        return res.status(500).json({ success: false, error: "Failed to update password in authentication system" });
+      }
+
+      // Mark reset code as used
+      await resetDocRef.update({
+        used: true,
+        usedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Update user document with password change timestamp
+      await userRef.update({
+        passwordChangedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      console.log(`✅ Password reset successfully for user: ${userId}`);
+
+      // Clean up reset document after 1 hour
+      setTimeout(async () => {
+        try {
+          await resetDocRef.delete();
+        } catch (err) {
+          console.error("Error cleaning up reset document:", err);
+        }
+      }, 60 * 60 * 1000);
+
+      return res.json({ 
+        success: true, 
+        message: "Password reset successfully" 
+      });
     }
 
     const password = newPassword;
@@ -2768,6 +2853,267 @@ app.use((err, req, res, next) => {
   console.error('Global error handler:', err);
   if (!res.headersSent) {
     res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// 🔐 Password Reset Flow Endpoints
+
+// Send password reset code (email or phone)
+app.post("/send-password-reset-code", async (req, res) => {
+  try {
+    const { identifier, type } = req.body;
+
+    if (!identifier || !type) {
+      return res.status(400).json({ success: false, error: "Identifier and type are required" });
+    }
+
+    console.log(`🔐 Sending password reset code to ${type}: ${identifier}`);
+
+    // Generate 6-digit reset code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Find user by email or phone
+    let userQuery;
+    if (type === 'email') {
+      userQuery = db.collection("Users").where("email", "==", identifier);
+    } else if (type === 'phone') {
+      const formattedPhone = identifier.startsWith('+') ? identifier : `+${identifier}`;
+      userQuery = db.collection("Users").where("phoneNumber", "==", formattedPhone);
+    } else {
+      return res.status(400).json({ success: false, error: "Invalid type. Must be 'email' or 'phone'" });
+    }
+
+    const userSnapshot = await userQuery.get();
+    if (userSnapshot.empty) {
+      return res.status(404).json({ success: false, error: `No account found with this ${type}` });
+    }
+
+    const userId = userSnapshot.docs[0].id;
+
+    // Store reset code in Firestore (expires in 10 minutes)
+    const resetDocRef = db.collection("password_resets").doc(identifier);
+    await resetDocRef.set({
+      userId: userId,
+      identifier: identifier,
+      type: type,
+      resetCode: resetCode,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: Date.now() + (10 * 60 * 1000), // 10 minutes
+      used: false
+    });
+
+    // Send code via email or SMS
+    if (type === 'email') {
+      // Send email with reset code
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: 'agrilinkph@gmail.com',
+          pass: 'nrxy aaso qdoy wkzn'
+        }
+      });
+
+      const mailOptions = {
+        from: 'AgriLink <agrilinkph@gmail.com>',
+        to: identifier,
+        subject: 'Password Reset Code - AgriLink',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #fa9100;">Password Reset Request</h2>
+            <p>You requested to reset your password. Use the code below to continue:</p>
+            <div style="background: #f5f7fa; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
+              <h1 style="color: #1c1e21; font-size: 32px; letter-spacing: 4px; margin: 0;">${resetCode}</h1>
+            </div>
+            <p>This code will expire in 10 minutes.</p>
+            <p>If you didn't request this, please ignore this email.</p>
+            <hr style="border: none; border-top: 1px solid #e4e6eb; margin: 20px 0;">
+            <p style="color: #65676b; font-size: 12px;">AgriLink - Connecting Farmers</p>
+          </div>
+        `
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log(`✅ Password reset email sent to: ${identifier}`);
+    } else if (type === 'phone') {
+      // Send SMS with reset code
+      const message = `${resetCode} is your password reset code for AgriLink. Valid for 10 minutes. Do not share this code.`;
+      const smsResult = await sendSmsMessage(identifier, message);
+      
+      if (!smsResult.success) {
+        throw new Error(smsResult.error || 'Failed to send SMS');
+      }
+      console.log(`✅ Password reset SMS sent to: ${identifier}`);
+    }
+
+    res.json({ 
+      success: true, 
+      message: `Reset code sent to your ${type}` 
+    });
+
+  } catch (err) {
+    console.error("❌ Error sending password reset code:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Verify password reset code
+app.post("/verify-password-reset-code", async (req, res) => {
+  try {
+    const { identifier, code, type } = req.body;
+
+    if (!identifier || !code || !type) {
+      return res.status(400).json({ success: false, error: "Identifier, code, and type are required" });
+    }
+
+    console.log(`🔐 Verifying reset code for ${type}: ${identifier}`);
+
+    const resetDocRef = db.collection("password_resets").doc(identifier);
+    const resetDoc = await resetDocRef.get();
+
+    if (!resetDoc.exists) {
+      return res.status(400).json({ success: false, error: "No reset code found. Please request a new code." });
+    }
+
+    const resetData = resetDoc.data();
+
+    // Check if code matches
+    if (resetData.resetCode !== code) {
+      return res.status(400).json({ success: false, error: "Invalid reset code" });
+    }
+
+    // Check if code has expired (10 minutes)
+    const now = Date.now();
+    if (now > resetData.expiresAt) {
+      await resetDocRef.delete();
+      return res.status(400).json({ success: false, error: "Reset code has expired. Please request a new code." });
+    }
+
+    // Check if code has been used
+    if (resetData.used) {
+      return res.status(400).json({ success: false, error: "Reset code has already been used" });
+    }
+
+    // Mark code as verified (but not used yet)
+    await resetDocRef.update({
+      verified: true,
+      verifiedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    console.log(`✅ Reset code verified for: ${identifier}`);
+
+    // Generate a temporary reset token
+    const resetToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    
+    await resetDocRef.update({
+      resetToken: resetToken
+    });
+
+    res.json({ 
+      success: true, 
+      message: "Code verified successfully",
+      resetToken: resetToken
+    });
+
+  } catch (err) {
+    console.error("❌ Error verifying reset code:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Reset password
+app.post("/reset-password", async (req, res) => {
+  try {
+    const { identifier, type, resetToken, newPassword } = req.body;
+
+    if (!identifier || !type || !resetToken || !newPassword) {
+      return res.status(400).json({ success: false, error: "All fields are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, error: "Password must be at least 6 characters long" });
+    }
+
+    console.log(`🔐 Resetting password for ${type}: ${identifier}`);
+
+    const resetDocRef = db.collection("password_resets").doc(identifier);
+    const resetDoc = await resetDocRef.get();
+
+    if (!resetDoc.exists) {
+      return res.status(400).json({ success: false, error: "Invalid reset session" });
+    }
+
+    const resetData = resetDoc.data();
+
+    // Verify reset token
+    if (resetData.resetToken !== resetToken) {
+      return res.status(400).json({ success: false, error: "Invalid reset token" });
+    }
+
+    // Check if already used
+    if (resetData.used) {
+      return res.status(400).json({ success: false, error: "Reset code has already been used" });
+    }
+
+    // Check expiration
+    const now = Date.now();
+    if (now > resetData.expiresAt) {
+      await resetDocRef.delete();
+      return res.status(400).json({ success: false, error: "Reset session has expired" });
+    }
+
+    // Get user document
+    const userId = resetData.userId;
+    const userRef = db.collection("Users").doc(userId);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
+    const userData = userDoc.data();
+
+    // Update password in Firebase Auth
+    try {
+      await admin.auth().updateUser(userId, {
+        password: newPassword
+      });
+      console.log(`✅ Password updated in Firebase Auth for user: ${userId}`);
+    } catch (authError) {
+      console.error("❌ Error updating Firebase Auth password:", authError);
+      return res.status(500).json({ success: false, error: "Failed to update password in authentication system" });
+    }
+
+    // Mark reset code as used
+    await resetDocRef.update({
+      used: true,
+      usedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Update user document with password change timestamp
+    await userRef.update({
+      passwordChangedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    console.log(`✅ Password reset successfully for user: ${userId}`);
+
+    // Clean up reset document after 1 hour
+    setTimeout(async () => {
+      try {
+        await resetDocRef.delete();
+      } catch (err) {
+        console.error("Error cleaning up reset document:", err);
+      }
+    }, 60 * 60 * 1000);
+
+    res.json({ 
+      success: true, 
+      message: "Password reset successfully" 
+    });
+
+  } catch (err) {
+    console.error("❌ Error resetting password:", err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

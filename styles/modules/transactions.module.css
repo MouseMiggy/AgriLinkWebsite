@@ -211,7 +211,7 @@
 }
 
 .columnHeader:nth-child(1) { width: 18%; } /* Listing Name */
-.columnHeader:nth-child(2) { width: 32%; } /* Listing Details */
+.columnHeader:nth-child(2) { width: 25%; } /* Listing Details */
 .columnHeader:nth-child(3) { width: 10%; } /* Price */
 .columnHeader:nth-child(4) { width: 18%; } /* Buyer Name - increased from 15% */
 .columnHeader:nth-child(5) { width: 12%; } /* Date Added */

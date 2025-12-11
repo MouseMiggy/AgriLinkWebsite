@@ -1191,7 +1191,10 @@ export default function Dashboard() {
 
   const hasUserLiked = (post) => {
     // Check both 'likes' and 'likedBy' for backward compatibility
-    return (post.likes && post.likes.includes(user?.uid)) || (post.likedBy && post.likedBy.includes(user?.uid))
+    // Ensure likes/likedBy are arrays before calling includes
+    const likesArray = Array.isArray(post.likes) ? post.likes : [];
+    const likedByArray = Array.isArray(post.likedBy) ? post.likedBy : [];
+    return likesArray.includes(user?.uid) || likedByArray.includes(user?.uid);
   }
 
   // Calculate total comment count including replies

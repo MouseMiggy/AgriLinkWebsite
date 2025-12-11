@@ -1,18 +1,18 @@
 // Cloud Function for scheduled inactive chat monitoring
-const functions = require('firebase-functions')
+const { onSchedule } = require('firebase-functions/v2/scheduler')
 const admin = require('firebase-admin')
 
-// Initialize Firebase Admin
-admin.initializeApp()
+// Don't initialize Firebase Admin here - it's already initialized in index.js
+// This prevents the "duplicate app" error
 
 // Import the server-side inactive chat monitor
 const ServerInactiveChatMonitor = require('./serverInactiveChatMonitor')
 
 // Scheduled function to run every 24 hours
-exports.runChatMonitoring = functions.pubsub
-  .schedule('every 24 hours')
-  .timeZone('Asia/Manila') // Set to your timezone
-  .onRun(async (context) => {
+exports.runChatMonitoring = onSchedule({
+  schedule: 'every 24 hours',
+  timeZone: 'Asia/Manila'
+}, async (event) => {
     console.log('🚀 Starting scheduled chat monitoring cycle...')
     
     try {
@@ -32,7 +32,9 @@ exports.runChatMonitoring = functions.pubsub
   })
 
 // Manual trigger for testing (can be called via HTTP)
-exports.triggerChatMonitoring = functions.https.onRequest(async (req, res) => {
+const { onRequest } = require('firebase-functions/v2/https')
+
+exports.triggerChatMonitoring = onRequest(async (req, res) => {
   console.log('🔧 Manual chat monitoring trigger activated')
   
   try {

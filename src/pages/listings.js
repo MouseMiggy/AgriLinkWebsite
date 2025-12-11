@@ -1573,7 +1573,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   // Search handling functions
   const generateListingEmbedding = async (listingId) => {
     try {
-      const semanticSearchUrl = process.env.NEXT_PUBLIC_SEMANTIC_SEARCH_URL || 'http://localhost:8000';
+      const semanticSearchUrl = 'https://context-based-2.onrender.com';
       const response = await fetch(`${semanticSearchUrl}/embed-listing`, {
         method: 'POST',
         headers: {
@@ -1877,11 +1877,10 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   }
 
   try {
-    // Try semantic search first
-    const semanticSearchUrl = process.env.NEXT_PUBLIC_SEMANTIC_SEARCH_URL || 'http://localhost:8000';
-    console.log('📡 Calling backend at:', semanticSearchUrl)
+    // Use context-based search API
+    const semanticSearchUrl = 'https://context-based-2.onrender.com';
+    console.log('📡 Calling context-based API at:', semanticSearchUrl)
     console.log('🔍 Search query:', enhancedSearchText)
-    console.log('🌐 Environment check - NEXT_PUBLIC_SEMANTIC_SEARCH_URL:', process.env.NEXT_PUBLIC_SEMANTIC_SEARCH_URL)
     
     // Quick connection test
     try {

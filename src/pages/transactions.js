@@ -168,7 +168,7 @@ const Transactions = ({ user }) => {
                 <th className={styles.columnHeader}>Listing Name</th>
                 <th className={styles.columnHeader}>Listing Details</th>
                 <th className={styles.columnHeader}>Price</th>
-                <th className={styles.columnHeader}>Transaction With</th>
+                <th className={styles.columnHeader}>Buyer</th>
                 <th className={styles.columnHeader}>Date Added</th>
                 <th className={styles.columnHeader}>Date Completed</th>
               </tr>

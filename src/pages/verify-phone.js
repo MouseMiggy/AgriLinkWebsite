@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { auth, db } from '../lib/firebase'
 import { doc, updateDoc } from 'firebase/firestore'
+import Toast from '../components/Toast'
 import styles from '../../styles/modules/verify-phone.module.css'
 
 export default function VerifyPhone() {
@@ -12,6 +13,7 @@ export default function VerifyPhone() {
   const [verifying, setVerifying] = useState(false)
   const [resending, setResending] = useState(false)
   const [step, setStep] = useState(1) // 1: Enter Phone, 2: Enter Code
+  const [toast, setToast] = useState(null)
   const inputRefs = useRef([])
   const router = useRouter()
 
@@ -76,9 +78,13 @@ export default function VerifyPhone() {
     }
   }
 
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type })
+  }
+
   const sendVerificationCode = async () => {
     if (!phoneNumber.trim()) {
-      alert('Please enter a phone number')
+      showToast('Please enter a phone number', 'error')
       return
     }
 
@@ -90,7 +96,7 @@ export default function VerifyPhone() {
     // Validate phone number format
     const phoneRegex = /^\+63[0-9]{10}$/
     if (!phoneRegex.test(formattedPhone)) {
-      alert('Invalid Philippine phone number format. Please use format: 09XXXXXXXXX')
+      showToast('Invalid Philippine phone number format. Please use format: 09XXXXXXXXX', 'error')
       return
     }
 
@@ -112,7 +118,7 @@ export default function VerifyPhone() {
       if (response.ok) {
         setStep(2)
         setCooldown(59)
-        alert(`Verification code sent to ${formattedPhone}!`)
+        showToast(`Verification code sent to ${formattedPhone}!`, 'success')
       } else {
         const errorText = await response.text()
         console.error('SMS send failed:', errorText)
@@ -120,7 +126,7 @@ export default function VerifyPhone() {
       }
     } catch (error) {
       console.error('Error sending SMS verification:', error)
-      alert(error.message || 'Failed to send verification code. Please try again.')
+      showToast(error.message || 'Failed to send verification code. Please try again.', 'error')
     } finally {
       setVerifying(false)
     }
@@ -129,7 +135,7 @@ export default function VerifyPhone() {
   const verifyCode = async () => {
     const fullCode = code.join('')
     if (fullCode.length !== 6) {
-      alert('Please enter the complete 6-digit code')
+      showToast('Please enter the complete 6-digit code', 'error')
       return
     }
 
@@ -140,7 +146,7 @@ export default function VerifyPhone() {
         : `+63${phoneNumber.replace(/^0/, '')}`
       const cleanedPhone = formattedPhone.replace('+', '')
 
-      const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/verify-account-sms-code', {
+      const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/verify-account-phone', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -171,18 +177,20 @@ export default function VerifyPhone() {
             updatedAt: new Date()
           })
           console.log('✅ Phone verified and updated:', formattedPhone)
-          alert('Phone number verified successfully!')
-          router.push('/account-settings')
+          showToast('Phone number verified successfully!', 'success')
+          setTimeout(() => {
+            router.push('/account-settings')
+          }, 1500)
         } catch (updateError) {
           console.error('Error updating Firestore:', updateError)
-          alert('Verification successful but failed to update profile. Please try again.')
+          showToast('Verification successful but failed to update profile. Please try again.', 'error')
         }
       } else {
         throw new Error(responseData.error || 'Invalid verification code')
       }
     } catch (error) {
       console.error('Error verifying code:', error)
-      alert(error.message || 'Failed to verify code. Please try again.')
+      showToast(error.message || 'Failed to verify code. Please try again.', 'error')
     } finally {
       setVerifying(false)
     }
@@ -197,6 +205,14 @@ export default function VerifyPhone() {
 
   return (
     <div className={styles.container}>
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+          duration={3000}
+        />
+      )}
       <div className={styles.header}>
         <button onClick={handleBack} className={styles.backButton}>
           ← Back

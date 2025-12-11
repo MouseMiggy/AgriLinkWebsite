@@ -219,11 +219,16 @@ export default function AccountSettings() {
             </div>
           <div className={styles.verificationItem}>
             <div className={styles.verificationInfo}>
-              {hasPhone ? (
-                <span className={styles.verificationDetail}>{userProfile.phoneNumber}</span>
-              ) : (
-                <span className={styles.verificationDetail}>No phone number added</span>
-              )}
+              <div className={styles.verificationRow}>
+                {hasPhone ? (
+                  <span className={styles.verificationDetail}>{userProfile.phoneNumber}</span>
+                ) : (
+                  <span className={styles.verificationDetail}>No phone number added</span>
+                )}
+                {hasPhone && phoneVerified && (
+                  <span className={styles.verifiedBadge}>✓ Verified</span>
+                )}
+              </div>
             </div>
             {(!hasPhone || !phoneVerified) && (
               <button onClick={handleAddVerifyPhone} className={styles.verifyButton}>

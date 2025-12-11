@@ -327,16 +327,8 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       checkUserRating()
     }
     
-    // Clear suggestions when transaction is completed
-    if (hasTransactionCompleted && selectedChat?.id) {
-      setPersistentSuggestions(prev => {
-        const updated = { ...prev };
-        delete updated[selectedChat.id];
-        return updated;
-      });
-      setAiSuggestions([]);
-      setShowSuggestions(false);
-    }
+    // DO NOT clear suggestions when transaction is completed - keep them visible
+    // Suggestions should persist to help users continue conversation
   }, [hasTransactionCompleted, selectedChat?.id, user?.uid])
   const aiSuggestionsCache = useRef(new Map())
   const lastProcessedMessageId = useRef(null)
@@ -493,10 +485,11 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         aiSuggestionsCache.current.set(cacheKey, filteredSuggestions);
         
         // Store suggestions persistently for this chat
-        setPersistentSuggestions(prev => ({
-          ...prev,
-          [selectedChat.id]: filteredSuggestions
-        }));
+        setPersistentSuggestions(prev => {
+          const updated = { ...prev };
+          updated[selectedChat.id] = filteredSuggestions;
+          return updated;
+        });
         
         // Update last processed message ID to prevent duplicates
         lastProcessedMessageId.current = lastMessage?.id;
@@ -516,10 +509,11 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
           setShowSuggestions(true);
           
           // Store suggestions persistently for this chat
-          setPersistentSuggestions(prev => ({
-            ...prev,
-            [selectedChat.id]: filteredSuggestions
-          }));
+          setPersistentSuggestions(prev => {
+            const updated = { ...prev };
+            updated[selectedChat.id] = filteredSuggestions;
+            return updated;
+          });
         }, 5000);
         
         // Unlock suggestions after 10 seconds total
@@ -791,16 +785,8 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       setRequestStatus(newStatus)
       setListingName(newListingName)
       
-      // Clear persistent suggestions if request is declined
-      if (newStatus === 'declined' && currentChatId) {
-        setPersistentSuggestions(prev => {
-          const updated = { ...prev };
-          delete updated[currentChatId];
-          return updated;
-        });
-        setAiSuggestions([]);
-        setShowSuggestions(false);
-      }
+      // Keep suggestions visible even if request is declined
+      // Suggestions help users understand what to do next
       
       // CRITICAL FIX: Reset stage ONLY for the current chat, not all chats
       const currentChatId = selectedChat?.id

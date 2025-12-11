@@ -1505,7 +1505,7 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       setPendingTransactionPopup(null)
       setCurrentPopupChatId(null)
     }
-  }, [selectedChat?.id, db, user.uid])
+  }, [selectedChat?.id, db, user?.uid])
 
   // Load conversations with real-time listener - wrapped in useCallback to prevent stale closures
   const loadConversations = useCallback(() => {

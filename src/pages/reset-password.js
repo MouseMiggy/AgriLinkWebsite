@@ -13,13 +13,13 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const router = useRouter()
-  const { identifier, type, resetToken } = router.query
+  const { identifier, type, code } = router.query
 
   useEffect(() => {
-    if (!identifier || !type || !resetToken) {
+    if (!identifier || !type || !code) {
       router.push('/forgot-password')
     }
-  }, [identifier, type, resetToken, router])
+  }, [identifier, type, code, router])
 
   const showToast = (message, toastType = 'info') => {
     setToast({ message, type: toastType })
@@ -49,17 +49,16 @@ export default function ResetPassword() {
 
     setLoading(true)
     try {
-      // Call backend to reset password
+      // Call backend to reset password using the mobile app's working endpoint
       const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/reset-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          identifier: identifier,
-          type: type,
-          resetToken: resetToken,
-          newPassword: newPassword
+          emailOrPhone: identifier,
+          newPassword: newPassword,
+          resetMethod: type || 'email'
         }),
       })
 
@@ -111,10 +110,6 @@ export default function ResetPassword() {
       </div>
 
       <div className={styles.content}>
-        <div className={styles.iconContainer}>
-          <img src="/assets/images/reset-password.png" alt="Reset Password" className={styles.icon} />
-        </div>
-
         <h2 className={styles.subtitle}>Create New Password</h2>
         <p className={styles.description}>
           Your new password must be different from previously used passwords.
@@ -131,13 +126,10 @@ export default function ResetPassword() {
               className={styles.input}
               disabled={loading}
             />
-            <button
-              type="button"
+            <i 
+              className={`fas ${showNewPassword ? 'fa-eye' : 'fa-eye-slash'} ${styles.eyeIcon}`}
               onClick={() => setShowNewPassword(!showNewPassword)}
-              className={styles.togglePassword}
-            >
-              {showNewPassword ? '👁️' : '👁️‍🗨️'}
-            </button>
+            ></i>
           </div>
           <span className={styles.hint}>Must be at least 6 characters</span>
         </div>
@@ -153,13 +145,10 @@ export default function ResetPassword() {
               className={styles.input}
               disabled={loading}
             />
-            <button
-              type="button"
+            <i 
+              className={`fas ${showConfirmPassword ? 'fa-eye' : 'fa-eye-slash'} ${styles.eyeIcon}`}
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className={styles.togglePassword}
-            >
-              {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
-            </button>
+            ></i>
           </div>
         </div>
 

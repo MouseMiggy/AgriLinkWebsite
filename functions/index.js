@@ -1650,6 +1650,11 @@ app.post("/reset-password", async (req, res) => {
         return res.status(404).json({ success: false, error: "User not found" });
       }
 
+      // Hash the new password before storing
+      const saltRounds = 12;
+      const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+      console.log(`✅ Password hashed successfully`);
+
       // Update password in Firebase Auth
       try {
         await admin.auth().updateUser(userId, {
@@ -1667,11 +1672,13 @@ app.post("/reset-password", async (req, res) => {
         usedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      // Update user document with password change timestamp
+      // Update user document with hashed password and timestamps
       await userRef.update({
+        passwordHash: hashedPassword,
         passwordChangedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
+      console.log(`✅ Password hash stored in Firestore for user: ${userId}`);
 
       console.log(`✅ Password reset successfully for user: ${userId}`);
 
@@ -2905,35 +2912,45 @@ app.post("/send-password-reset-code", async (req, res) => {
     // Send code via email or SMS
     if (type === 'email') {
       // Send email with reset code
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: 'agrilinkph@gmail.com',
-          pass: 'nrxy aaso qdoy wkzn'
-        }
-      });
+      try {
+        const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: 'agrilinkph@gmail.com',
+            pass: 'nrxy aaso qdoy wkzn' // TODO: Update this with a valid Gmail App Password
+          }
+        });
 
-      const mailOptions = {
-        from: 'AgriLink <agrilinkph@gmail.com>',
-        to: identifier,
-        subject: 'Password Reset Code - AgriLink',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #fa9100;">Password Reset Request</h2>
-            <p>You requested to reset your password. Use the code below to continue:</p>
-            <div style="background: #f5f7fa; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
-              <h1 style="color: #1c1e21; font-size: 32px; letter-spacing: 4px; margin: 0;">${resetCode}</h1>
+        const mailOptions = {
+          from: 'AgriLink <agrilinkph@gmail.com>',
+          to: identifier,
+          subject: 'Password Reset Code - AgriLink',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #fa9100;">Password Reset Request</h2>
+              <p>You requested to reset your password. Use the code below to continue:</p>
+              <div style="background: #f5f7fa; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
+                <h1 style="color: #1c1e21; font-size: 32px; letter-spacing: 4px; margin: 0;">${resetCode}</h1>
+              </div>
+              <p>This code will expire in 10 minutes.</p>
+              <p>If you didn't request this, please ignore this email.</p>
+              <hr style="border: none; border-top: 1px solid #e4e6eb; margin: 20px 0;">
+              <p style="color: #65676b; font-size: 12px;">AgriLink - Connecting Farmers</p>
             </div>
-            <p>This code will expire in 10 minutes.</p>
-            <p>If you didn't request this, please ignore this email.</p>
-            <hr style="border: none; border-top: 1px solid #e4e6eb; margin: 20px 0;">
-            <p style="color: #65676b; font-size: 12px;">AgriLink - Connecting Farmers</p>
-          </div>
-        `
-      };
+          `
+        };
 
-      await transporter.sendMail(mailOptions);
-      console.log(`✅ Password reset email sent to: ${identifier}`);
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ Password reset email sent to: ${identifier}`);
+      } catch (emailError) {
+        console.error(`❌ Failed to send email:`, emailError);
+        // If email fails, suggest using phone number instead
+        return res.status(503).json({ 
+          success: false, 
+          error: "Failed to send email. Please try using your phone number instead, or contact support if the issue persists.",
+          usePhoneInstead: true
+        });
+      }
     } else if (type === 'phone') {
       // Send SMS with reset code
       const message = `${resetCode} is your password reset code for AgriLink. Valid for 10 minutes. Do not share this code.`;
@@ -3020,102 +3037,7 @@ app.post("/verify-password-reset-code", async (req, res) => {
   }
 });
 
-// Reset password
-app.post("/reset-password", async (req, res) => {
-  try {
-    const { identifier, type, resetToken, newPassword } = req.body;
-
-    if (!identifier || !type || !resetToken || !newPassword) {
-      return res.status(400).json({ success: false, error: "All fields are required" });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({ success: false, error: "Password must be at least 6 characters long" });
-    }
-
-    console.log(`🔐 Resetting password for ${type}: ${identifier}`);
-
-    const resetDocRef = db.collection("password_resets").doc(identifier);
-    const resetDoc = await resetDocRef.get();
-
-    if (!resetDoc.exists) {
-      return res.status(400).json({ success: false, error: "Invalid reset session" });
-    }
-
-    const resetData = resetDoc.data();
-
-    // Verify reset token
-    if (resetData.resetToken !== resetToken) {
-      return res.status(400).json({ success: false, error: "Invalid reset token" });
-    }
-
-    // Check if already used
-    if (resetData.used) {
-      return res.status(400).json({ success: false, error: "Reset code has already been used" });
-    }
-
-    // Check expiration
-    const now = Date.now();
-    if (now > resetData.expiresAt) {
-      await resetDocRef.delete();
-      return res.status(400).json({ success: false, error: "Reset session has expired" });
-    }
-
-    // Get user document
-    const userId = resetData.userId;
-    const userRef = db.collection("Users").doc(userId);
-    const userDoc = await userRef.get();
-
-    if (!userDoc.exists) {
-      return res.status(404).json({ success: false, error: "User not found" });
-    }
-
-    const userData = userDoc.data();
-
-    // Update password in Firebase Auth
-    try {
-      await admin.auth().updateUser(userId, {
-        password: newPassword
-      });
-      console.log(`✅ Password updated in Firebase Auth for user: ${userId}`);
-    } catch (authError) {
-      console.error("❌ Error updating Firebase Auth password:", authError);
-      return res.status(500).json({ success: false, error: "Failed to update password in authentication system" });
-    }
-
-    // Mark reset code as used
-    await resetDocRef.update({
-      used: true,
-      usedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // Update user document with password change timestamp
-    await userRef.update({
-      passwordChangedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    console.log(`✅ Password reset successfully for user: ${userId}`);
-
-    // Clean up reset document after 1 hour
-    setTimeout(async () => {
-      try {
-        await resetDocRef.delete();
-      } catch (err) {
-        console.error("Error cleaning up reset document:", err);
-      }
-    }, 60 * 60 * 1000);
-
-    res.json({ 
-      success: true, 
-      message: "Password reset successfully" 
-    });
-
-  } catch (err) {
-    console.error("❌ Error resetting password:", err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+// NOTE: Duplicate /reset-password endpoint removed - using the one at line 1595 which has proper password hashing
 
 // Export the Express app as a Firebase Cloud Function (v2)
 exports.api = onRequest({ region: "us-central1" }, app);

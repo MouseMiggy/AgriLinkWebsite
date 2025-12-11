@@ -72,15 +72,14 @@ export default function VerifyResetCode() {
 
     setVerifying(true)
     try {
-      const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/verify-password-reset-code', {
+      const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/verify-reset-code', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          identifier: identifier,
-          code: fullCode,
-          type: type
+          email: identifier,
+          code: fullCode
         }),
       })
 
@@ -101,7 +100,7 @@ export default function VerifyResetCode() {
             query: { 
               identifier: identifier,
               type: type,
-              resetToken: responseData.resetToken
+              code: code.join('')
             }
           })
         }, 1500)

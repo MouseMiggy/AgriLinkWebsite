@@ -85,14 +85,13 @@ export default function ForgotPassword() {
         formattedIdentifier = `63${cleanedPhone}` // Remove + for API
       }
 
-      const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/send-password-reset-code', {
+      const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/send-reset-code', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          identifier: formattedIdentifier,
-          type: type
+          emailOrPhone: formattedIdentifier
         }),
       })
 
@@ -151,10 +150,6 @@ export default function ForgotPassword() {
       </div>
 
       <div className={styles.content}>
-        <div className={styles.iconContainer}>
-          <img src="/assets/images/forgot-password.png" alt="Forgot Password" className={styles.icon} />
-        </div>
-
         <h1 className={styles.title}>Forgot Password?</h1>
         <p className={styles.description}>
           Enter your email address or phone number and we'll send you a code to reset your password.

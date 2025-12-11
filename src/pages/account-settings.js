@@ -148,9 +148,20 @@ export default function AccountSettings() {
 
       <div className={styles.content}>
         <div className={styles.leftColumn}>
+          {/* Security Information */}
+          <section className={`${styles.section} ${styles.securitySection}`}>
+            <div className={styles.securityHeader}>
+              <img src="/assets/images/security.png" alt="Security" className={styles.securityHeaderIcon} />
+              <h2>Security Information</h2>
+            </div>
+            <p>
+              Verifying both your email and phone number helps secure your account and enables account recovery options.
+            </p>
+          </section>
+
           {/* Account Status Section */}
           <section className={styles.section}>
-            <h2>Account Status</h2>
+            <h2 className={styles.accountStatusTitle}>Account Status</h2>
             
             <div className={styles.infoRow}>
               <span className={styles.infoLabel}>Registration Method:</span>
@@ -170,24 +181,31 @@ export default function AccountSettings() {
               )}
             </div>
           </section>
+        </div>
 
+        <div className={styles.centerColumn}>
           {/* Verification Section */}
           <section className={styles.section}>
-            <h2>Verification</h2>
+            <div className={styles.verificationHeader}>
+              <img src="/assets/images/verified.png" alt="Verification" className={styles.verificationHeaderIcon} />
+              <h2>Verification</h2>
+            </div>
           
+          <div className={styles.emailVerificationHeader}>
+              <span className={styles.verificationLabel}>Email Verification</span>
+            </div>
           <div className={styles.verificationItem}>
             <div className={styles.verificationInfo}>
-              <div className={styles.verificationHeader}>
-                <span className={styles.verificationLabel}>Email Verification</span>
+              <div className={styles.verificationRow}>
+                {hasEmail ? (
+                  <span className={styles.verificationDetail}>{userProfile.email}</span>
+                ) : (
+                  <span className={styles.verificationDetail}>No email added</span>
+                )}
                 {hasEmail && emailVerified && (
                   <span className={styles.verifiedBadge}>✓ Verified</span>
                 )}
               </div>
-              {hasEmail ? (
-                <span className={styles.verificationDetail}>{userProfile.email}</span>
-              ) : (
-                <span className={styles.verificationDetail}>No email added</span>
-              )}
             </div>
             {(!hasEmail || !emailVerified) && (
               <button onClick={handleAddVerifyEmail} className={styles.verifyButton}>
@@ -196,14 +214,11 @@ export default function AccountSettings() {
             )}
           </div>
 
+          <div className={styles.emailVerificationHeader}>
+              <span className={styles.verificationLabel}>Phone Number Verification</span>
+            </div>
           <div className={styles.verificationItem}>
             <div className={styles.verificationInfo}>
-              <div className={styles.verificationHeader}>
-                <span className={styles.verificationLabel}>Phone Number</span>
-                {hasPhone && phoneVerified && (
-                  <span className={styles.verifiedBadge}>✓ Verified</span>
-                )}
-              </div>
               {hasPhone ? (
                 <span className={styles.verificationDetail}>{userProfile.phoneNumber}</span>
               ) : (
@@ -220,35 +235,29 @@ export default function AccountSettings() {
         </div>
 
         <div className={styles.rightColumn}>
-          {/* Security Information */}
-          <section className={styles.section}>
-            <h2>Security Information</h2>
-            <div className={styles.securityInfo}>
-              <img src="/assets/icons/shield.png" alt="Security" className={styles.securityIcon} />
-              <p>
-                Verifying both your email and phone number helps secure your account and enables account recovery options.
-              </p>
-            </div>
-          </section>
-
           {/* Location Settings */}
           <section className={styles.section}>
-            <h2>Location Settings</h2>
-          
-          <div className={styles.locationSetting}>
-            <div className={styles.locationInfo}>
-              <h3>Location Access</h3>
-              <div className={styles.locationStatus}>
-                <span className={styles.statusLabel}>Status:</span>
+            <div className={styles.locationHeader}>
+              <img src="/assets/images/location.png" alt="Location" className={styles.locationHeaderIcon} />
+              <h2>Location Settings</h2>
+            </div>
+
+            <p className={styles.locationDescription}>
+              {locationEnabled 
+                ? 'Your location is being used to show nearby listings and provide personalized recommendations based on your area.'
+                : 'Enable location to find nearby farmers and get location-based recommendations. Your exact location will not be shared with other users.'}
+            </p>
+
+            <div className={styles.locationStatusCard}>
+              <div className={styles.locationSettingsHeader}>
+                <span className={styles.verificationLabel}>Location Access</span>
                 <span className={locationEnabled ? styles.statusEnabled : styles.statusDisabled}>
                   {locationEnabled ? 'Enabled' : 'Disabled'}
                 </span>
               </div>
-              <p className={styles.locationDescription}>
-                {locationEnabled 
-                  ? 'Your location is being used to show nearby listings and provide personalized recommendations based on your area.'
-                  : 'Enable location to find nearby farmers and get location-based recommendations. Your exact location will not be shared with other users.'}
-              </p>
+            </div>
+
+            <div className={styles.locationButtonWrapper}>
               <button 
                 onClick={handleToggleLocation}
                 className={locationEnabled ? styles.disableButton : styles.enableButton}
@@ -256,7 +265,6 @@ export default function AccountSettings() {
                 {locationEnabled ? 'Disable Location' : 'Enable Location'}
               </button>
             </div>
-          </div>
           </section>
         </div>
       </div>

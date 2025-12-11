@@ -67,6 +67,7 @@ export default function Dashboard() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [unreadChats, setUnreadChats] = useState(0) // Re-added for navigation badge
   const [showNotifications, setShowNotifications] = useState(false)
+  const [notificationsClosing, setNotificationsClosing] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [editingComment, setEditingComment] = useState(null)
@@ -74,6 +75,8 @@ export default function Dashboard() {
   const [showCommentMenu, setShowCommentMenu] = useState(null)
   const [previousUnreadCount, setPreviousUnreadCount] = useState(0)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [replyTextMap, setReplyTextMap] = useState({})
+  const [showReplyInput, setShowReplyInput] = useState({})
   
   // Essential state variables
   const [showMenuDropdown, setShowMenuDropdown] = useState(false)
@@ -193,14 +196,35 @@ export default function Dashboard() {
 
   // Wrapper for handleAddComment with required parameters
   const handleAddComment = async () => {
-    if (!selectedPost || !commentText.trim()) return
+    console.log('🎯 handleAddComment called')
+    console.log('📝 Comment text:', commentText)
+    console.log('📄 Selected post:', selectedPost?.id)
+    console.log('👤 User:', user?.uid)
     
+    if (!selectedPost) {
+      console.error('❌ No selected post')
+      return
+    }
+    
+    if (!commentText.trim()) {
+      console.error('❌ Comment text is empty')
+      return
+    }
+    
+    if (!user) {
+      console.error('❌ No user logged in')
+      return
+    }
+    
+    console.log('✅ Validation passed, calling addComment...')
     setCommentLoading(true)
     try {
-      await addComment(selectedPost.id, commentText, user)
+      const result = await addComment(selectedPost.id, commentText, user)
+      console.log('✅ Comment added, result:', result)
       setCommentText('')
     } catch (error) {
-      console.error('Error adding comment:', error)
+      console.error('❌ Error in handleAddComment wrapper:', error)
+      alert('Failed to add comment: ' + error.message)
     } finally {
       setCommentLoading(false)
     }
@@ -274,10 +298,6 @@ export default function Dashboard() {
       setPreviousUnreadCount(unreadNotifications.length)
       
       console.log('✅ Loaded', notificationsData.length, 'notifications,', unreadNotifications.length, 'unread')
-      
-      // Load all chats
-      console.log('💬 Loading chats...')
-      await loadUserChats(userId)
       
       console.log('🎉 All user data loaded successfully!')
       setIsInitialLoad(false)
@@ -496,8 +516,12 @@ export default function Dashboard() {
           setShowDropdown(null)
         }
         if (showNotifications) {
-          setShowNotifications(false)
+          setNotificationsClosing(true)
           document.body.style.overflow = 'auto'
+          setTimeout(() => {
+            setShowNotifications(false)
+            setNotificationsClosing(false)
+          }, 200)
         }
                 if (showProfileMenu) {
           setShowProfileMenu(false)
@@ -530,8 +554,12 @@ export default function Dashboard() {
       if (!isInsideNotifications && !isInsideNotificationsButton && !event.target.closest('.dropdown-container') && !event.target.closest('.menu-dropdown-container')) {
         setShowDropdown(null)
         if (showNotifications) {
-          setShowNotifications(false)
+          setNotificationsClosing(true)
           document.body.style.overflow = 'auto'
+          setTimeout(() => {
+            setShowNotifications(false)
+            setNotificationsClosing(false)
+          }, 200)
         }
                 setShowProfileMenu(false)
         setShowMobileSearch(false)
@@ -590,7 +618,8 @@ export default function Dashboard() {
               lastName: userData.lastName || currentUser.displayName?.split(' ')[1] || '',
               email: currentUser.email,
               uid: currentUser.uid,
-              role: userData.role
+              role: userData.role,
+              profilePicture: userData.profilePicture || null
             })
             console.log('👤 User loaded:', userData.firstName, userData.lastName, 'Role:', userData.role)
           } else {
@@ -717,43 +746,53 @@ export default function Dashboard() {
       forceCorrectOrder()
     }, 2000)
 
-    // Listen to notifications when user is authenticated
-    let unsubscribeNotifications = null
-    if (user) {
-      console.log('🔔 Starting notification listener for user:', user.uid, 'role:', userRole)
-      unsubscribeNotifications = listenToNotifications(user.uid, (notificationsList) => {
-        console.log('🔔 Dashboard received notifications update:', notificationsList.length, 'notifications')
-        console.log('🔔 Notification types:', notificationsList.map(n => ({ type: n.type, from: n.fromUserName, listingName: n.listingName })))
-        setNotifications(notificationsList)
-        const unreadNotifications = notificationsList.filter(n => !n.read)
-        const newUnreadCount = unreadNotifications.length
-        
-        // Play sound and show visual feedback for new notifications
-        if (newUnreadCount > previousUnreadCount && previousUnreadCount >= 0) {
-          console.log('🔔 New notification received! Playing sound...')
-          playNotificationSound()
-        }
-        
-        setUnreadCount(newUnreadCount)
-        setPreviousUnreadCount(newUnreadCount)
-        console.log('Updated unread count to:', newUnreadCount)
-      })
-    }
-
     return () => {
       unsubscribeAuth()
       if (unsubscribePosts) {
         unsubscribePosts()
       }
+    }
+  }, [router])
+
+  // Separate useEffect for notification listener - depends on user state
+  useEffect(() => {
+    if (!user || !db) return
+
+    console.log('🔔 Starting notification listener for user:', user.uid)
+    
+    const unsubscribeNotifications = listenToNotifications(user.uid, (notificationsList) => {
+      console.log('🔔 Dashboard received notifications update:', notificationsList.length, 'notifications')
+      console.log('🔔 Notification types:', notificationsList.map(n => ({ type: n.type, from: n.fromUserName, listingName: n.listingName })))
+      setNotifications(notificationsList)
+      const unreadNotifications = notificationsList.filter(n => !n.read)
+      const newUnreadCount = unreadNotifications.length
+      
+      // Play sound and show visual feedback for new notifications (skip on initial load)
+      if (!isInitialLoad && newUnreadCount > previousUnreadCount && previousUnreadCount >= 0) {
+        console.log('🔔 New notification received! Playing sound...')
+        playNotificationSound()
+      }
+      
+      setUnreadCount(newUnreadCount)
+      setPreviousUnreadCount(newUnreadCount)
+      console.log('📊 Updated unread count to:', newUnreadCount)
+    })
+
+    return () => {
       if (unsubscribeNotifications) {
         unsubscribeNotifications()
       }
     }
-  }, [router])
+  }, [user, isInitialLoad, previousUnreadCount])
 
   // Load featured listings for right sidebar (nearby listings for crop farmers, top listings for livestock owners)
   useEffect(() => {
-    if (!db || !user) return
+    if (!db || !user) {
+      console.log('⏸️ Featured listings useEffect skipped - missing db or user')
+      return
+    }
+
+    console.log('🚀 Featured listings useEffect running for:', userRole)
 
     const loadFeaturedListings = async () => {
       setFeaturedListingsLoading(true)
@@ -876,86 +915,57 @@ export default function Dashboard() {
             setFeaturedListings([])
           }
         } else if (userRole === 'livestock_owner') {
-          // For livestock owners, show their top 4 listings by today's request count
+          // For livestock owners, show their top 4 listings by request count
           const listingsQuery = query(
             collection(db, 'livestock_listings'),
-            where('ownerId', '==', user.uid),
-            where('status', 'in', ['active', 'available']) // Only show active listings
+            where('ownerId', '==', user.uid)
           )
           
           const snapshot = await getDocs(listingsQuery)
-          const userListings = snapshot.docs.map(docSnap => ({
+          const allListings = snapshot.docs.map(docSnap => ({
             id: docSnap.id,
             ...docSnap.data()
           }))
           
-          if (userListings.length === 0) {
+          // Filter out sold and deleted listings
+          const availableListings = allListings.filter(
+            listing => listing.status !== 'sold' && listing.status !== 'deleted'
+          )
+          
+          if (availableListings.length === 0) {
             setFeaturedListings([])
             return
           }
           
-          // Get today's start time (midnight)
-          const today = new Date()
-          today.setHours(0, 0, 0, 0)
-          const todayTimestamp = today
-          
-          // Count today's requests and total requests for each listing
-          const listingsWithRequestCount = await Promise.all(
-            userListings.map(async (listing) => {
-              // Count total requests
-              const totalRequestsQuery = query(
+          // Count requests for each available listing
+          const listingsWithRequests = await Promise.all(
+            availableListings.map(async (listing) => {
+              const requestsQuery = query(
                 collection(db, 'listing_requests'),
                 where('listingId', '==', listing.id)
               )
-              const totalRequestsSnapshot = await getDocs(totalRequestsQuery)
-              const totalRequestCount = totalRequestsSnapshot.size
-              
-              // Count today's requests only
-              const todayRequestsQuery = query(
-                collection(db, 'listing_requests'),
-                where('listingId', '==', listing.id),
-                where('createdAt', '>=', todayTimestamp)
-              )
-              const todayRequestsSnapshot = await getDocs(todayRequestsQuery)
-              const todayRequestCount = todayRequestsSnapshot.size
+              const requestsSnapshot = await getDocs(requestsQuery)
+              const requestCount = requestsSnapshot.size
               
               return {
                 ...listing,
-                totalRequestCount,
-                todayRequestCount,
-                ownerRating: 0 // Livestock owner sees their own listing
+                requestCount,
+                ownerRating: 0
               }
             })
           )
           
-          // Filter out listings with zero total requests
-          const listingsWithRequests = listingsWithRequestCount.filter(
-            listing => listing.totalRequestCount > 0
-          )
-          
-          if (listingsWithRequests.length === 0) {
-            setFeaturedListings([])
-            return
-          }
-          
-          // Sort by today's requests first (highest), then total requests (highest)
+          // Sort by request count (highest first), then by creation date (newest first)
           const topListings = listingsWithRequests
             .sort((a, b) => {
-              // Primary sort: today's requests
-              if (b.todayRequestCount !== a.todayRequestCount) {
-                return b.todayRequestCount - a.todayRequestCount
+              if (b.requestCount !== a.requestCount) {
+                return b.requestCount - a.requestCount
               }
-              // Secondary sort: total requests
-              return b.totalRequestCount - a.totalRequestCount
+              const aTime = a.createdAt?.toDate?.() || new Date(a.createdAt)
+              const bTime = b.createdAt?.toDate?.() || new Date(b.createdAt)
+              return bTime - aTime
             })
             .slice(0, 4)
-          
-          console.log('🏆 Your Top Listings selected:', {
-            total: topListings.length,
-            requestCounts: topListings.map(l => 
-              `${l.name}: ${l.todayRequestCount} today, ${l.totalRequestCount} total`
-            )
-          })
           
           setFeaturedListings(topListings)
         } else {
@@ -969,7 +979,7 @@ export default function Dashboard() {
     }
 
     loadFeaturedListings()
-  }, [user, userRole])
+  }, [user, userRole, db])
 
   // Handle logout functionality
   const nextImage = (postId, maxImages) => {
@@ -1111,11 +1121,14 @@ export default function Dashboard() {
         userId: user.uid,
         userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email?.split('@')[0] || 'AgriLink User',
         userEmail: user.email,
+        userProfilePicture: user.profilePicture || null,
         imageUrls: imageUrls,
         imageUrl: imageUrls.length > 0 ? imageUrls[0] : null, // Keep backward compatibility
-        likes: 0,
-        likedBy: [],
+        likes: [], // Array of user IDs who liked
+        likesCount: 0, // Count for display
+        likedBy: [], // Backward compatibility
         comments: [],
+        commentsCount: 0, // Count for display
         createdAt: serverTimestamp(),
       }
       
@@ -1177,7 +1190,24 @@ export default function Dashboard() {
   }
 
   const hasUserLiked = (post) => {
-    return post.likedBy && post.likedBy.includes(user?.uid)
+    // Check both 'likes' and 'likedBy' for backward compatibility
+    return (post.likes && post.likes.includes(user?.uid)) || (post.likedBy && post.likedBy.includes(user?.uid))
+  }
+
+  // Calculate total comment count including replies
+  const getTotalCommentCount = (post) => {
+    if (!post.comments || post.comments.length === 0) return 0
+    
+    let total = post.comments.length
+    
+    // Add reply counts
+    post.comments.forEach(comment => {
+      if (comment.replies && comment.replies.length > 0) {
+        total += comment.replies.length
+      }
+    })
+    
+    return total
   }
 
   const toggleShowAllComments = (postId) => {
@@ -1660,12 +1690,12 @@ export default function Dashboard() {
         setSelectedPost(prev => ({ ...prev, comments: updatedComments }))
       }
       
-      // Show success message
-      alert(`Comment ${isOwnComment ? '' : `by ${commentToDelete?.userName || 'user'} `}has been deleted successfully.`)
+      // Show success toast
+      showSuccessPopup(`Comment ${isOwnComment ? '' : `by ${commentToDelete?.userName || 'user'} `}deleted successfully`)
       
     } catch (error) {
       console.error('Error deleting comment:', error)
-      alert(`Failed to delete comment: ${error.message}. Please try again.`)
+      showErrorPopup(`Failed to delete comment: ${error.message}`)
     }
   }
 
@@ -1708,10 +1738,10 @@ export default function Dashboard() {
       
       setEditingComment(null)
       setEditCommentText('')
-      alert('Comment updated successfully!')
+      showSuccessPopup('Comment updated successfully')
     } catch (error) {
       console.error('Error editing comment:', error)
-      alert('Failed to edit comment. Please try again.')
+      showErrorPopup('Failed to edit comment. Please try again.')
     }
   }
 
@@ -1745,7 +1775,7 @@ export default function Dashboard() {
       await updateDoc(postRef, { comments: updatedComments })
       setSelectedPost(prev => ({ ...prev, comments: updatedComments }))
       setShowCommentMenu(null)
-      alert('Reply deleted successfully!')
+      showSuccessPopup('Reply deleted successfully')
       
     } catch (error) {
       console.error('Error deleting reply:', error)
@@ -2213,7 +2243,13 @@ export default function Dashboard() {
 
   const handleNotificationClick = async (notification) => {
     console.log('Notification clicked:', notification)
-    setShowNotifications(false)
+    
+    // Close with animation
+    setNotificationsClosing(true)
+    setTimeout(() => {
+      setShowNotifications(false)
+      setNotificationsClosing(false)
+    }, 200)
     
     // Mark notification as read if it's unread
     if (!notification.read) {
@@ -2688,22 +2724,22 @@ export default function Dashboard() {
                 e.preventDefault()
                 e.stopPropagation()
                 if (showNotifications) {
-                  // Close notifications and restore scrolling
-                  setShowNotifications(false)
+                  // Trigger closing animation
+                  setNotificationsClosing(true)
                   document.body.style.overflow = 'auto'
+                  // Wait for animation to complete before hiding
+                  setTimeout(() => {
+                    setShowNotifications(false)
+                    setNotificationsClosing(false)
+                  }, 200) // Match animation duration
                 } else {
-                  // Close other panels if open, then open notifications
-                  setActiveMenuItem('')
+                  // Open notifications
+                  setShowNotifications(true)
+                  setNotificationsClosing(false)
                   document.body.style.overflow = 'auto'
-              }
-            }}
-            onMouseEnter={() => {
-              document.body.style.overflow = 'hidden'
-            }}
-            onMouseLeave={() => {
-              document.body.style.overflow = 'auto'
-            }}
-          >
+                }
+              }}
+            >
             <img src="/assets/icons/bell.png" alt="Notifications" className={styles.notificationIcon} />
             {unreadCount > 0 && (
               <span className={styles.notificationBadge}>
@@ -2715,7 +2751,7 @@ export default function Dashboard() {
           {/* Notifications Dropdown */}
           {showNotifications && (
             <div 
-              className={styles.notificationsDropdown}
+              className={`${styles.notificationsDropdown} ${notificationsClosing ? styles.closing : ''}`}
               onMouseEnter={() => {
                 document.body.style.overflow = 'hidden'
               }}
@@ -2816,7 +2852,11 @@ export default function Dashboard() {
             <div className={styles.postPromptContainer}>
               <div className={styles.postPrompt}>
                 <div className={styles.userAvatar}>
-                  {user?.firstName ? user.firstName[0].toUpperCase() : 'U'}
+                  {user?.profilePicture ? (
+                    <img src={user.profilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                  ) : (
+                    user?.firstName ? user.firstName[0].toUpperCase() : 'U'
+                  )}
                 </div>
                 <div className={styles.clickableTextBox} onClick={openPostModal}>
                   {userRole === 'crop_farmer' ? 'As a Crop Farmer, what\'s on your mind?' : userRole === 'livestock_owner' ? 'As a Livestock Owner, what\'s on your mind?' : 'What\'s on your mind?'}
@@ -2852,7 +2892,13 @@ export default function Dashboard() {
                posts).map((post) => (
               <div key={post.id} className={styles.post}>
                 <div className={styles.postHeader}>
-                  <div className={styles.postAvatar}>{post.userName ? post.userName[0].toUpperCase() : 'U'}</div>
+                  <div className={styles.postAvatar}>
+                    {post.userProfilePicture ? (
+                      <img src={post.userProfilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                    ) : (
+                      post.userName ? post.userName[0].toUpperCase() : 'U'
+                    )}
+                  </div>
                   <div className={styles.postInfo}>
                     <h4 className={styles.postAuthor}>{post.userName || 'Anonymous'}</h4>
                     <span className={styles.postTime}>
@@ -2963,8 +3009,8 @@ export default function Dashboard() {
                   )}
                 </div>
                 <div className={styles.postStats}>
-                  <span>{post.likes || 0} likes</span>
-                  <span>{post.comments?.length || 0} comments</span>
+                  <span>{post.likesCount || post.likes?.length || 0} {(post.likesCount || post.likes?.length || 0) === 1 ? 'like' : 'likes'}</span>
+                  <span>{getTotalCommentCount(post)} {getTotalCommentCount(post) === 1 ? 'comment' : 'comments'}</span>
                 </div>
                 
                 <div className={styles.postSeparator}></div>
@@ -3087,17 +3133,31 @@ export default function Dashboard() {
                           {listing.isFree ? 'Free' : listing.price ? `₱${listing.price}` : 'Contact for price'}
                         </p>
                         <div className={styles.featuredListingMeta}>
-                          <span className={styles.featuredListingOwner}>
-                            {listing.ownerName?.split(' ')[0] || 'Owner'}
-                          </span>
-                          <span className={styles.featuredListingDot}>•</span>
-                          <span className={styles.featuredListingRating}>
-                            ⭐ {typeof listing.ownerRating === 'number' ? listing.ownerRating.toFixed(1) : '0.0'}
-                          </span>
-                          <span className={styles.featuredListingDot}>•</span>
-                          <span className={`${styles.featuredListingTime} ${formatListingTime(listing.createdAt) === 'New' ? styles.newListing : ''}`}>
-                            {formatListingTime(listing.createdAt)}
-                          </span>
+                          {userRole === 'livestock_owner' && listing.requestCount != null ? (
+                            <>
+                              <span className={styles.featuredListingRequests}>
+                                📋 {listing.requestCount} {listing.requestCount === 1 ? 'request' : 'requests'}
+                              </span>
+                              <span className={styles.featuredListingDot}>•</span>
+                              <span className={`${styles.featuredListingTime} ${formatListingTime(listing.createdAt) === 'New' ? styles.newListing : ''}`}>
+                                {formatListingTime(listing.createdAt)}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className={styles.featuredListingOwner}>
+                                {listing.ownerName?.split(' ')[0] || 'Owner'}
+                              </span>
+                              <span className={styles.featuredListingDot}>•</span>
+                              <span className={styles.featuredListingRating}>
+                                ⭐ {typeof listing.ownerRating === 'number' ? listing.ownerRating.toFixed(1) : '0.0'}
+                              </span>
+                              <span className={styles.featuredListingDot}>•</span>
+                              <span className={`${styles.featuredListingTime} ${formatListingTime(listing.createdAt) === 'New' ? styles.newListing : ''}`}>
+                                {formatListingTime(listing.createdAt)}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -3198,7 +3258,11 @@ export default function Dashboard() {
               <div className={styles.modalContent}>
                 <div className={styles.modalUserInfo}>
                   <div className={styles.modalUserAvatar}>
-                    {user?.firstName ? user.firstName[0].toUpperCase() : 'U'}
+                    {user?.profilePicture ? (
+                      <img src={user.profilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                    ) : (
+                      user?.firstName ? user.firstName[0].toUpperCase() : 'U'
+                    )}
                   </div>
                   <span className={styles.modalUserName}>
                     {user?.firstName} {user?.lastName}
@@ -3289,7 +3353,11 @@ export default function Dashboard() {
               <div className={styles.modalContent}>
                 <div className={styles.modalUserInfo}>
                   <div className={styles.modalUserAvatar}>
-                    {editingPost.userName ? editingPost.userName[0].toUpperCase() : 'U'}
+                    {editingPost.userProfilePicture ? (
+                      <img src={editingPost.userProfilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                    ) : (
+                      editingPost.userName ? editingPost.userName[0].toUpperCase() : 'U'
+                    )}
                   </div>
                   <span className={styles.modalUserName}>
                     {editingPost.userName}
@@ -3494,7 +3562,11 @@ export default function Dashboard() {
               <div className={styles.modalPostContent}>
                 <div className={styles.modalPostHeader}>
                   <div className={styles.modalPostAvatar}>
-                    {selectedPost.userName ? selectedPost.userName[0].toUpperCase() : 'U'}
+                    {selectedPost.userProfilePicture ? (
+                      <img src={selectedPost.userProfilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                    ) : (
+                      selectedPost.userName ? selectedPost.userName[0].toUpperCase() : 'U'
+                    )}
                   </div>
                   <div>
                     <div className={styles.modalPostAuthor}>{selectedPost.userName}</div>
@@ -3567,8 +3639,8 @@ export default function Dashboard() {
               </div>
               {/* Like Stats */}
               <div className={styles.modalPostStats}>
-                <span>{selectedPost?.likes || 0} likes</span>
-                <span>{selectedPost?.comments?.length || 0} comments</span>
+                <span>{selectedPost?.likesCount || selectedPost?.likes?.length || 0} {(selectedPost?.likesCount || selectedPost?.likes?.length || 0) === 1 ? 'like' : 'likes'}</span>
+                <span>{getTotalCommentCount(selectedPost)} {getTotalCommentCount(selectedPost) === 1 ? 'comment' : 'comments'}</span>
               </div>
               {/* Like Button */}
               <div className={styles.modalPostActions}>
@@ -3592,7 +3664,11 @@ export default function Dashboard() {
                     return (
                       <div key={commentId} className={styles.modalComment} data-comment-id={commentId}>
                         <div className={styles.commentAvatar}>
-                          {comment.userName ? comment.userName[0].toUpperCase() : 'U'}
+                          {comment.userProfilePicture ? (
+                            <img src={comment.userProfilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                          ) : (
+                            comment.userName ? comment.userName[0].toUpperCase() : 'U'
+                          )}
                         </div>
                         <div className={styles.commentContent}>
                           {editingComment === commentId ? (
@@ -3623,185 +3699,157 @@ export default function Dashboard() {
                               </div>
                             </div>
                           ) : (
-                            <div className={styles.commentBubbleWrapper}>
-                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                                {/* Left: bubble + reply controls */}
-                                <div style={{ display: 'inline-block' }}>
-                                  <div className={styles.commentBubble}>
-                                    <span className={styles.commentAuthor}>{comment.userName}</span>
-                                    <p className={styles.commentText}>
-                                      {comment.text}
-                                      {comment.editedAt && <span className={styles.editedIndicator}> (edited)</span>}
-                                    </p>
-                                  </div>
-                                  {/* Reply button with timestamp on the left */}
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 2, width: '100%' }}>
-                                    <span className={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</span>
-                                    <button
-                                      onClick={() => toggleReplyInput(commentId)}
-                                      className={styles.commentMenuItem}
-                                      onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-                                      onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-                                    >
-                                      Reply
-                                    </button>
-                                  </div>
-                                  {showReplyInput[commentId] && (
-                                    <div className={styles.replyGroup}>
-                                      <div className={styles.replyInputRow}>
-                                        <input
-                                          type="text"
-                                          placeholder={`Reply to ${comment.userName}...`}
-                                          value={replyTextMap[commentId] || ''}
-                                          onChange={(e) => setReplyTextMap(prev => ({ ...prev, [commentId]: e.target.value }))}
-                                          onKeyPress={(e) => { if (e.key === 'Enter') { handleAddReply(commentId) } }}
-                                          className={styles.commentInput}
-                                          style={{ flex: 1 }}
-                                        />
-                                        <button
-                                          onClick={() => handleAddReply(commentId)}
-                                          disabled={!((replyTextMap[commentId] || '').trim())}
-                                          className={styles.commentSubmitBtn}
-                                        >
-                                          Post
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
-                                  
-                                  {/* Replies section - directly under the comment */}
-                                  {comment.replies && comment.replies.length > 0 && (
-                                    <div style={{ marginTop: 8, marginLeft: 40, display: 'grid', gap: 8, justifyItems: 'start' }}>
-                                      {comment.replies.map((reply, rIdx) => {
-                                        const replyId = reply.id || `reply-${rIdx}`
-                                        return (
-                                          <div key={replyId} className={styles.modalComment} data-reply-id={replyId}>
-                                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                                              {/* Left: reply bubble + reply controls */}
-                                              <div style={{ display: 'inline-block' }}>
-                                                <div className={styles.commentAvatar}>
-                                                  {reply.userName ? reply.userName[0].toUpperCase() : 'U'}
-                                                </div>
-                                                <div className={styles.commentContent}>
-                                                  <div className={styles.commentBubble}>
-                                                    <span className={styles.commentAuthor}>{reply.userName}</span>
-                                                    <p className={styles.commentText} dangerouslySetInnerHTML={{ __html: reply.text }}></p>
-                                                  </div>
-                                                  {/* Reply button with timestamp */}
-                                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 2, width: '100%' }}>
-                                                    <span className={styles.commentTime}>{formatTimeAgo(reply.createdAt)}</span>
-                                                    <button
-                                                      onClick={() => toggleReplyInput(replyId)}
-                                                      className={styles.commentMenuItem}
-                                                      style={{ 
-                                                        padding: 0, 
-                                                        background: 'transparent', 
-                                                        fontSize: '12px',
-                                                        textDecoration: 'none',
-                                                        cursor: 'pointer'
-                                                      }}
-                                                      onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-                                                      onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-                                                    >
-                                                      Reply
-                                                    </button>
-                                                  </div>
-                                                  {showReplyInput[replyId] && (
-                                                    <div className={styles.replyGroup}>
-                                                      <div className={styles.replyInputRow}>
-                                                        <input
-                                                          type="text"
-                                                          placeholder={`Reply to ${reply.userName}...`}
-                                                          value={replyTextMap[replyId] || ''}
-                                                          onChange={(e) => setReplyTextMap(prev => ({ ...prev, [replyId]: e.target.value }))}
-                                                          onKeyPress={(e) => { if (e.key === 'Enter') { handleAddReply(commentId, replyId) } }}
-                                                          className={styles.commentInput}
-                                                          style={{ flex: 1 }}
-                                                        />
-                                                        <button
-                                                          onClick={() => handleAddReply(commentId, replyId)}
-                                                          disabled={!((replyTextMap[replyId] || '').trim())}
-                                                          className={styles.commentSubmitBtn}
-                                                        >
-                                                          Post
-                                                        </button>
-                                                      </div>
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              </div>
-                                              {/* Right: menu */}
-                                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                <div className={`${styles.commentMenuContainer} comment-menu-container ${showCommentMenu === replyId ? styles.menuOpen : ''}`}>
-                                                  <button 
-                                                    className={styles.commentMenuBtn}
-                                                    onClick={(e) => {
-                                                      e.preventDefault()
-                                                      e.stopPropagation()
-                                                      setShowCommentMenu(showCommentMenu === replyId ? null : replyId)
-                                                    }}
-                                                  >
-                                                    ⋯
-                                                  </button>
-                                                  {showCommentMenu === replyId && (
-                                                    <div className={styles.commentDropdown}>
-                                                      {(reply.userId === user?.uid || (!reply.userId && reply.userEmail === user?.email)) ? (
-                                                        <>
-                                                          <button onClick={() => handleEditReply(reply, commentId)} className={styles.commentMenuItem}>Edit</button>
-                                                          <button onClick={() => handleDeleteReply(replyId, commentId)} className={`${styles.commentMenuItem} ${styles.deleteMenuItem}`}>Delete</button>
-                                                        </>
-                                                      ) : (
-                                                        <button onClick={() => handleReportReply(replyId)} className={`${styles.commentMenuItem} ${styles.reportMenuItem}`}>Report</button>
-                                                      )}
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        )
-                                      })}
-                                    </div>
-                                  )}
+                            <div className={styles.commentContent}>
+                              {/* Bubble with menu button - fixed position */}
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                <div className={styles.commentBubble}>
+                                  <span className={styles.commentAuthor}>{comment.userName}</span>
+                                  <p className={styles.commentText}>
+                                    {comment.text}
+                                    {comment.editedAt && <span className={styles.editedIndicator}> (edited)</span>}
+                                  </p>
                                 </div>
-                                {/* Right: menu only */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div className={`${styles.commentMenuContainer} comment-menu-container ${showCommentMenu === commentId ? styles.menuOpen : ''}`}>
-                                    <button 
-                                      className={styles.commentMenuBtn}
-                                      onClick={(e) => {
-                                        e.preventDefault()
-                                        e.stopPropagation()
-                                        setShowCommentMenu(showCommentMenu === commentId ? null : commentId)
-                                        if (showCommentMenu !== commentId) {
-                                          setTimeout(() => {
-                                            const dropdown = document.querySelector(`[data-comment-id="${commentId}"] .${styles.commentDropdown}`)
-                                            if (dropdown) {
-                                              const buttonRect = e.target.getBoundingClientRect()
-                                              dropdown.style.left = `${buttonRect.right + 4}px`
-                                              dropdown.style.top = `${buttonRect.top}px`
-                                            }
-                                          }, 10)
-                                        }
-                                      }}
-                                    >
-                                      ⋯
-                                    </button>
-                                    {showCommentMenu === commentId && (
-                                      <div className={styles.commentDropdown}>
-                                        {(comment.userId === user?.uid || (!comment.userId && comment.userEmail === user?.email)) ? (
-                                          <>
-                                            <button onClick={() => handleEditComment(comment)} className={styles.commentMenuItem}>Edit</button>
-                                            <button onClick={() => handleDeleteComment(commentId)} className={`${styles.commentMenuItem} ${styles.deleteMenuItem}`}>Delete</button>
-                                          </>
-                                        ) : (
-                                          <button onClick={() => handleReportComment(commentId)} className={`${styles.commentMenuItem} ${styles.reportMenuItem}`}>Report</button>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
+                                {/* Menu button right next to bubble */}
+                                <div className={`${styles.commentMenuContainer} comment-menu-container ${showCommentMenu === commentId ? styles.menuOpen : ''}`}>
+                                  <button 
+                                    className={styles.commentMenuBtn}
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      setShowCommentMenu(showCommentMenu === commentId ? null : commentId)
+                                    }}
+                                  >
+                                    ⋯
+                                  </button>
+                                  {showCommentMenu === commentId && (
+                                    <div className={styles.commentDropdown}>
+                                      {(comment.userId === user?.uid || (!comment.userId && comment.userEmail === user?.email)) ? (
+                                        <>
+                                          <button onClick={() => handleEditComment(comment)} className={styles.commentMenuItem}>Edit</button>
+                                          <button onClick={() => handleDeleteComment(commentId)} className={`${styles.commentMenuItem} ${styles.deleteMenuItem}`}>Delete</button>
+                                        </>
+                                      ) : (
+                                        <button onClick={() => handleReportComment(commentId)} className={`${styles.commentMenuItem} ${styles.reportMenuItem}`}>Report</button>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
+                              
+                              {/* Reply button with timestamp */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, marginLeft: 12 }}>
+                                <span className={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</span>
+                                <span style={{ color: '#65676b' }}>•</span>
+                                <button
+                                  onClick={() => toggleReplyInput(commentId)}
+                                  className={styles.commentReplyBtn}
+                                  onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+                                  onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+                                >
+                                  Reply
+                                </button>
+                              </div>
+                              
+                              {/* Replies section - directly under the comment */}
+                              {comment.replies && comment.replies.length > 0 && (
+                                <div style={{ marginTop: 8, marginLeft: 40, display: 'grid', gap: 8 }}>
+                                  {comment.replies.map((reply, rIdx) => {
+                                    const replyId = reply.id || `reply-${rIdx}`
+                                    return (
+                                      <div key={replyId} className={styles.modalComment} data-reply-id={replyId}>
+                                        {/* Profile Picture */}
+                                        <div className={styles.commentAvatar}>
+                                          {reply.userProfilePicture ? (
+                                            <img src={reply.userProfilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                                          ) : (
+                                            reply.userName ? reply.userName[0].toUpperCase() : 'U'
+                                          )}
+                                        </div>
+                                        {/* Reply Content */}
+                                        <div className={styles.commentContent}>
+                                          {/* Bubble with menu button */}
+                                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                            <div className={styles.commentBubble}>
+                                              <span className={styles.commentAuthor}>{reply.userName}</span>
+                                              <p className={styles.commentText} dangerouslySetInnerHTML={{ __html: reply.text }}></p>
+                                            </div>
+                                            {/* Menu button right next to bubble */}
+                                            <div className={`${styles.commentMenuContainer} comment-menu-container ${showCommentMenu === replyId ? styles.menuOpen : ''}`}>
+                                              <button 
+                                                className={styles.commentMenuBtn}
+                                                onClick={(e) => {
+                                                  e.preventDefault()
+                                                  e.stopPropagation()
+                                                  setShowCommentMenu(showCommentMenu === replyId ? null : replyId)
+                                                }}
+                                              >
+                                                ⋯
+                                              </button>
+                                              {showCommentMenu === replyId && (
+                                                <div className={styles.commentDropdown}>
+                                                  {(reply.userId === user?.uid || (!reply.userId && reply.userEmail === user?.email)) ? (
+                                                    <>
+                                                      <button onClick={() => handleEditReply(reply, commentId)} className={styles.commentMenuItem}>Edit</button>
+                                                      <button onClick={() => handleDeleteReply(replyId, commentId)} className={`${styles.commentMenuItem} ${styles.deleteMenuItem}`}>Delete</button>
+                                                    </>
+                                                  ) : (
+                                                    <button onClick={() => handleReportReply(replyId)} className={`${styles.commentMenuItem} ${styles.reportMenuItem}`}>Report</button>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                          
+                                          {/* Reply button with timestamp */}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, marginLeft: 12 }}>
+                                            <span className={styles.commentTime}>{formatTimeAgo(reply.createdAt)}</span>
+                                            <span style={{ color: '#65676b' }}>•</span>
+                                            <button
+                                              onClick={() => toggleReplyInput(replyId)}
+                                              className={styles.commentReplyBtn}
+                                              onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+                                              onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+                                            >
+                                              Reply
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                              
+                              {/* Reply input - appears after all replies */}
+                              {showReplyInput[commentId] && (
+                                <div style={{ marginTop: 8, marginLeft: 40 }}>
+                                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                    <div className={styles.commentAvatar}>
+                                      {user?.profilePicture ? (
+                                        <img src={user.profilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                                      ) : (
+                                        user?.firstName ? user.firstName[0].toUpperCase() : 'U'
+                                      )}
+                                    </div>
+                                    <input
+                                      type="text"
+                                      placeholder={`Reply to ${comment.userName}...`}
+                                      value={replyTextMap[commentId] || ''}
+                                      onChange={(e) => setReplyTextMap(prev => ({ ...prev, [commentId]: e.target.value }))}
+                                      onKeyPress={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddReply(commentId) } }}
+                                      className={styles.commentInput}
+                                      style={{ flex: 1 }}
+                                    />
+                                    <button
+                                      onClick={() => handleAddReply(commentId)}
+                                      disabled={!((replyTextMap[commentId] || '').trim())}
+                                      className={styles.commentSubmitBtn}
+                                    >
+                                      Post
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -3816,7 +3864,11 @@ export default function Dashboard() {
               <div className={styles.modalCommentInput}>
                 <div className={styles.commentInputContainer}>
                   <div className={styles.commentAvatar}>
-                    {user?.firstName ? user.firstName[0].toUpperCase() : 'U'}
+                    {user?.profilePicture ? (
+                      <img src={user.profilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                    ) : (
+                      user?.firstName ? user.firstName[0].toUpperCase() : 'U'
+                    )}
                   </div>
                   <input
                     type="text"

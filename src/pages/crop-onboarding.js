@@ -4,6 +4,7 @@ import Head from 'next/head'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { doc, updateDoc, getDoc } from 'firebase/firestore'
+import StepIndicator from '../components/StepIndicator'
 import styles from '../../styles/modules/crop-onboarding.module.css'
 
 export default function CropOnboarding() {
@@ -17,23 +18,20 @@ export default function CropOnboarding() {
   const router = useRouter()
 
   const cropTypes = [
-    { id: 'rice', name: 'Rice', icon: 'fas fa-seedling', description: 'Palay, bigas' },
-    { id: 'corn', name: 'Corn', icon: 'fas fa-corn', description: 'Yellow corn, white corn' },
-    { id: 'vegetables', name: 'Vegetables', icon: 'fas fa-carrot', description: 'Leafy greens, root vegetables' },
-    { id: 'fruits', name: 'Fruits', icon: 'fas fa-apple-alt', description: 'Tropical fruits, citrus' },
-    { id: 'coconut', name: 'Coconut', icon: 'fas fa-tree', description: 'Coconut palms' },
-    { id: 'sugarcane', name: 'Sugarcane', icon: 'fas fa-leaf', description: 'Sugar production' },
-    { id: 'coffee', name: 'Coffee', icon: 'fas fa-coffee', description: 'Arabica, robusta' },
-    { id: 'banana', name: 'Banana', icon: 'fas fa-banana', description: 'Cavendish, saba' },
-    { id: 'cassava', name: 'Cassava', icon: 'fas fa-potato', description: 'Root crop, kamote' },
-    { id: 'other', name: 'Other Crops', icon: 'fas fa-spa', description: 'Other agricultural crops' }
+    { id: 'rice', name: 'Rice', icon: '/assets/images/wheat.png', description: 'Palay, Bigas' },
+    { id: 'corn', name: 'Corn', icon: '/assets/images/corn.png', description: 'Green corn, Yellow corn' },
+    { id: 'vegetables', name: 'Vegetables', icon: '/assets/images/lettuce.png', description: 'Leafy vegetables, Other vegetables' },
+    { id: 'fruits', name: 'Fruits', icon: '/assets/images/fruits.png', description: 'Tropical fruits, Other fruits' },
+    { id: 'root-tuber', name: 'Root Crops', icon: '/assets/images/rootcrop.png', description: 'Cassava, Other roots' },
+    { id: 'plantation', name: 'Plantation Crops', icon: '/assets/images/sugarcane.png', description: 'Sugarcane, Coffee' },
+    { id: 'other', name: 'Other Crops', icon: '/assets/images/other.png', description: 'Other crops' }
   ]
 
   const farmSizes = [
-    { id: 'small', label: '0.5 - 2 hectares', description: 'Small scale farming' },
-    { id: 'medium', label: '2 - 10 hectares', description: 'Medium scale farming' },
-    { id: 'large', label: '10 - 50 hectares', description: 'Large scale farming' },
-    { id: 'commercial', label: '50+ hectares', description: 'Commercial scale farming' }
+    { id: 'small', label: '0.5 - 2 hectares', description: 'Small scale farming', fences: 1 },
+    { id: 'medium', label: '2 - 10 hectares', description: 'Medium scale farming', fences: 2 },
+    { id: 'large', label: '10 - 50 hectares', description: 'Large scale farming', fences: 3 },
+    { id: 'commercial', label: '50+ hectares', description: 'Commercial scale farming', fences: 4 }
   ]
 
   useEffect(() => {
@@ -179,127 +177,112 @@ export default function CropOnboarding() {
         <div className={styles.backgroundPattern}></div>
         
         <div className={styles.content}>
-          <div className={styles.header}>
-            <div className={styles.logoContainer}>
-              <img 
-                src="/assets/images/AgrilinkLogo.png" 
-                alt="AgriLink Logo" 
-                className={styles.logo}
-              />
+          <div className={styles.topBar}>
+            <button className={styles.backButton} onClick={handleBack}>
+              <i className="fas fa-arrow-left"></i>
+              Back
+            </button>
+            <StepIndicator currentStep={currentStep + 1} totalSteps={4} variant="dots" />
+            <img 
+              src="/assets/images/AgrilinkLogo.png" 
+              alt="AgriLink Logo" 
+              className={styles.logo}
+            />
+          </div>
+          
+          <div className={styles.mainContent}>
+            <div className={styles.leftSection}>
+              <h1 className={styles.title}>
+                {currentStep === 1 ? (
+                  <>What <span style={{ color: '#2d5a27' }}>Crops</span><br />do you grow?</>
+                ) : (
+                  <>How big is<br />your <span style={{ color: '#2d5a27' }}>Farm</span>?</>
+                )}
+              </h1>
+              
+              {currentStep === 1 && (
+                <p className={styles.subtitle}>
+                  Select the crops you grow so we can connect you with relevant livestock owners and tailored opportunities.
+                </p>
+              )}
+              
+              {currentStep === 2 && (
+                <p className={styles.subtitle}>
+                  This helps us estimate your fertilizer needs and match you with appropriate livestock owners.
+                </p>
+              )}
             </div>
             
-            <div className={styles.progressContainer}>
-              <div className={styles.progressBar}>
-                <div 
-                  className={styles.progressFill}
-                  style={{ width: `${(currentStep / 2) * 100}%` }}
-                ></div>
-              </div>
-              <p className={styles.progressText}>Step {currentStep} of 2</p>
-            </div>
-          </div>
-
-          <div className={styles.stepContainer}>
-            {currentStep === 1 && (
-              <div className={styles.step}>
-                <div className={styles.stepHeader}>
-                  <div className={styles.stepIcon}>
-                    <i className="fas fa-seedling"></i>
-                  </div>
-                  <h1 className={styles.stepTitle}>What crops do you grow?</h1>
-                  <p className={styles.stepSubtitle}>
-                    Select all the types of crops you currently cultivate on your farm
-                  </p>
-                </div>
-
-                <div className={styles.optionsGrid}>
-                  {cropTypes.map((crop) => (
-                    <div
-                      key={crop.id}
-                      className={`${styles.optionCard} ${selectedCrops.includes(crop.id) ? styles.selected : ''}`}
-                      onClick={() => handleCropSelect(crop.id)}
-                    >
-                      <div className={styles.optionIcon}>
-                        <i className={crop.icon}></i>
-                      </div>
-                      <h3 className={styles.optionTitle}>{crop.name}</h3>
-                      <p className={styles.optionDescription}>{crop.description}</p>
-                      <div className={styles.selectIndicator}>
-                        <i className="fas fa-check-circle"></i>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {currentStep === 2 && (
-              <div className={styles.step}>
-                <div className={styles.stepHeader}>
-                  <div className={styles.stepIcon}>
-                    <i className="fas fa-ruler-combined"></i>
-                  </div>
-                  <h1 className={styles.stepTitle}>How big is your farm?</h1>
-                  <p className={styles.stepSubtitle}>
-                    This helps us estimate your fertilizer needs and match you with appropriate livestock owners
-                  </p>
-                </div>
-
-                <div className={styles.farmSizeOptions}>
-                  {farmSizes.map((size) => (
-                    <div
-                      key={size.id}
-                      className={`${styles.farmSizeOption} ${selectedFarmSize === size.id ? styles.selected : ''}`}
-                      onClick={() => handleFarmSizeSelect(size.id)}
-                    >
-                      <div className={styles.farmSizeOptionContent}>
-                        <h3 className={styles.farmSizeOptionLabel}>{size.label}</h3>
-                        <p className={styles.farmSizeOptionDescription}>{size.description}</p>
-                      </div>
-                      <div className={styles.selectIndicator}>
-                        <i className="fas fa-check-circle"></i>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className={styles.actionContainer}>
-            <button 
-              className={styles.backButton}
-              onClick={handleBack}
-              disabled={loading}
-            >
-              <i className="fas fa-arrow-left"></i>
-              <span>Back</span>
-            </button>
-
-            <button 
-              className={`${styles.nextButton} ${
-                (currentStep === 1 && selectedCrops.length > 0) || 
-                (currentStep === 2 && selectedFarmSize) ? styles.active : ''
-              }`}
-              onClick={handleNext}
-              disabled={
-                loading || 
-                (currentStep === 1 && selectedCrops.length === 0) ||
-                (currentStep === 2 && !selectedFarmSize)
-              }
-            >
-              {loading ? (
+            <div className={styles.rightSection}>
+              {currentStep === 1 && (
                 <>
-                  <div className={styles.buttonSpinner}></div>
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <span>{currentStep === 2 ? 'Complete Setup' : 'Next'}</span>
-                  <i className="fas fa-arrow-right"></i>
+                  <div className={styles.optionsGrid}>
+                    {cropTypes.map((crop) => (
+                      <div
+                        key={crop.id}
+                        className={`${styles.optionCard} ${selectedCrops.includes(crop.id) ? styles.selected : ''}`}
+                        onClick={() => handleCropSelect(crop.id)}
+                      >
+                        <div className={styles.optionIcon}>
+                          <img 
+                            src={crop.icon} 
+                            alt={crop.name} 
+                            className={styles.cropIcon} 
+                            onError={(e) => {
+                              e.target.style.display = 'none'
+                              e.target.parentElement.innerHTML = '<i class="fas fa-seedling" style="font-size: 2.5rem; color: #2d5a27;"></i>'
+                            }}
+                          />
+                        </div>
+                        <h3 className={styles.optionTitle}>{crop.name}</h3>
+                        <p className={styles.optionDescription}>{crop.description}</p>
+                        <div className={styles.selectIndicator}>
+                          <i className="fas fa-check-circle"></i>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <button className={styles.nextButton} onClick={handleNext}>
+                    Next
+                  </button>
                 </>
               )}
-            </button>
+
+              {currentStep === 2 && (
+                <>
+                  <div className={styles.farmSizeGrid}>
+                    {farmSizes.map((size) => (
+                      <div
+                        key={size.id}
+                        className={`${styles.optionCard} ${styles.noIcon} ${selectedFarmSize === size.id ? styles.selected : ''}`}
+                        onClick={() => handleFarmSizeSelect(size.id)}
+                      >
+                        <div className={styles.fenceContainer}>
+                          {Array.from({ length: size.fences }).map((_, index) => (
+                            <img 
+                              key={index} 
+                              src="/assets/images/fence.png" 
+                              alt="Fence" 
+                              className={styles.fenceIcon}
+                            />
+                          ))}
+                        </div>
+                        <h3 className={styles.optionTitle}>{size.label}</h3>
+                        <p className={styles.optionDescription}>{size.description}</p>
+                        <div className={styles.selectIndicator}>
+                          <i className="fas fa-check-circle"></i>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <button className={styles.nextButton} onClick={handleNext}>
+                    {loading ? 'Saving...' : 'Done'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
 

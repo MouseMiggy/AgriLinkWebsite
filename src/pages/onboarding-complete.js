@@ -4,7 +4,6 @@ import Head from 'next/head'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
-import StepIndicator from '../components/StepIndicator'
 import styles from '../../styles/modules/onboarding-complete.module.css'
 
 export default function OnboardingComplete() {
@@ -19,6 +18,9 @@ export default function OnboardingComplete() {
       if (currentUser) {
         setUser(currentUser)
         
+        // Set initial username from auth immediately for faster UI
+        setUserName(currentUser.displayName?.split(' ')[0] || 'User')
+        
         // Get user data from Firestore
         try {
           const userDocRef = doc(db, 'Users', currentUser.uid)
@@ -27,7 +29,10 @@ export default function OnboardingComplete() {
           if (userDoc.exists()) {
             const userData = userDoc.data()
             setUserRole(userData.role || '')
-            setUserName(userData.firstName || currentUser.displayName?.split(' ')[0] || 'User')
+            // Update username with Firestore data if available
+            if (userData.firstName) {
+              setUserName(userData.firstName)
+            }
             
             // If user hasn't completed onboarding, redirect to appropriate page
             if (!userData.onboardingCompleted) {
@@ -55,15 +60,6 @@ export default function OnboardingComplete() {
     return () => unsubscribe()
   }, [router])
 
-  useEffect(() => {
-    // Auto-redirect to dashboard after 4 seconds
-    const timer = setTimeout(() => {
-      handleGoToDashboard()
-    }, 4000)
-
-    return () => clearTimeout(timer)
-  }, [])
-
   const handleGoToDashboard = () => {
     setRedirecting(true)
     router.push('/dashboard')
@@ -75,8 +71,6 @@ export default function OnboardingComplete() {
         return 'Livestock Owner'
       case 'crop_farmer':
         return 'Crop Farmer'
-      default:
-        return 'Farmer'
     }
   }
 
@@ -86,8 +80,6 @@ export default function OnboardingComplete() {
         return 'fas fa-cow'
       case 'crop_farmer':
         return 'fas fa-seedling'
-      default:
-        return 'fas fa-user'
     }
   }
 
@@ -97,8 +89,6 @@ export default function OnboardingComplete() {
         return 'You can now list your livestock waste and connect with crop farmers who need organic fertilizer.'
       case 'crop_farmer':
         return 'You can now browse available livestock waste and connect with livestock owners in your area.'
-      default:
-        return 'You can now explore AgriLink and connect with other farmers.'
     }
   }
 
@@ -119,6 +109,9 @@ export default function OnboardingComplete() {
         <title>Welcome to AgriLink! | AgriLink PH</title>
         <meta name="description" content="Your AgriLink profile is now complete" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
       </Head>
 
@@ -126,50 +119,55 @@ export default function OnboardingComplete() {
         <div className={styles.backgroundPattern}></div>
         
         <div className={styles.content}>
-          <div className={styles.topBar}>
-            <div className={styles.spacer}></div>
-            <StepIndicator currentStep={4} totalSteps={4} variant="dots" />
-            <img 
-              src="/assets/images/AgrilinkLogo.png" 
-              alt="AgriLink Logo" 
-              className={styles.logo}
-            />
+          <div className={styles.header}>
+            <div className={styles.logoContainer}>
+              <img 
+                src="/assets/images/AgrilinkLogo.png" 
+                alt="AgriLink Logo" 
+                className={styles.logo}
+              />
+            </div>
           </div>
-          
+
           <div className={styles.mainContent}>
-            <div className={styles.leftSection}>
-              <div className={styles.successAnimation}>
-                <div className={styles.checkmarkContainer}>
-                  <div className={styles.checkmark}>
-                    <i className="fas fa-check"></i>
-                  </div>
-                </div>
-                <div className={styles.celebrationEmojis}>
-                  <span className={styles.emoji}>🎉</span>
-                  <span className={styles.emoji}>🌱</span>
-                  <span className={styles.emoji}>🚜</span>
-                  <span className={styles.emoji}>🎉</span>
+            <div className={styles.successAnimation}>
+              <div className={styles.checkmarkContainer}>
+                <div className={styles.checkmark}>
+                  <i className="fas fa-check"></i>
                 </div>
               </div>
-              <h1 className={styles.title}>Welcome to AgriLink!</h1>
+            </div>
+
+            <div className={styles.welcomeSection}>
+              <h1 className={styles.title}>Nice! You're all set up!</h1>
               <p className={styles.subtitle}>
-                Congratulations {userName}! Your {getRoleDisplayName(userRole)} profile is now complete.
+                Welcome to AgriLink, <span className={styles.userName}>{userName}</span>!
               </p>
             </div>
-            
-            <div className={styles.rightSection}>
-              <div className={styles.roleInfo}>
+
+            {(userRole === 'livestock_owner' || userRole === 'crop_farmer') && (
+              <div className={styles.roleCard}>
                 <div className={styles.roleIcon}>
                   <i className={getRoleIcon(userRole)}></i>
                 </div>
-                <h3 className={styles.roleTitle}>{getRoleDisplayName(userRole)}</h3>
-                <p className={styles.roleDescription}>{getRoleDescription(userRole)}</p>
+                <h2 className={styles.roleTitle}>
+                  You're registered as a {getRoleDisplayName(userRole)}
+                </h2>
+                <p className={styles.roleDescription}>
+                  {getRoleDescription(userRole)}
+                </p>
               </div>
-              
+            )}
+
+            <div className={styles.featuresGrid}>
               <div className={styles.feature}>
-                <div className={styles.featureIcon}>
-                  <i className="fas fa-exchange-alt"></i>
-                </div>
+                <h3 className={styles.featureTitle}>Connect</h3>
+                <p className={styles.featureDescription}>
+                  Find and connect with farmers in your area
+                </p>
+              </div>
+
+              <div className={styles.feature}>
                 <h3 className={styles.featureTitle}>Exchange</h3>
                 <p className={styles.featureDescription}>
                   Trade livestock waste for mutual benefit
@@ -177,9 +175,6 @@ export default function OnboardingComplete() {
               </div>
 
               <div className={styles.feature}>
-                <div className={styles.featureIcon}>
-                  <i className="fas fa-leaf"></i>
-                </div>
                 <h3 className={styles.featureTitle}>Grow</h3>
                 <p className={styles.featureDescription}>
                   Build a sustainable farming community
@@ -205,11 +200,6 @@ export default function OnboardingComplete() {
                   </>
                 )}
               </button>
-
-              <p className={styles.autoRedirectText}>
-                <i className="fas fa-clock"></i>
-                Automatically redirecting in a few seconds...
-              </p>
             </div>
           </div>
         </div>

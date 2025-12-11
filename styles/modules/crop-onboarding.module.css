@@ -1,12 +1,16 @@
-/* Crop Onboarding Page Styles */
+/* Crop Onboarding Page Styles - Matching Livestock Onboarding Design */
 .container {
-  min-height: 100vh;
+  height: 100vh;
   background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
-  position: relative;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   overflow: hidden;
 }
 
@@ -17,162 +21,215 @@
   right: 0;
   bottom: 0;
   background-image: 
-    radial-gradient(circle at 25% 75%, rgba(250, 145, 0, 0.03) 0%, transparent 50%),
-    radial-gradient(circle at 75% 25%, rgba(250, 145, 0, 0.02) 0%, transparent 50%);
-  animation: float 28s ease-in-out infinite;
+    radial-gradient(circle at 20% 80%, rgba(45, 90, 39, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(45, 90, 39, 0.02) 0%, transparent 50%);
+  animation: float 25s ease-in-out infinite;
 }
 
 @keyframes float {
   0%, 100% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-20px) rotate(-2deg); }
+  33% { transform: translateY(-15px) rotate(1deg); }
+  66% { transform: translateY(-10px) rotate(-1deg); }
 }
 
 .content {
   background: #ffffff;
   border-radius: 16px;
   padding: 30px;
-  max-width: 1100px;
-  width: 100%;
+  width: 1200px;
+  height: 626px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   position: relative;
   z-index: 1;
   border: 1px solid #f0f0f0;
+  overflow-y: auto;
 }
 
-.header {
-  text-align: center;
-  margin-bottom: 40px;
+.topBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 50px;
 }
 
-.logoContainer {
-  margin-bottom: 20px;
+.topBar .backButton {
+  background: transparent;
+  color: #666;
+  border: 2px solid #ddd;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: 'Poppins', sans-serif;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topBar .backButton:hover {
+  border-color: #2d5a27;
+  color: #2d5a27;
+}
+
+.topBar .backButton:hover i {
+  color: #2d5a27;
 }
 
 .logo {
-  height: 50px;
-  width: auto;
+  width: 120px;
+  height: auto;
 }
 
-.progressContainer {
+.mainContent {
+  display: flex;
+  align-items: flex-start;
+}
+
+.leftSection {
+  flex: 0.4;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.progressBar {
-  width: 200px;
-  height: 6px;
-  background: #e5e5e5;
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progressFill {
-  height: 100%;
-  background: #fa9100;
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.progressText {
-  font-size: 0.9rem;
-  color: #666;
-  margin: 0;
-  font-weight: 500;
-}
-
-.stepContainer {
-  margin-bottom: 40px;
-}
-
-.step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.stepHeader {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.stepIcon {
-  width: 80px;
-  height: 80px;
-  background: #fa9100;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
   justify-content: center;
+  margin-left: 20px;
+}
+
+.rightSection {
+  flex: 0.7;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.title {
   font-size: 2.5rem;
-  color: white;
-  margin: 0 auto 20px;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-}
-
-.stepTitle {
-  font-size: 2.2rem;
   font-weight: 700;
   color: #fa9100;
-  margin-bottom: 10px;
-  font-family: 'Raleway', sans-serif;
+  font-family: 'Poppins', sans-serif;
+  margin-bottom: 20px;
+  line-height: 1.2;
 }
 
-.stepSubtitle {
+.subtitle {
   font-size: 1.1rem;
   color: #666;
   margin: 0;
   line-height: 1.6;
-  max-width: 500px;
+  max-width: 400px;
+}
+
+.nextButton {
+  background: #fa9100;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 32px;
+  margin-top: 30px;
+  margin-right: 19px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: 'Poppins', sans-serif;
+}
+
+.nextButton:hover {
+  background: #e8820e;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(250, 145, 0, 0.3);
 }
 
 .optionsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-right: 20px;
+}
+
+.farmSizeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
+  margin-right: 20px;
   width: 100%;
-  max-width: 900px;
+}
+
+.farmSizeGrid .optionCard {
+  padding: 24px 20px;
+  min-height: 120px;
+}
+
+.fenceContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.fenceIcon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  filter: brightness(0) saturate(100%) invert(24%) sepia(18%) saturate(1847%) hue-rotate(74deg) brightness(95%) contrast(92%);
 }
 
 .optionCard {
   background: white;
-  border: 3px solid #e5e5e5;
-  border-radius: 16px;
-  padding: 25px 15px;
+  border: 2px solid #f0f0f0;
+  border-radius: 12px;
+  padding: 20px 16px;
   cursor: pointer;
   transition: all 0.3s ease;
   position: relative;
+  min-height: 140px;
+  width: 100%;
   text-align: center;
-  min-height: 160px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .optionCard:hover {
-  border-color: #fa9100;
-  transform: translateY(-3px);
-  box-shadow: 0 8px 25px rgba(45, 90, 39, 0.15);
+  border-color: #2d5a27;
+  background-color: #dcf0d9;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(45, 90, 39, 0.15);
 }
 
 .optionCard.selected {
-  border-color: #fa9100;
-  background: linear-gradient(135deg, #f8fdf8 0%, #e8f5e8 100%);
-  box-shadow: 0 8px 25px rgba(45, 90, 39, 0.2);
-  transform: translateY(-3px);
+  border-color: #2d5a27;
+  background: linear-gradient(135deg, #f0f8f0 0%, #e8f4e8 100%);
+  box-shadow: 0 8px 25px rgba(45, 90, 39, 0.25);
+  transform: translateY(-2px);
+}
+
+.optionCard.noIcon {
+  justify-content: center;
+  text-align: center;
+  min-height: 170px;
+}
+
+.optionCard.noIcon .optionTitle {
+  margin-bottom: 8px;
+}
+
+.optionCard.noIcon .optionDescription {
+  margin-bottom: 0;
 }
 
 .optionIcon {
-  font-size: 2.5rem;
-  color: #fa9100;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
+}
+
+.cropIcon {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  filter: brightness(0) saturate(100%) invert(24%) sepia(18%) saturate(1847%) hue-rotate(74deg) brightness(95%) contrast(92%);
 }
 
 .optionCard.selected .optionIcon {
@@ -186,10 +243,10 @@
 }
 
 .optionTitle {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 600;
-  color: #fa9100;
-  margin-bottom: 8px;
+  color: #2d5a27;
+  margin-bottom: 6px;
 }
 
 .optionDescription {
@@ -201,10 +258,10 @@
 
 .selectIndicator {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  font-size: 1.3rem;
-  color: #fa9100;
+  top: 10px;
+  right: 10px;
+  font-size: 1.2rem;
+  color: #2d5a27;
   opacity: 0;
   transform: scale(0);
   transition: all 0.3s ease;
@@ -215,143 +272,19 @@
   transform: scale(1);
 }
 
-.farmSizeOptions {
+.loadingContainer {
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  width: 100%;
-  max-width: 600px;
-}
-
-.farmSizeOption {
-  background: white;
-  border: 3px solid #e5e5e5;
-  border-radius: 12px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.farmSizeOption:hover {
-  border-color: #fa9100;
-  transform: translateX(5px);
-  box-shadow: 0 5px 20px rgba(45, 90, 39, 0.15);
-}
-
-.farmSizeOption.selected {
-  border-color: #fa9100;
-  background: linear-gradient(135deg, #f8fdf8 0%, #e8f5e8 100%);
-  box-shadow: 0 5px 20px rgba(45, 90, 39, 0.2);
-  transform: translateX(5px);
-}
-
-.farmSizeOptionContent {
-  flex: 1;
-  text-align: left;
-}
-
-.farmSizeOptionLabel {
-  font-size: 1.3rem;
-  font-weight: 600;
-  color: #fa9100;
-  margin-bottom: 5px;
-}
-
-.farmSizeOptionDescription {
-  font-size: 0.9rem;
-  color: #666;
-  margin: 0;
-}
-
-.farmSizeOption .selectIndicator {
-  font-size: 1.5rem;
-  color: #fa9100;
-  opacity: 0;
-  transform: scale(0);
-  transition: all 0.3s ease;
-  position: static;
-}
-
-.farmSizeOption.selected .selectIndicator {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.actionContainer {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 20px;
-}
-
-.backButton {
-  background: transparent;
   color: #666;
-  border: 2px solid #ddd;
-  border-radius: 12px;
-  padding: 12px 20px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
-.backButton:hover {
-  border-color: #fa9100;
-  color: #fa9100;
-}
-
-.backButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.nextButton {
-  background: #fa9100;
-  color: white;
-  border: none;
-  border-radius: 12px;
-  padding: 15px 30px;
-  font-size: 1.1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  opacity: 0.5;
-  transform: scale(0.95);
-  min-width: 160px;
-  justify-content: center;
-}
-
-.nextButton.active {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.nextButton.active:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(45, 90, 39, 0.3);
-}
-
-.nextButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.buttonSpinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid white;
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(45, 90, 39, 0.3);
+  border-top: 4px solid #2d5a27;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -359,23 +292,6 @@
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
-}
-
-.loadingContainer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  color: white;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top: 4px solid white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
 }
 
 /* Toast Notification */
@@ -427,63 +343,72 @@
 }
 
 /* Responsive Design */
+@media (max-width: 1024px) {
+  .content {
+    width: 95%;
+    height: auto;
+    max-height: 90vh;
+  }
+
+  .mainContent {
+    flex-direction: column;
+  }
+
+  .leftSection {
+    margin-left: 0;
+    margin-bottom: 30px;
+  }
+
+  .rightSection {
+    width: 100%;
+    align-items: center;
+  }
+
+  .optionsGrid {
+    margin-right: 0;
+    width: 100%;
+  }
+}
+
 @media (max-width: 768px) {
   .container {
     padding: 15px;
   }
 
   .content {
-    padding: 30px 20px;
+    padding: 20px;
   }
 
-  .stepTitle {
-    font-size: 1.8rem;
+  .title {
+    font-size: 2rem;
   }
 
-  .stepSubtitle {
+  .subtitle {
     font-size: 1rem;
   }
 
-  .stepIcon {
-    width: 70px;
-    height: 70px;
-    font-size: 2rem;
-  }
-
   .optionsGrid {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
   }
 
   .optionCard {
-    padding: 20px 10px;
-    min-height: 140px;
+    padding: 16px 12px;
+    min-height: 120px;
+    width: 100%;
   }
 
-  .optionIcon {
-    font-size: 2rem;
+  .cropIcon {
+    width: 40px;
+    height: 40px;
   }
 
   .optionTitle {
-    font-size: 1.1rem;
+    font-size: 1rem;
   }
 
-  .farmSizeOption {
-    padding: 15px;
-  }
-
-  .farmSizeOptionLabel {
-    font-size: 1.1rem;
-  }
-
-  .actionContainer {
-    flex-direction: column;
-    gap: 15px;
-  }
-
-  .backButton, .nextButton {
-    width: 100%;
-    justify-content: center;
+  .optionDescription {
+    font-size: 0.8rem;
   }
 
   .toast {
@@ -495,45 +420,24 @@
 
 @media (max-width: 480px) {
   .content {
-    padding: 25px 15px;
+    padding: 15px;
   }
 
-  .stepTitle {
+  .title {
     font-size: 1.6rem;
   }
 
-  .stepIcon {
-    width: 60px;
-    height: 60px;
-    font-size: 1.8rem;
-  }
-
   .optionsGrid {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .optionCard {
-    padding: 18px 12px;
-    min-height: 120px;
+    padding: 14px 10px;
+    min-height: 100px;
   }
 
-  .optionIcon {
-    font-size: 1.8rem;
-  }
-
-  .optionTitle {
-    font-size: 1rem;
-  }
-
-  .optionDescription {
-    font-size: 0.8rem;
-  }
-
-  .farmSizeOptionLabel {
-    font-size: 1rem;
-  }
-
-  .farmSizeOptionDescription {
-    font-size: 0.85rem;
+  .cropIcon {
+    width: 36px;
+    height: 36px;
   }
 }

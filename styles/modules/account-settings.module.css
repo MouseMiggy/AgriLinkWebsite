@@ -58,13 +58,14 @@
 .content {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 480px 480px 430px;
   gap: 30px;
   padding: 30px 40px;
   overflow: hidden;
 }
 
 .leftColumn,
+.centerColumn,
 .rightColumn {
   display: flex;
   flex-direction: column;
@@ -76,21 +77,126 @@
   background: white;
   border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #d0d0d0;
   flex-shrink: 0;
 }
 
-.section h2 {
-  font-size: 20px;
+.securitySection {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #d0d0d0;
+  flex-shrink: 0;
+}
+
+.securitySection p {
+  font-size: 16px !important;
+  font-family: 'Poppins', sans-serif;
+  text-align: center;
+  color: #2d5a27;
+  line-height: 1.0;
+}
+
+.securityHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 5px;
+}
+
+.securityHeaderIcon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+}
+
+.securityHeader h2 {
+  margin: 0;
+  font-size: 25px !important;
   font-weight: 600;
-  color: #1c1e21;
+  color: #2d5a27;
+  font-family: 'Poppins', sans-serif;
+}
+
+.section h2 {
+  font-size: 25px !important;
+  font-weight: 700;
+  color: #2d5a27;
   margin: 0 0 16px 0;
+  text-align: center;
+  padding-bottom: 8px;
+}
+
+.emailVerificationHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0px;   /* Reduced from 16px */
+  padding: 0 5px;
+  min-height: 45px;
+}
+
+.locationSettingsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.accountStatusTitle {
+  border-bottom: 2px solid #2d5a27;
+}
+
+.verificationHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 0px;
+}
+
+.verificationHeaderIcon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+}
+
+.verificationHeader h2 {
+  margin: 0;
+  font-size: 25px !important;
+  font-weight: 700;
+  color: #2d5a27;
+  font-family: 'Poppins', sans-serif;
+}
+
+.locationHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 0px;
+}
+
+.locationHeaderIcon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+}
+
+.locationHeader h2 {
+  margin: 0;
+  font-size: 25px !important;
+  font-weight: 700;
+  color: #2d5a27;
+  font-family: 'Poppins', sans-serif;
 }
 
 .section h3 {
   font-size: 16px;
-  font-weight: 600;
-  color: #1c1e21;
+  font-weight: 700;
+  color: #2d5a27;
   margin: 0 0 8px 0;
 }
 
@@ -142,7 +248,9 @@
   padding: 16px;
   background: #f8f9fa;
   border-radius: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 60px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #d0d0d0;
 }
 
 .verificationItem:last-child {
@@ -153,15 +261,16 @@
   flex: 1;
 }
 
-.verificationHeader {
+/* Row inside verification card (email + badge) */
+.verificationRow {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
 }
 
 .verificationLabel {
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 600;
   color: #1c1e21;
 }
@@ -199,13 +308,12 @@
 
 /* Security Information */
 .securityInfo {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
   padding: 16px;
   background: #fff3e0;
   border-left: 4px solid #fa9100;
   border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #d0d0d0;
 }
 
 .securityIcon {
@@ -221,10 +329,14 @@
 }
 
 /* Location Settings */
-.locationSetting {
+/* Card around Location Access + Status (keep border) */
+.locationStatusCard {
   padding: 16px;
   background: #f8f9fa;
   border-radius: 8px;
+  border: 1px solid #d0d0d0;
+  margin-bottom: 40px;
+  margin-top: 42px;
 }
 
 .locationInfo {
@@ -233,6 +345,8 @@
 
 .locationInfo h3 {
   margin-bottom: 8px;
+  color: #2d5a27;
+  font-weight: 700;
 }
 
 .locationStatus {
@@ -249,27 +363,34 @@
 }
 
 .statusEnabled {
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 600;
   color: #4caf50;
 }
 
 .statusDisabled {
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 600;
   color: #f44336;
 }
 
 .locationDescription {
-  font-size: 13px;
+  font-size: 17px !important;
   color: #65676b;
-  margin-bottom: 12px;
+  margin-bottom: 0px;
+  font-family: 'Poppins', sans-serif;
+  text-align: center;
   line-height: 1.5;
+}
+
+.locationButtonWrapper {
+  display: flex;
+  justify-content: center;
 }
 
 .enableButton,
 .disableButton {
-  padding: 10px 24px;
+  padding: 15px 24px;
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -277,12 +398,14 @@
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
-  min-width: 140px;
+  min-width: 190px;
+  margin-bottom: 14px;
 }
 
 .enableButton {
   background: #4caf50;
   color: white;
+  font-size: 1.0rem;
 }
 
 .enableButton:hover {

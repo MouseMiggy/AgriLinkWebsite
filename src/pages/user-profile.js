@@ -12,6 +12,7 @@ export default function UserProfile() {
   const [userProfile, setUserProfile] = useState(null)
   const [listings, setListings] = useState([])
   const [posts, setPosts] = useState([])
+  const [requestCount, setRequestCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showDropdown, setShowDropdown] = useState(null)
   const [editingPost, setEditingPost] = useState(null)
@@ -38,6 +39,7 @@ export default function UserProfile() {
         setUser(currentUser)
         await loadUserProfile(currentUser.uid)
         await loadUserListings(currentUser.uid)
+        await loadUserRequests(currentUser.uid)
         loadUserPosts(currentUser.uid)
       }
       setLoading(false)
@@ -85,25 +87,49 @@ export default function UserProfile() {
     try {
       console.log('Loading listings for userId:', userId)
       const q = query(
-        collection(db, 'listings'),
+        collection(db, 'livestock_listings'),
         where('ownerId', '==', userId)
       )
       const snapshot = await getDocs(q)
-      console.log('Listings found:', snapshot.docs.length)
+      console.log('Total listings found:', snapshot.docs.length)
       
-      const listingsData = snapshot.docs.map(doc => ({
+      const allListings = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }))
+      
+      // Filter out sold and deleted listings - only count available ones
+      const availableListings = allListings.filter(
+        listing => listing.status !== 'sold' && listing.status !== 'deleted'
+      )
+      
+      console.log('Available listings (not sold/deleted):', availableListings.length)
+      
       // Sort manually by createdAt
-      listingsData.sort((a, b) => {
+      availableListings.sort((a, b) => {
         const dateA = a.createdAt?.toDate?.() || new Date(0)
         const dateB = b.createdAt?.toDate?.() || new Date(0)
         return dateB - dateA
       })
-      setListings(listingsData)
+      setListings(availableListings)
     } catch (error) {
       console.error('Error loading listings:', error)
+    }
+  }
+
+  const loadUserRequests = async (userId) => {
+    try {
+      console.log('Loading requests for userId:', userId)
+      const q = query(
+        collection(db, 'listing_requests'),
+        where('requesterId', '==', userId)
+      )
+      const snapshot = await getDocs(q)
+      const count = snapshot.size
+      console.log('Total requests made:', count)
+      setRequestCount(count)
+    } catch (error) {
+      console.error('Error loading requests:', error)
     }
   }
 
@@ -573,14 +599,29 @@ export default function UserProfile() {
           <div className={styles.statsCard}>
             <h2 className={styles.cardTitle}>Activity</h2>
             <div className={styles.statsContent}>
-              <div className={styles.statItem}>
-                <p className={styles.statNumber}>{listings.length}</p>
-                <p className={styles.statLabel}>Listings</p>
-              </div>
-              <div className={styles.statItem}>
-                <p className={styles.statNumber}>{posts.length}</p>
-                <p className={styles.statLabel}>Posts</p>
-              </div>
+              {userProfile?.role === 'livestock_owner' ? (
+                <>
+                  <div className={styles.statItem}>
+                    <p className={styles.statNumber}>{listings.length}</p>
+                    <p className={styles.statLabel}>Listings</p>
+                  </div>
+                  <div className={styles.statItem}>
+                    <p className={styles.statNumber}>{posts.length}</p>
+                    <p className={styles.statLabel}>Posts</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.statItem}>
+                    <p className={styles.statNumber}>{requestCount}</p>
+                    <p className={styles.statLabel}>Requests</p>
+                  </div>
+                  <div className={styles.statItem}>
+                    <p className={styles.statNumber}>{posts.length}</p>
+                    <p className={styles.statLabel}>Posts</p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </aside>

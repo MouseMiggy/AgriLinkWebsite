@@ -1603,11 +1603,6 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       
       // Check if current user has already rated the other user for this transaction
       
-      // Create transaction record when both users agree
-      if (isTransactionCompletedByYesCount && selectedChat) {
-        createTransactionFromChat(selectedChat, messages)
-      }
-      
       // Function to create transaction from chat data
       const createTransactionFromChat = async (chatData, messages) => {
         console.log('🔄 Creating transaction from chat:', chatData)
@@ -1688,6 +1683,12 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
           console.error('❌ Error creating transaction:', error)
         }
       }
+      
+      // Create transaction record when both users agree
+      if (isTransactionCompletedByYesCount && selectedChat) {
+        createTransactionFromChat(selectedChat, messages)
+      }
+      
       if (isTransactionCompletedByYesCount && user && selectedChat) {
         const checkUserRating = async () => {
           try {

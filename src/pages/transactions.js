@@ -17,45 +17,87 @@ const Transactions = ({ user }) => {
     setLoading(true)
     setError(null)
 
-    // Query transactions from Firestore collection
-    // Simplified query to avoid index issues for now
-    const q = query(
+    // Query transactions where user is either buyer or seller
+    // We need to fetch both separately and merge them
+    const buyerQuery = query(
       collection(db, 'transactions'),
-      where('userId', '==', user.uid)
+      where('buyerId', '==', user.uid)
+    )
+    
+    const sellerQuery = query(
+      collection(db, 'transactions'),
+      where('sellerId', '==', user.uid)
     )
 
-    const unsubscribe = onSnapshot(
-      q,
+    const transactionMap = new Map()
+
+    // Listen to buyer transactions
+    const unsubscribeBuyer = onSnapshot(
+      buyerQuery,
       (snapshot) => {
-        const transactionData = []
         snapshot.forEach((doc) => {
           const data = doc.data()
-          transactionData.push({
+          transactionMap.set(doc.id, {
             id: doc.id,
             ...data,
             dateAdded: data.dateAdded?.toDate() || new Date(),
-            dateSold: data.dateSold?.toDate() || new Date()
+            dateSold: data.completedAt?.toDate() || data.dateSold?.toDate() || new Date(),
+            userRole: 'buyer' // Track which role the current user has in this transaction
           })
         })
-        // Sort client-side instead of server-side to avoid index issues
-        transactionData.sort((a, b) => b.dateSold - a.dateAdded)
-        setTransactions(transactionData)
-        setLoading(false)
+        updateTransactionsList()
       },
       (err) => {
-        console.error('Error loading transactions:', err)
-        // If collection doesn't exist or permission denied, show empty state instead of error
-        if (err.code === 'permission-denied' || err.code === 'unavailable') {
-          setTransactions([])
-          setLoading(false)
-        } else {
-          setError('Failed to load transactions')
-          setLoading(false)
-        }
+        console.error('Error loading buyer transactions:', err)
+        handleQueryError(err)
       }
     )
 
-    return () => unsubscribe()
+    // Listen to seller transactions
+    const unsubscribeSeller = onSnapshot(
+      sellerQuery,
+      (snapshot) => {
+        snapshot.forEach((doc) => {
+          const data = doc.data()
+          transactionMap.set(doc.id, {
+            id: doc.id,
+            ...data,
+            dateAdded: data.dateAdded?.toDate() || new Date(),
+            dateSold: data.completedAt?.toDate() || data.dateSold?.toDate() || new Date(),
+            userRole: 'seller' // Track which role the current user has in this transaction
+          })
+        })
+        updateTransactionsList()
+      },
+      (err) => {
+        console.error('Error loading seller transactions:', err)
+        handleQueryError(err)
+      }
+    )
+
+    const updateTransactionsList = () => {
+      const transactionData = Array.from(transactionMap.values())
+      // Sort by completion date (most recent first)
+      transactionData.sort((a, b) => b.dateSold - a.dateSold)
+      setTransactions(transactionData)
+      setLoading(false)
+    }
+
+    const handleQueryError = (err) => {
+      // If collection doesn't exist or permission denied, show empty state instead of error
+      if (err.code === 'permission-denied' || err.code === 'unavailable') {
+        setTransactions([])
+        setLoading(false)
+      } else {
+        setError('Failed to load transactions')
+        setLoading(false)
+      }
+    }
+
+    return () => {
+      unsubscribeBuyer()
+      unsubscribeSeller()
+    }
   }, [db, user])
 
   const formatDate = (date) => {
@@ -126,9 +168,9 @@ const Transactions = ({ user }) => {
                 <th className={styles.columnHeader}>Listing Name</th>
                 <th className={styles.columnHeader}>Listing Details</th>
                 <th className={styles.columnHeader}>Price</th>
-                <th className={styles.columnHeader}>Buyer Name</th>
+                <th className={styles.columnHeader}>Transaction With</th>
                 <th className={styles.columnHeader}>Date Added</th>
-                <th className={styles.columnHeader}>Date Sold</th>
+                <th className={styles.columnHeader}>Date Completed</th>
               </tr>
             </thead>
             <tbody>
@@ -170,7 +212,9 @@ const Transactions = ({ user }) => {
                     </td>
                     <td className={styles.tableCell}>
                       <div className={styles.buyerName}>
-                        {transaction.buyerName || 'N/A'}
+                        {transaction.userRole === 'buyer' 
+                          ? transaction.sellerName || 'N/A' 
+                          : transaction.buyerName || 'N/A'}
                       </div>
                     </td>
                     <td className={styles.tableCell}>
@@ -227,11 +271,21 @@ const Transactions = ({ user }) => {
                 </div>
 
                 <div className={styles.receiptSection}>
-                  <h3 className={styles.receiptSectionTitle}>Buyer Information</h3>
+                  <h3 className={styles.receiptSectionTitle}>Transaction Parties</h3>
                   <div className={styles.receiptInfo}>
                     <div className={styles.receiptRow}>
-                      <span className={styles.receiptLabel}>Buyer Name:</span>
+                      <span className={styles.receiptLabel}>Buyer:</span>
                       <span className={styles.receiptValue}>{selectedTransaction.buyerName || 'N/A'}</span>
+                    </div>
+                    <div className={styles.receiptRow}>
+                      <span className={styles.receiptLabel}>Seller:</span>
+                      <span className={styles.receiptValue}>{selectedTransaction.sellerName || 'N/A'}</span>
+                    </div>
+                    <div className={styles.receiptRow}>
+                      <span className={styles.receiptLabel}>Your Role:</span>
+                      <span className={styles.receiptValue}>
+                        {selectedTransaction.userRole === 'buyer' ? 'Buyer (Crop Farmer)' : 'Seller (Livestock Owner)'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -244,7 +298,7 @@ const Transactions = ({ user }) => {
                       <span className={styles.receiptValue}>{formatDate(selectedTransaction.dateAdded)}</span>
                     </div>
                     <div className={styles.receiptRow}>
-                      <span className={styles.receiptLabel}>Date Sold:</span>
+                      <span className={styles.receiptLabel}>Date Completed:</span>
                       <span className={styles.receiptValue}>{formatDate(selectedTransaction.dateSold)}</span>
                     </div>
                   </div>

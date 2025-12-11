@@ -22,6 +22,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import AIChatService from '../lib/aiChatService'
 import { createTransaction } from '../lib/transactionService'
 import styles from '../../styles/modules/chat.module.css'
+import ReportModal from '../components/ReportModal'
 
 const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   // Chat state variables
@@ -66,6 +67,8 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   const [isSuggestionsLocked, setIsSuggestionsLocked] = useState(false)
   const [suggestionsLockedUntil, setSuggestionsLockedUntil] = useState(0)
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(true)
+  // Store suggestions per chat to make them persistent
+  const [persistentSuggestions, setPersistentSuggestions] = useState({})
   const [showSummary, setShowSummary] = useState(false)
   const [transactionSummary, setTransactionSummary] = useState(null)
   const [transactionStage, setTransactionStage] = useState('initial')
@@ -99,6 +102,10 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   
   // Per-user rating completion state
   const [userHasRated, setUserHasRated] = useState(false)
+  
+  // Report modal state
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportedMessages, setReportedMessages] = useState([])
   
   // Ref for auto-scrolling to bottom
   const messagesEndRef = useRef(null)
@@ -268,19 +275,22 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     })
   }
 
-  // Clear AI suggestions when transaction is completed
-  useEffect(() => {
-    if (hasTransactionCompleted) {
-      console.log('🤖 Transaction completed - clearing AI suggestions')
-      setAiSuggestions([])
-      setShowSuggestions(false)
-    }
-  }, [hasTransactionCompleted])
-  
   // Reset user rating status when switching chats
   useEffect(() => {
     setUserHasRated(false)
-  }, [selectedChat?.id])
+    // Reset AI suggestion tracking when switching chats
+    lastProcessedMessageId.current = null
+    console.log('🔄 Reset last processed message ID for new chat')
+    
+    // Load persistent suggestions for the new chat
+    if (selectedChat) {
+      const savedSuggestions = persistentSuggestions[selectedChat.id] || []
+      setAiSuggestions(savedSuggestions)
+      if (savedSuggestions.length > 0) {
+        setShowSuggestions(true)
+      }
+    }
+  }, [selectedChat?.id, persistentSuggestions])
   
   // Check if current user has already rated when transaction completes or chat loads
   useEffect(() => {
@@ -316,8 +326,20 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       
       checkUserRating()
     }
+    
+    // Clear suggestions when transaction is completed
+    if (hasTransactionCompleted && selectedChat?.id) {
+      setPersistentSuggestions(prev => {
+        const updated = { ...prev };
+        delete updated[selectedChat.id];
+        return updated;
+      });
+      setAiSuggestions([]);
+      setShowSuggestions(false);
+    }
   }, [hasTransactionCompleted, selectedChat?.id, user?.uid])
   const aiSuggestionsCache = useRef(new Map())
+  const lastProcessedMessageId = useRef(null)
   
   // Clear cache on component mount to ensure fresh payment filtering
   useEffect(() => {
@@ -329,6 +351,25 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   const triggerAISuggestions = async (messages) => {
     if (!user || !selectedChat || messages.length === 0) return;
     
+    // Get the last message
+    const lastMessage = messages[messages.length - 1];
+    
+    console.log('🤖 AI SUGGESTIONS DEBUG:', {
+      lastMessageId: lastMessage?.id,
+      lastProcessedId: lastProcessedMessageId.current,
+      lastMessageText: lastMessage?.text,
+      lastMessageSender: lastMessage?.senderId,
+      currentUserId: user?.uid,
+      isFromOtherUser: lastMessage?.senderId !== user?.uid
+    });
+    
+    // Temporarily disable strict message ID check to see if this is blocking suggestions
+    // Only skip if we've already processed this exact message and it's from the same user
+    if (lastProcessedMessageId.current === lastMessage?.id && lastMessage?.senderId !== user?.uid) {
+      console.log('🤖 Skipping AI suggestions - already processed message from other user:', lastMessage?.id);
+      return;
+    }
+    
     // Check if suggestions are locked (4-second cooldown)
     const now = Date.now()
     if (isSuggestionsLocked && now < suggestionsLockedUntil) {
@@ -339,9 +380,10 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     try {
       console.log('🤖 Triggering AI suggestions for chat:', selectedChat.id);
       
-      // Create cache key based on last message content and count
-      const lastMessage = messages[messages.length - 1];
-      const cacheKey = `${selectedChat.id}_${messages.length}_${lastMessage?.text?.slice(-50) || ''}`;
+      // Create cache key based on last message ID and content (not message count)
+      const cacheKey = `${selectedChat.id}_${lastMessage?.id || 'no_id'}_${lastMessage?.text?.slice(-50) || ''}`;
+      
+      console.log('🔑 Cache key generated:', cacheKey);
       
       // Check cache first
       if (aiSuggestionsCache.current.has(cacheKey)) {
@@ -395,50 +437,96 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       if (result && result.suggestions) {
         console.log('🤖 AI Suggestions received:', result);
         
-        // HARD FILTER: Remove ALL payment-related suggestions (phrase-based detection)
-        const paymentPhrases = [
-          'cash on', 'cash upon', 'cash for', 'cash payment',
-          'card payment', 'credit card', 'debit card',
-          'bank transfer', 'bank deposit',
-          'gcash payment', 'paypal payment',
-          'pay with cash', 'pay by cash',
-          'payment method', 'payment option',
-          'cod', 'cash on delivery'
-        ]
-        
-        const filteredSuggestions = result.suggestions.filter(suggestion => {
-          const suggestionText = suggestion.toLowerCase()
-          const containsPayment = paymentPhrases.some(phrase => suggestionText.includes(phrase))
+        // Filter suggestions to only show appropriate conversation stages
+        const stageBasedSuggestions = result.suggestions.filter(suggestion => {
+          const suggestionText = suggestion.toLowerCase();
           
+          // Block payment-related suggestions
+          const paymentPhrases = [
+            'cash on', 'cash upon', 'cash for', 'cash payment',
+            'card payment', 'credit card', 'debit card',
+            'bank transfer', 'bank deposit',
+            'gcash payment', 'paypal payment',
+            'pay with cash', 'pay by cash',
+            'payment method', 'payment option',
+            'cod', 'cash on delivery', 'cash on meetup', 'cash on pickup'
+          ];
+          
+          const containsPayment = paymentPhrases.some(phrase => suggestionText.includes(phrase));
           if (containsPayment) {
-            console.log('🚫 BLOCKED payment suggestion in triggerAISuggestions:', suggestion)
-            return false
-          } else {
-            console.log('✅ ALLOWED suggestion in triggerAISuggestions:', suggestion)
-            return true
+            console.log('🚫 BLOCKED payment suggestion:', suggestion);
+            return false;
           }
-        }).slice(0, 3) // Limit to exactly 3 suggestions
+          
+          // Allow stage-appropriate suggestions
+          const allowedPhrases = [
+            // Stage 1: Listing details
+            'quality', 'condition', 'price', 'cost', 'how much', 'details',
+            'description', 'specifications', 'features', 'information',
+            'about the', 'tell me more', 'what is', 'how is',
+            
+            // Stage 2: Location and time
+            'location', 'where', 'meet', 'pickup', 'delivery', 'time',
+            'when', 'schedule', 'available', 'address', 'place',
+            
+            // Stage 3: Finalization
+            'confirm', 'ready', 'finalize', 'complete', 'done', 'agree',
+            'sure', 'okay', 'deal', 'arrange', 'proceed'
+          ];
+          
+          const isStageAppropriate = allowedPhrases.some(phrase => suggestionText.includes(phrase));
+          
+          if (isStageAppropriate) {
+            console.log('✅ ALLOWED stage-appropriate suggestion:', suggestion);
+            return true;
+          } else {
+            console.log('⚠️ SKIPPED non-stage suggestion:', suggestion);
+            return false;
+          }
+        });
         
-        console.log('🔍 FINAL in triggerAISuggestions: Filtered', result.suggestions.length, 'suggestions to', filteredSuggestions.length, '(max 3)')
+        const filteredSuggestions = stageBasedSuggestions.slice(0, 3);
         
-        // Lock suggestions for 2 seconds to prevent changes
-        const lockUntil = now + 2000
+        console.log('🔍 FINAL in triggerAISuggestions: Filtered', result.suggestions.length, 'suggestions to', filteredSuggestions.length, '(stage-appropriate only)');
+        
+        // Store suggestions in cache immediately
+        aiSuggestionsCache.current.set(cacheKey, filteredSuggestions);
+        
+        // Store suggestions persistently for this chat
+        setPersistentSuggestions(prev => ({
+          ...prev,
+          [selectedChat.id]: filteredSuggestions
+        }));
+        
+        // Update last processed message ID to prevent duplicates
+        lastProcessedMessageId.current = lastMessage?.id;
+        
+        // Lock suggestions for 10 seconds to prevent any changes
+        const lockUntil = now + 10000
         setIsSuggestionsLocked(true)
         setSuggestionsLockedUntil(lockUntil)
         
-        console.log('🔒 Locking suggestions for 2 seconds until:', new Date(lockUntil).toLocaleTimeString())
+        console.log('🔒 Locking suggestions for 10 seconds until:', new Date(lockUntil).toLocaleTimeString())
+        console.log('🤖 AI is thinking... suggestions will appear in 5 seconds')
         
-        // Store suggestions in cache
-        aiSuggestionsCache.current.set(cacheKey, filteredSuggestions);
+        // Wait 5 seconds before showing suggestions (AI thinking time)
+        setTimeout(() => {
+          console.log('✅ AI finished thinking - showing suggestions now')
+          setAiSuggestions(filteredSuggestions);
+          setShowSuggestions(true);
+          
+          // Store suggestions persistently for this chat
+          setPersistentSuggestions(prev => ({
+            ...prev,
+            [selectedChat.id]: filteredSuggestions
+          }));
+        }, 5000);
         
-        setAiSuggestions(filteredSuggestions);
-        setShowSuggestions(true);
-        
-        // Unlock suggestions after 2 seconds
+        // Unlock suggestions after 10 seconds total
         setTimeout(() => {
           console.log('🔓 Unlocking suggestions - new updates can now occur')
           setIsSuggestionsLocked(false)
-        }, 2000)
+        }, 10000)
         
         // Update chat-specific transaction state
         setChatTransactionStates(prev => ({
@@ -454,12 +542,15 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     }
   };
 
-  // Extract listing ID from chat messages for transaction completion
+  // Extract listing ID and name from chat messages for transaction completion
   const extractListingIdFromChat = () => {
-    // Find the listing request message to get listing ID
+    // Find the listing request message to get listing ID and name
     const listingRequestMessage = chatMessages.find(msg => msg.isListingRequest)
     if (listingRequestMessage && listingRequestMessage.listingId) {
-      return listingRequestMessage.listingId
+      return {
+        listingId: listingRequestMessage.listingId,
+        listingName: listingRequestMessage.listingName || selectedChat?.listingName || 'Untitled Listing'
+      }
     }
     return null
   }
@@ -529,47 +620,84 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       if (result && result.suggestions && result.suggestions.length > 0) {
         console.log('✅ Raw AI suggestions received:', result.suggestions)
         
-        // HARD FILTER: Remove ALL payment-related suggestions (phrase-based detection)
-        const paymentPhrases = [
-          'cash on', 'cash upon', 'cash for', 'cash payment',
-          'card payment', 'credit card', 'debit card',
-          'bank transfer', 'bank deposit',
-          'gcash payment', 'paypal payment',
-          'pay with cash', 'pay by cash',
-          'payment method', 'payment option',
-          'cod', 'cash on delivery'
-        ]
-        
-        const filteredSuggestions = result.suggestions.filter(suggestion => {
-          const suggestionText = suggestion.toLowerCase()
-          const containsPayment = paymentPhrases.some(phrase => suggestionText.includes(phrase))
+        // Filter suggestions to only show appropriate conversation stages
+        const stageBasedSuggestions = result.suggestions.filter(suggestion => {
+          const suggestionText = suggestion.toLowerCase();
           
+          // Block payment-related suggestions
+          const paymentPhrases = [
+            'cash on', 'cash upon', 'cash for', 'cash payment',
+            'card payment', 'credit card', 'debit card',
+            'bank transfer', 'bank deposit',
+            'gcash payment', 'paypal payment',
+            'pay with cash', 'pay by cash',
+            'payment method', 'payment option',
+            'cod', 'cash on delivery', 'cash on meetup', 'cash on pickup'
+          ];
+          
+          const containsPayment = paymentPhrases.some(phrase => suggestionText.includes(phrase));
           if (containsPayment) {
-            console.log('🚫 BLOCKED payment suggestion:', suggestion)
-            return false
-          } else {
-            console.log('✅ ALLOWED suggestion:', suggestion)
-            return true
+            console.log('🚫 BLOCKED payment suggestion:', suggestion);
+            return false;
           }
-        }).slice(0, 3) // Limit to exactly 3 suggestions
+          
+          // Allow stage-appropriate suggestions
+          const allowedPhrases = [
+            // Stage 1: Listing details
+            'quality', 'condition', 'price', 'cost', 'how much', 'details',
+            'description', 'specifications', 'features', 'information',
+            'about the', 'tell me more', 'what is', 'how is',
+            
+            // Stage 2: Location and time
+            'location', 'where', 'meet', 'pickup', 'delivery', 'time',
+            'when', 'schedule', 'available', 'address', 'place',
+            
+            // Stage 3: Finalization
+            'confirm', 'ready', 'finalize', 'complete', 'done', 'agree',
+            'sure', 'okay', 'deal', 'arrange', 'proceed'
+          ];
+          
+          const isStageAppropriate = allowedPhrases.some(phrase => suggestionText.includes(phrase));
+          
+          if (isStageAppropriate) {
+            console.log('✅ ALLOWED stage-appropriate suggestion:', suggestion);
+            return true;
+          } else {
+            console.log('⚠️ SKIPPED non-stage suggestion:', suggestion);
+            return false;
+          }
+        });
         
-        console.log('🔍 FINAL: Filtered', result.suggestions.length, 'suggestions to', filteredSuggestions.length, '(max 3)')
+        const filteredSuggestions = stageBasedSuggestions.slice(0, 3);
         
-        // Lock suggestions for 2 seconds to prevent changes
-        const lockUntil = now + 2000
+        console.log('🔍 FINAL: Filtered', result.suggestions.length, 'suggestions to', filteredSuggestions.length, '(stage-appropriate only)')
+        
+        // Lock suggestions for 10 seconds to prevent any changes
+        const lockUntil = now + 10000
         setIsSuggestionsLocked(true)
         setSuggestionsLockedUntil(lockUntil)
         
-        console.log('🔒 Locking suggestions for 2 seconds until:', new Date(lockUntil).toLocaleTimeString())
+        console.log('🔒 Locking suggestions for 10 seconds until:', new Date(lockUntil).toLocaleTimeString())
+        console.log('🤖 AI is thinking... suggestions will appear in 5 seconds')
         
-        setAiSuggestions(filteredSuggestions)
-        setShowSuggestions(true) // Always show suggestions, never hide
+        // Wait 5 seconds before showing suggestions (AI thinking time)
+        setTimeout(() => {
+          console.log('✅ AI finished thinking - showing suggestions now')
+          setAiSuggestions(filteredSuggestions)
+          setShowSuggestions(true)
+          
+          // Store suggestions persistently for this chat
+          setPersistentSuggestions(prev => ({
+            ...prev,
+            [chatId]: filteredSuggestions
+          }));
+        }, 5000);
         
-        // Unlock suggestions after 2 seconds
+        // Unlock suggestions after 10 seconds total
         setTimeout(() => {
           console.log('🔓 Unlocking suggestions - new updates can now occur')
           setIsSuggestionsLocked(false)
-        }, 2000)
+        }, 10000)
         
         // Update chat-specific transaction state from AI response
         const updatedChatState = {
@@ -617,9 +745,10 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     try {
       console.log('🔍 DEBUG: Using AI suggestion:', suggestion)
       
-      // Clear suggestions when user uses one
-      setAiSuggestions([])
-      setShowSuggestions(false)
+      // Show thinking state without clearing persistent suggestions
+      setIsSuggestionsLocked(true)
+      setSuggestionsLockedUntil(Date.now() + 5000)
+      setShowSuggestions(true)
       
       // Send the suggestion as a message using sendMessageWithText
       console.log('🔍 DEBUG: Calling sendMessageWithText with:', suggestion)
@@ -661,6 +790,17 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       
       setRequestStatus(newStatus)
       setListingName(newListingName)
+      
+      // Clear persistent suggestions if request is declined
+      if (newStatus === 'declined' && currentChatId) {
+        setPersistentSuggestions(prev => {
+          const updated = { ...prev };
+          delete updated[currentChatId];
+          return updated;
+        });
+        setAiSuggestions([]);
+        setShowSuggestions(false);
+      }
       
       // CRITICAL FIX: Reset stage ONLY for the current chat, not all chats
       const currentChatId = selectedChat?.id
@@ -834,10 +974,23 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     try {
       console.log('🚨 DEBUG: About to update Firestore document')
       
-      // Create popup data for Firestore
+      // Delete all previous transaction response messages to reset state
+      const messagesRef = collection(db, 'chats', chatId, 'messages')
+      const transactionResponsesQuery = query(
+        messagesRef,
+        where('isTransactionResponse', '==', true)
+      )
+      const transactionResponsesSnapshot = await getDocs(transactionResponsesQuery)
+      
+      // Delete all previous transaction response messages
+      const deletePromises = transactionResponsesSnapshot.docs.map(doc => 
+        deleteDoc(doc.ref)
+      )
+      await Promise.all(deletePromises)
+      console.log('✅ Deleted', transactionResponsesSnapshot.docs.length, 'previous transaction responses')
+      
+      // Create popup data with fresh state
       const popupData = {
-        popupId: Date.now().toString(),
-        message: 'Done transaction?',
         triggeredBy: user.uid,
         responses: {},
         createdAt: serverTimestamp()
@@ -881,7 +1034,55 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
 
   // Handle report button click
   const handleReportClick = () => {
-    alert('Coming soon')
+    if (!selectedChat || !chatMessages.length) {
+      alert('No messages to report')
+      return
+    }
+    
+    // Get ALL messages from the other user (the one being reported)
+    // Include all regular messages, exclude only system-generated messages
+    const otherUserMessages = chatMessages.filter(msg => 
+      msg.senderId === selectedChat.otherUserId && 
+      msg.senderId !== 'system' &&
+      !msg.isListingRequest && 
+      !msg.isTransactionResponse
+    )
+    
+    if (otherUserMessages.length === 0) {
+      alert('No messages from this user to report')
+      return
+    }
+    
+    console.log('📋 Reporting conversation with ALL messages from user:', otherUserMessages.length)
+    console.log('📝 Messages include:', {
+      textMessages: otherUserMessages.filter(m => m.text).length,
+      imageMessages: otherUserMessages.filter(m => m.imageUrl).length,
+      totalMessages: otherUserMessages.length
+    })
+    
+    // Debug: Log each message to see what data we have
+    console.log('🔍 DETAILED MESSAGE BREAKDOWN:')
+    otherUserMessages.forEach((msg, idx) => {
+      console.log(`  Message ${idx + 1}:`, {
+        hasText: !!msg.text,
+        text: msg.text?.substring(0, 50),
+        hasImageUrl: !!msg.imageUrl,
+        imageUrl: msg.imageUrl?.substring(0, 80)
+      })
+    })
+    
+    // Extract image URLs
+    const imageUrls = otherUserMessages.filter(msg => msg.imageUrl).map(msg => msg.imageUrl)
+    console.log('🖼️ EXTRACTED IMAGE URLS:', imageUrls)
+    console.log('📊 Total images to report:', imageUrls.length)
+    
+    setReportedMessages(otherUserMessages)
+    setShowReportModal(true)
+  }
+  
+  const closeReportModal = () => {
+    setShowReportModal(false)
+    setReportedMessages([])
   }
 
   // Handle complete transaction button click
@@ -935,7 +1136,31 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       const responses = updatedPopup.responses || {}
       const participantIds = Object.keys(responses)
       
-      if (participantIds.length === 2) {
+      if (response === 'no') {
+        // User said no - clear popup and delete ALL transaction response messages
+        console.log('❌ User said no - clearing transaction popup and resetting all states')
+        
+        // Delete all transaction response messages from both users
+        const messagesRef = collection(db, 'chats', chatId, 'messages')
+        const transactionResponsesQuery = query(
+          messagesRef,
+          where('isTransactionResponse', '==', true)
+        )
+        const transactionResponsesSnapshot = await getDocs(transactionResponsesQuery)
+        
+        const deletePromises = transactionResponsesSnapshot.docs.map(doc => 
+          deleteDoc(doc.ref)
+        )
+        await Promise.all(deletePromises)
+        console.log('✅ Deleted', transactionResponsesSnapshot.docs.length, 'transaction response messages')
+        
+        await updateDoc(doc(db, 'chats', chatId), {
+          pendingTransactionPopup: null,
+          transactionStatus: null,
+          transactionStatusTime: null
+        })
+        console.log('✅ Transaction rejected - popup cleared and states reset')
+      } else if (participantIds.length === 2) {
         // Both users responded - check if both said yes
         const bothSaidYes = Object.values(responses).every(r => r.response === 'yes')
         
@@ -944,9 +1169,10 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
           
           // Create transaction record for both users
           try {
-            const listingId = extractListingIdFromChat()
-            if (listingId) {
-              console.log('🔍 Creating transaction record for listing:', listingId)
+            const listingInfo = extractListingIdFromChat()
+            if (listingInfo) {
+              const { listingId, listingName } = listingInfo
+              console.log('🔍 Creating transaction record for listing:', listingId, 'with name:', listingName)
               
               // Get participant IDs (buyer and seller)
               const participantIds = Object.keys(responses)
@@ -984,9 +1210,16 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
               const buyerData = buyerDoc.exists() ? buyerDoc.data() : {}
               const sellerData = sellerDoc.exists() ? sellerDoc.data() : {}
               
-              // Get listing details
+              // Get listing details for price and other info
               const listingDoc = await getDoc(doc(db, 'livestock_listings', listingId))
               const listingData = listingDoc.exists() ? listingDoc.data() : {}
+              
+              console.log('📋 Listing data retrieved:', {
+                exists: listingDoc.exists(),
+                listingNameFromChat: listingName,
+                listingNameFromFirestore: listingData.name,
+                price: listingData.price
+              })
               
               // Format user names
               const buyerName = `${buyerData.firstName || ''} ${buyerData.lastName || ''}`.trim() || 
@@ -994,12 +1227,12 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
               const sellerName = `${sellerData.firstName || ''} ${sellerData.lastName || ''}`.trim() || 
                                sellerData.email?.split('@')[0] || 'Unknown Seller'
               
-              // Create transaction data
+              // Create transaction data - use listing name from chat message (most reliable)
               const transactionData = {
                 buyerId,
                 sellerId,
                 listingId,
-                listingName: listingData.title || 'Untitled Listing',
+                listingName: listingName, // Use name from chat message, not Firestore
                 listingDetails: listingData.description || listingData.details || '',
                 price: listingData.price || 0,
                 dateAdded: listingData.createdAt || new Date(),
@@ -1009,6 +1242,7 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
               }
               
               console.log('💾 Transaction data prepared:', transactionData)
+              console.log('🔍 Listing name being stored:', transactionData.listingName)
               
               // Create the transaction record
               await createTransaction(transactionData)
@@ -1310,10 +1544,11 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     
     const conversationsMap = new Map() // Use Map to prevent duplicate conversations
     
-    const unsubscribe = onSnapshot(chatsQuery, (chatsSnapshot) => {
+    const unsubscribe = onSnapshot(chatsQuery, async (chatsSnapshot) => {
       console.log('🔄 WEB CHAT: Received chats snapshot with', chatsSnapshot.size, 'documents')
       
-      chatsSnapshot.docs.forEach(chatDoc => {
+      // Process chats sequentially to handle async operations
+      for (const chatDoc of chatsSnapshot.docs) {
         const chatId = chatDoc.id
         const chatData = chatDoc.data()
         
@@ -1322,7 +1557,7 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         // Defensive null checks for required fields
         if (!chatData.participants || !Array.isArray(chatData.participants)) {
           console.warn('⚠️ WEB CHAT: Skipping chat with invalid participants:', chatId)
-          return
+          continue
         }
         
         // Find the other user ID (not the current user)
@@ -1330,15 +1565,37 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         
         if (!otherUserId) {
           console.warn('⚠️ WEB CHAT: Skipping chat with no other user:', chatId)
-          return
+          continue
         }
         
-        // Get other user details with fallbacks
-        const otherUserName = chatData.otherUserName || chatData[`${otherUserId}_name`] || 'Unknown User'
-        const otherUserEmail = chatData.otherUserEmail || chatData[`${otherUserId}_email`] || 'unknown@example.com'
+        // Get other user details with fallbacks - prioritize actual names over role names
+        let otherUserName = chatData.participantNames?.[otherUserId] || chatData.otherUserName || chatData[`${otherUserId}_name`] || 'Unknown User'
+        const otherUserEmail = chatData.participantEmails?.[otherUserId] || chatData.otherUserEmail || chatData[`${otherUserId}_email`] || 'unknown@example.com'
         const listingName = chatData.listingName || ''
         
-        console.log('👤 WEB CHAT: Other user details:', { otherUserId, otherUserName, otherUserEmail })
+        // If participantNames doesn't exist or doesn't have the user's name, fetch from Users collection
+        if (!chatData.participantNames?.[otherUserId] || otherUserName === 'Crop Farmer' || otherUserName === 'Livestock Owner') {
+          try {
+            const otherUserDoc = await getDoc(doc(db, 'Users', otherUserId))
+            if (otherUserDoc.exists()) {
+              const otherUserData = otherUserDoc.data()
+              otherUserName = `${otherUserData.firstName || ''} ${otherUserData.lastName || ''}`.trim() || otherUserData.email?.split('@')[0] || otherUserName
+              console.log('✅ Fetched user name from Users collection:', otherUserName)
+            }
+          } catch (error) {
+            console.error('Error fetching user name from Users collection:', error)
+          }
+        }
+        
+        console.log('👤 WEB CHAT: Other user details DEBUG:', { 
+          otherUserId, 
+          participantNames: chatData.participantNames,
+          participantNameForUser: chatData.participantNames?.[otherUserId],
+          otherUserName: chatData.otherUserName,
+          legacyName: chatData[`${otherUserId}_name`],
+          finalName: otherUserName,
+          listingName 
+        });
         
         // ROLE-BASED FILTERING: matching mobile app logic exactly
         const currentUserRoleInChat = chatData.participantRoles?.[user.uid]
@@ -1346,16 +1603,16 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         // Skip chats where current user doesn't have the expected role
         if (currentUserRoleInChat !== userRole) {
           console.log('⚠️ WEB CHAT: Skipping chat - user role mismatch. Expected:', userRole, 'Got:', currentUserRoleInChat)
-          return
+          continue
         }
         
         // Initialize conversation in map first (prevents duplicates)
-        // Get user data directly from Firestore chat document
+        // Use the fetched otherUserName which already has proper fallback logic
         const conversationData = {
           id: chatId,
           otherUserId,
-          otherUserName: chatData.participantNames?.[otherUserId] || chatData.otherUserName || otherUserName,
-          otherUserEmail: chatData.participantEmails?.[otherUserId] || chatData.otherUserEmail || otherUserEmail,
+          otherUserName: otherUserName, // Use the fetched name (already has all fallbacks applied)
+          otherUserEmail: otherUserEmail, // Use the fetched email
           lastMessage: chatData.lastMessage || '',
           lastMessageTime: chatData.lastMessageTime,
           lastMessageSenderId: chatData.lastMessageSenderId,
@@ -1496,8 +1753,8 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
             const updatedConversation = {
               id: chatId,
               otherUserId,
-              otherUserName: chatData.participantNames?.[otherUserId] || chatData.otherUserName || otherUserName,
-              otherUserEmail: chatData.participantEmails?.[otherUserId] || chatData.otherUserEmail || otherUserEmail,
+              otherUserName: otherUserName, // Use the fetched name (already has all fallbacks applied)
+              otherUserEmail: otherUserEmail, // Use the fetched email
               lastMessage: lastMessageText,
               lastMessageTime: actualLastMessageTime,
               lastMessageSenderId: actualLastMessageSenderId,
@@ -1551,7 +1808,7 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         
         // Store the message unsubscribe function
         messageListeners.current.set(messageChatId, messageUnsubscribe)
-      })
+      }
       
       // Set initial conversations from map (no duplicates possible)
       const initialConversations = Array.from(conversationsMap.values())
@@ -1590,7 +1847,17 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       const yesTransactionMessages = messages.filter(msg => 
         msg.text === 'Yes, the transaction is done.' && msg.isTransactionResponse
       )
-      const isTransactionCompletedByYesCount = yesTransactionMessages.length >= 2
+      const noTransactionMessages = messages.filter(msg => 
+        msg.text === 'No, the transaction is not done yet.' && msg.isTransactionResponse
+      )
+      // Transaction is complete ONLY when both users said YES (2 YES messages) and NO user said NO (0 NO messages)
+      const isTransactionCompletedByYesCount = yesTransactionMessages.length >= 2 && noTransactionMessages.length === 0
+      
+      console.log('🔍 Transaction Completion Check in Message Listener:', {
+        yesCount: yesTransactionMessages.length,
+        noCount: noTransactionMessages.length,
+        isCompleted: isTransactionCompletedByYesCount
+      })
       
       // Also check for legacy system message with isTransactionDone flag
       const completedTransactionMessage = messages.find(msg => 
@@ -1600,8 +1867,6 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       )
       
       setHasTransactionCompleted(!!completedTransactionMessage || isTransactionCompletedByYesCount)
-      
-      // Check if current user has already rated the other user for this transaction
       
       // Function to create transaction from chat data
       const createTransactionFromChat = async (chatData, messages) => {
@@ -1625,16 +1890,35 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         // Extract listing information from chat
         const listingData = chatData.listing || {}
         const participants = chatData.participants || []
+        const participantRoles = chatData.participantRoles || {}
+        
+        console.log('🔍 Transaction data extraction:', {
+          participants,
+          participantRoles,
+          listingData,
+          chatId: chatData.id
+        })
         
         // Determine buyer and seller based on roles
-        let buyerId, sellerId, buyerName, sellerName
+        let buyerId, sellerId, buyerName, sellerName, listingId
         
-        if (participants.length >= 2) {
-          // Assume first participant is buyer, second is seller (adjust based on your data structure)
-          buyerId = participants[0].uid || participants[0]
-          sellerId = participants[1].uid || participants[1]
-          
-          // Fetch user names
+        // Find buyer (crop_farmer) and seller (livestock_owner) from participant roles
+        for (const userId of participants) {
+          const role = participantRoles[userId]
+          if (role === 'crop_farmer') {
+            buyerId = userId
+          } else if (role === 'livestock_owner') {
+            sellerId = userId
+          }
+        }
+        
+        console.log('🔍 Extracted IDs:', { buyerId, sellerId })
+        
+        // Get listing ID from chat data or listing object
+        listingId = chatData.listingId || listingData.id || null
+        
+        // Fetch user names from Users collection
+        if (buyerId && sellerId) {
           try {
             const buyerDoc = await getDoc(doc(db, 'Users', buyerId))
             const sellerDoc = await getDoc(doc(db, 'Users', sellerId))
@@ -1642,31 +1926,50 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
             if (buyerDoc.exists()) {
               const buyerData = buyerDoc.data()
               buyerName = `${buyerData.firstName || ''} ${buyerData.lastName || ''}`.trim() || buyerData.email?.split('@')[0] || 'Unknown Buyer'
+            } else {
+              buyerName = 'Unknown Buyer'
             }
             
             if (sellerDoc.exists()) {
               const sellerData = sellerDoc.data()
               sellerName = `${sellerData.firstName || ''} ${sellerData.lastName || ''}`.trim() || sellerData.email?.split('@')[0] || 'Unknown Seller'
+            } else {
+              sellerName = 'Unknown Seller'
             }
+            
+            console.log('✅ Fetched user names:', { buyerName, sellerName })
           } catch (error) {
             console.error('Error fetching user names:', error)
             buyerName = 'Unknown Buyer'
             sellerName = 'Unknown Seller'
           }
+        } else {
+          console.error('❌ Missing buyer or seller ID:', { buyerId, sellerId })
+          return
         }
         
-        // Create transaction data
+        // Create transaction data with all required fields
         const transactionData = {
           buyerId,
           sellerId,
-          listingId: listingData.id || chatData.listingId,
-          listingName: listingData.title || listingData.name || 'Unknown Listing',
+          listingId: listingId || 'unknown',
+          listingName: chatData.listingName || listingData.title || listingData.name || 'Unknown Listing',
           listingDetails: listingData.description || listingData.details || '',
           price: listingData.price || 0,
-          dateAdded: listingData.createdAt || new Date(),
+          dateAdded: new Date(),
           buyerName,
           sellerName,
-          chatId: chatData.id
+          chatId: chatData.id,
+          status: 'completed',
+          completedAt: new Date()
+        }
+        
+        console.log('💾 Transaction data to be saved:', transactionData)
+        
+        // Validate all required fields are present
+        if (!transactionData.buyerId || !transactionData.sellerId) {
+          console.error('❌ Cannot create transaction - missing buyer or seller ID')
+          return
         }
         
         // Create the transaction
@@ -1684,25 +1987,38 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         }
       }
       
-      // Create transaction record when both users agree
+      // Create transaction record when both users agree (with duplicate prevention)
       if (isTransactionCompletedByYesCount && selectedChat) {
+        console.log('✅ Both users confirmed transaction complete - creating transaction record')
         createTransactionFromChat(selectedChat, messages)
       }
       
       if (isTransactionCompletedByYesCount && user && selectedChat) {
         const checkUserRating = async () => {
           try {
+            console.log('🔍 Checking user rating in message listener...')
             const otherUserRef = doc(db, 'Users', selectedChat.otherUserId)
             const otherUserDoc = await getDoc(otherUserRef)
             
             if (otherUserDoc.exists()) {
               const otherUserData = otherUserDoc.data()
               const existingRatings = otherUserData.ratings || []
+              console.log('📊 Existing ratings for other user:', existingRatings.length)
+              
               const currentUserRating = existingRatings.find(rating => 
                 rating.ratedBy === user.uid && 
                 rating.chatId === selectedChat.id
               )
-              setUserHasRated(!!currentUserRating)
+              
+              const hasRated = !!currentUserRating
+              console.log('✅ User has rated in message listener:', hasRated)
+              
+              // Only update if user has actually rated
+              if (hasRated) {
+                setUserHasRated(true)
+              }
+            } else {
+              console.log('⚠️ Other user document does not exist')
             }
           } catch (error) {
             console.error('Error checking user rating status:', error)
@@ -1723,11 +2039,14 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
           selectedChat?.transactionStatus === 'confirming'
         )
         
-        // Simple check: if there are 2+ "Yes, the transaction is done." messages, disable AI permanently
+        // Simple check: if there are 2+ "Yes, the transaction is done." messages AND no NO messages, disable AI permanently
         const yesTransactionMessages = messages.filter(msg => 
           msg.text === 'Yes, the transaction is done.' && msg.isTransactionResponse
         )
-        const isTransactionCompletedByYesCount = yesTransactionMessages.length >= 2
+        const noTransactionMessages = messages.filter(msg => 
+          msg.text === 'No, the transaction is not done yet.' && msg.isTransactionResponse
+        )
+        const isTransactionCompletedByYesCount = yesTransactionMessages.length >= 2 && noTransactionMessages.length === 0
         
         const isTransactionCompleted = hasTransactionCompleted || isTransactionCompletedByYesCount
         
@@ -1792,8 +2111,10 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     setNewMessage('')
     
     setDeliveredMessageId(null)
-    setShowSuggestions(false)
-    setAiSuggestions([])
+    // Show thinking state without clearing persistent suggestions
+    setIsSuggestionsLocked(true)
+    setSuggestionsLockedUntil(Date.now() + 5000)
+    setShowSuggestions(true)
     
     // Use chatId if available, otherwise fallback to id
     const chatIdToUse = selectedChat.chatId || selectedChat.id
@@ -1892,9 +2213,10 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   const sendMessageWithText = async (messageText) => {
     if (!messageText.trim() || !selectedChat || !user || !db) return
     
-    // Clear AI suggestions when user sends a message
-    setAiSuggestions([])
-    setShowSuggestions(false)
+    // Show thinking state without clearing persistent suggestions
+    setIsSuggestionsLocked(true)
+    setSuggestionsLockedUntil(Date.now() + 5000)
+    setShowSuggestions(true)
     
     try {
       const messageData = {
@@ -1989,8 +2311,10 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     logSetSelectedChat(null)
     setChatMessages([])
     setNewMessage('')
-    setAiSuggestions([])
-    setShowSuggestions(false)
+    // Keep suggestions visible with thinking state when closing chat
+    setIsSuggestionsLocked(true)
+    setSuggestionsLockedUntil(Date.now() + 2000)
+    setShowSuggestions(true)
     setShowSummary(false)
     setTransactionSummary(null)
   }
@@ -2099,9 +2423,10 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                 key={conversation.id} 
                 className={`${styles.conversationCard} ${selectedChat?.id === conversation.id ? styles.selected : ''} ${conversation.unreadCount > 0 ? styles.unread : ''}`}
                 onClick={() => {
-                  // Clear AI suggestions when switching conversations
-                  setAiSuggestions([])
-                  setShowSuggestions(false)
+                  // Show thinking state when switching conversations
+                  setIsSuggestionsLocked(true)
+                  setSuggestionsLockedUntil(Date.now() + 3000)
+                  setShowSuggestions(true)
                   
                   logSetSelectedChat(conversation)
                   
@@ -2185,23 +2510,57 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                 <h3 className={styles.chatHeaderName}>{formatChatListDisplayName(selectedChat.otherUserName, selectedChat.listingName)}</h3>
               </div>
               <div className={styles.chatHeaderActions}>
-                {/* Done Transaction Button */}
-                <button 
-                  className={styles.doneTransactionBtn}
-                  onClick={handleCompleteTransaction}
-                  title="Mark this transaction as completed"
-                >
-                  Done Transaction
-                </button>
-                
-                {/* Report Button - same size as Rate User button was */}
-                <button 
-                  className={styles.reportBtn}
-                  onClick={handleReportClick}
-                  title="Report this conversation"
-                >
-                  Report
-                </button>
+                {/* Check if there's an approved request before showing buttons */}
+                {(() => {
+                  const hasApprovedRequest = chatMessages.some(msg => 
+                    msg.isListingRequest && msg.requestStatus === 'approved'
+                  )
+                  
+                  // Check if transaction is completed
+                  const yesTransactionMessages = chatMessages.filter(msg => 
+                    msg.text === 'Yes, the transaction is done.' && msg.isTransactionResponse
+                  )
+                  const noTransactionMessages = chatMessages.filter(msg => 
+                    msg.text === 'No, the transaction is not done yet.' && msg.isTransactionResponse
+                  )
+                  // Transaction is complete ONLY when both users said YES (2 YES messages) and NO user said NO (0 NO messages)
+                  const isTransactionCompleted = yesTransactionMessages.length >= 2 && noTransactionMessages.length === 0
+                  
+                  console.log('🔍 Done Transaction Button Check:', {
+                    yesCount: yesTransactionMessages.length,
+                    noCount: noTransactionMessages.length,
+                    isCompleted: isTransactionCompleted,
+                    hasApprovedRequest
+                  })
+                  
+                  if (!hasApprovedRequest) {
+                    return null // Don't show buttons until request is approved
+                  }
+                  
+                  return (
+                    <>
+                      {/* Done Transaction Button - HIDE when both users pressed YES */}
+                      {!isTransactionCompleted && (
+                        <button 
+                          className={styles.doneTransactionBtn}
+                          onClick={handleCompleteTransaction}
+                          title="Mark this transaction as completed"
+                        >
+                          ✅ Done Transaction
+                        </button>
+                      )}
+                      
+                      {/* Report Button - same size as Rate User button was */}
+                      <button 
+                        className={styles.reportBtn}
+                        onClick={handleReportClick}
+                        title="Report this conversation"
+                      >
+                        Report
+                      </button>
+                    </>
+                  )
+                })()}
               </div>
             </div>
 
@@ -2330,32 +2689,45 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                   )}
                 </div>
               ))}
-              
-              {/* Transaction Done Separator - moved outside messages loop for full width */}
+
+              {/* Transaction Complete Divider - shows ONLY when both users pressed YES and no one pressed NO */}
               {(() => {
-                // Find all transaction response messages
-                const transactionYesMessages = chatMessages.filter((msg, index) => 
-                  msg.text === 'Yes, the transaction is done.' && 
-                  msg.isTransactionResponse
+                const yesTransactionMessages = chatMessages.filter(msg => 
+                  msg.text === 'Yes, the transaction is done.' && msg.isTransactionResponse
                 )
+                const noTransactionMessages = chatMessages.filter(msg => 
+                  msg.text === 'No, the transaction is not done yet.' && msg.isTransactionResponse
+                )
+                // Only show divider when exactly 2 YES messages exist and NO messages exist
+                const isTransactionCompleted = yesTransactionMessages.length >= 2 && noTransactionMessages.length === 0
                 
-                // Show separator only if there are "yes" messages
-                const hasYesMessages = transactionYesMessages.length > 0
+                console.log('🔍 Transaction Complete Divider Check:', {
+                  yesCount: yesTransactionMessages.length,
+                  noCount: noTransactionMessages.length,
+                  isCompleted: isTransactionCompleted
+                })
                 
-                return hasYesMessages ? (
-                  <div className={styles.transactionDoneSeparator}></div>
+                return isTransactionCompleted ? (
+                  <div className={styles.transactionCompleteDivider}>
+                    <span className={styles.dividerText}>Transaction complete</span>
+                  </div>
                 ) : null
               })()}
 
               {/* AI Suggestions Section - disabled when transaction is completed */}
               {(() => {
-                // Check if transaction is completed using the same logic as message listener
+                // Check if transaction is completed
                 const yesTransactionMessages = chatMessages.filter(msg => 
                   msg.text === 'Yes, the transaction is done.' && msg.isTransactionResponse
                 )
-                const isTransactionCompleted = yesTransactionMessages.length >= 2 || hasTransactionCompleted
+                const noTransactionMessages = chatMessages.filter(msg => 
+                  msg.text === 'No, the transaction is not done yet.' && msg.isTransactionResponse
+                )
+                const isTransactionCompleted = yesTransactionMessages.length >= 2 && noTransactionMessages.length === 0
                 
-                return aiSuggestions.length > 0 && showSuggestions && requestStatus === 'approved' && !isTransactionCompleted
+                // Show container if suggestions exist OR if AI is thinking (locked)
+                // Keep suggestions visible unless request is declined or transaction is done
+                return (aiSuggestions.length > 0 || isSuggestionsLocked) && showSuggestions && requestStatus !== 'declined' && !isTransactionCompleted
               })() && (
                 <div className={`${styles.aiSuggestionsContainer} ${!isSuggestionsOpen ? styles.collapsed : ''}`}>
                   {/* Collapsible Header */}
@@ -2425,24 +2797,39 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
               <div ref={messagesEndRef} />
               
               {/* White Container Rating Prompt - appears when transaction is completed and individual user hasn't rated yet */}
-              {hasTransactionCompleted && !userHasRated && (
-                <div className={styles.whiteRatingPromptContainer}>
-                  <div className={styles.ratingPromptContent}>
-                    <p className={styles.ratingPromptText}>
-                      Rate {selectedChat.otherUserName || 'the other user'} for this transaction
-                    </p>
-                    <button 
-                      className={styles.whiteRateUserBtn}
-                      onClick={() => {
-                        setRatingUser(selectedChat.otherUserId)
-                        setShowRatingModal(true)
-                      }}
-                    >
-                      ⭐ Rate Now
-                    </button>
+              {(() => {
+                console.log('🎯 Rating Button Debug:', {
+                  hasTransactionCompleted,
+                  userHasRated,
+                  shouldShow: hasTransactionCompleted && !userHasRated,
+                  selectedChatId: selectedChat?.id,
+                  otherUserId: selectedChat?.otherUserId
+                })
+                
+                // Don't render anything if user has already rated
+                if (userHasRated) {
+                  return null
+                }
+                
+                return hasTransactionCompleted && (
+                  <div className={styles.whiteRatingPromptContainer}>
+                    <div className={styles.ratingPromptContent}>
+                      <p className={styles.ratingPromptText}>
+                        Rate {selectedChat.otherUserName || 'the other user'} for this transaction
+                      </p>
+                      <button 
+                        className={styles.whiteRateUserBtn}
+                        onClick={() => {
+                          setRatingUser(selectedChat.otherUserId)
+                          setShowRatingModal(true)
+                        }}
+                      >
+                        ⭐ Rate Now
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
             </div>
 
             {/* Chat Input Area */}
@@ -2690,8 +3077,29 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         </button>
       </div>
     )}
+    
+    {/* Report Modal for Chat Messages */}
+    <ReportModal
+      visible={showReportModal}
+      onClose={closeReportModal}
+      targetUser={{
+        id: selectedChat?.otherUserId,
+        displayName: selectedChat?.otherUserName,
+        firstName: selectedChat?.otherUserName?.split(' ')[0],
+        lastName: selectedChat?.otherUserName?.split(' ')[1]
+      }}
+      content={{
+        id: selectedChat?.id,
+        messages: reportedMessages,
+        text: reportedMessages.map(msg => msg.text).join('\n'),
+        imageUrls: reportedMessages.filter(msg => msg.imageUrl).map(msg => msg.imageUrl)
+      }}
+      contentType="message"
+      reporterId={user?.uid}
+    />
     </>
   )
 }
 
 export default Chat
+ 

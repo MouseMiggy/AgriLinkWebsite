@@ -13,19 +13,62 @@ class AIChatService {
         detectedLanguage: conversationData.detectedLanguage
       })
       
-      const response = await fetch(`${AI_BASE_URL}/generate-contextual-suggestions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userRole: conversationData.userRole,
-          listingName: conversationData.listingName,
-          messages: conversationData.messages,
-          currentStage: conversationData.currentStage,
-          detectedLanguage: conversationData.detectedLanguage
+      // Route to role-specific endpoint based on user role
+      // TEMPORARILY DISABLED: Backend endpoints not implemented yet
+      // const endpoint = conversationData.userRole === 'livestock_owner' 
+      //   ? '/generate-seller-suggestions' 
+      //   : '/generate-buyer-suggestions'
+      
+      // Use original endpoint until role-specific endpoints are implemented
+      const endpoint = '/generate-contextual-suggestions'
+      
+      let response, usedFallback = false
+      
+      try {
+        // Try role-specific endpoint first
+        response = await fetch(`${AI_BASE_URL}${endpoint}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userRole: conversationData.userRole,
+            listingName: conversationData.listingName,
+            messages: conversationData.messages,
+            currentStage: conversationData.currentStage,
+            detectedLanguage: conversationData.detectedLanguage
+          })
         })
-      })
+        
+        // Check if response is successful (not 404, 500, etc.)
+        if (!response.ok) {
+          throw new Error(`Role-specific endpoint returned ${response.status}`)
+        }
+        
+      } catch (roleEndpointError) {
+        console.log('⚠️ Role-specific endpoint not available, falling back to original endpoint:', roleEndpointError.message)
+        usedFallback = true
+        
+        try {
+          // Fallback to original endpoint
+          response = await fetch(`${AI_BASE_URL}/generate-contextual-suggestions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userRole: conversationData.userRole,
+              listingName: conversationData.listingName,
+              messages: conversationData.messages,
+              currentStage: conversationData.currentStage,
+              detectedLanguage: conversationData.detectedLanguage
+            })
+          })
+        } catch (fallbackError) {
+          console.error('❌ Both role-specific and fallback endpoints failed:', fallbackError)
+          throw new Error('All AI suggestion endpoints are unavailable')
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`AI service error: ${response.status}`)
@@ -33,6 +76,8 @@ class AIChatService {
 
       const data = await response.json()
       console.log('✅ Contextual suggestions generated:', {
+        role: conversationData.userRole,
+        endpoint: usedFallback ? '/generate-contextual-suggestions (fallback)' : endpoint,
         stage: data.stage,
         language: data.language,
         suggestionsCount: data.suggestions?.length || 0

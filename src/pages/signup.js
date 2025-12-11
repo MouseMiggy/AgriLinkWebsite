@@ -200,6 +200,7 @@ export default function SignUp() {
       console.log('Attempting to register user:', formData.emailOrPhone, 'Type:', validation.type)
       
       if (validation.type === 'email') {
+        console.log('📧 EMAIL FLOW: Starting email registration')
         // Email registration - use existing flow
         const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/send-code', {
           method: 'POST',
@@ -240,16 +241,18 @@ export default function SignUp() {
         }
 
         // Navigate to code verification page
+        console.log('📧 EMAIL FLOW: Navigating to verify-code page')
         router.push({
           pathname: '/verify-code',
           query: { email: formData.emailOrPhone }
         })
       } else {
         // Phone registration - auto-send SMS and navigate to verification
-        console.log('Starting phone registration with auto-SMS for:', formData.emailOrPhone)
+        console.log('📱 PHONE FLOW: Starting phone registration with auto-SMS for:', formData.emailOrPhone)
         
         // Auto-send SMS verification code
         try {
+          console.log('📱 PHONE FLOW: Sending SMS request...')
           const smsResponse = await fetch('https://api-tykddqtfpa-uc.a.run.app/send-sms-code', {
             method: 'POST',
             headers: {
@@ -263,28 +266,36 @@ export default function SignUp() {
             }),
           })
 
+          console.log('📱 PHONE FLOW: SMS response status:', smsResponse.status)
           const smsResult = await smsResponse.json()
+          console.log('📱 PHONE FLOW: SMS response data:', smsResult)
           
           if (smsResult.success) {
-            console.log('✅ SMS sent successfully, navigating to verification')
-            setLoading(false)
+            console.log('✅ PHONE FLOW: SMS sent successfully, navigating to verification')
             
-            // Navigate to phone verification page
-            router.push({
-              pathname: '/phone-number-verification',
-              query: { 
-                phoneNumber: formData.emailOrPhone,
-                firstName: formData.firstName,
-                lastName: formData.lastName,
-                password: formData.password,
-                autoSent: 'true'
-              },
+            // Force navigation using window.location to bypass Fast Refresh interference
+            console.log('📱 PHONE FLOW: Navigating to phone-number-verification page with data:', {
+              phoneNumber: formData.emailOrPhone,
+              firstName: formData.firstName,
+              lastName: formData.lastName
             })
+            
+            const queryParams = new URLSearchParams({
+              phoneNumber: formData.emailOrPhone,
+              firstName: formData.firstName,
+              lastName: formData.lastName,
+              password: formData.password,
+              autoSent: 'true'
+            }).toString()
+            
+            window.location.href = `/phone-number-verification?${queryParams}`
           } else {
+            console.error('❌ PHONE FLOW: SMS API returned error:', smsResult.error)
             throw new Error(smsResult.error || 'Failed to send SMS verification code')
           }
         } catch (smsError) {
-          console.error('❌ SMS sending failed:', smsError)
+          console.error('❌ PHONE FLOW: SMS sending failed:', smsError)
+          console.error('❌ PHONE FLOW: SMS error details:', smsError.message)
           setLoading(false)
           showErrorToast('Failed to send verification code. Please try again.')
           return
@@ -464,11 +475,6 @@ export default function SignUp() {
                     'Enter your email or phone number'}
                   required
                 />
-                {inputType && (
-                  <small className={styles.inputHint}>
-                    Detected: {getInputTypeText(inputType)}
-                  </small>
-                )}
               </div>
 
               <div className={styles.inputGroup}>

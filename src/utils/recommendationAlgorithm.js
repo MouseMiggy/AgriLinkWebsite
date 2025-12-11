@@ -282,8 +282,10 @@ export const getEnhancedLivestockListings = async () => {
 
   console.log(`📊 Total documents found in livestock_listings collection: ${listingsSnapshot.size}`)
 
-  // Filter out hidden listings for crop farmers
+  // Collect unique owner IDs for batch processing
+  const uniqueOwnerIds = new Set()
   let hiddenCount = 0
+  
   for (const listingDoc of listingsSnapshot.docs) {
     const listingData = listingDoc.data()
     // Skip hidden listings (only show to owners)
@@ -291,19 +293,10 @@ export const getEnhancedLivestockListings = async () => {
       hiddenCount++
       continue
     }
-    listings.push({
-      id: listingDoc.id,
-      ...listingData
-    })
-  }
-
-  console.log(`🚫 Filtered out ${hiddenCount} hidden listings. Showing ${listings.length} visible listings`)
-
-  // Collect unique owner IDs for batch processing
-  const uniqueOwnerIds = new Set()
-  for (const listing of listings) {
-    if (listing.ownerId) {
-      uniqueOwnerIds.add(listing.ownerId)
+    
+    // Collect owner IDs for batch processing
+    if (listingData.ownerId) {
+      uniqueOwnerIds.add(listingData.ownerId)
     }
   }
 
@@ -324,6 +317,11 @@ export const getEnhancedLivestockListings = async () => {
   // Process listings with cached owner data
   for (const listingDoc of listingsSnapshot.docs) {
     const listingData = listingDoc.data()
+
+    // Skip hidden listings (only show to owners)
+    if (listingData.status === 'hidden') {
+      continue
+    }
 
     // Skip sold listings
     if (listingData.status === 'sold') {
@@ -377,10 +375,30 @@ export const getEnhancedLivestockListings = async () => {
     }
   }
 
+  console.log(`🚫 Filtered out ${hiddenCount} hidden listings. Showing ${listings.length} visible listings`)
+
   console.log(`✅ Final processed listings count: ${listings.length}`)
   console.log('📋 Listing statuses:', listings.map(l => ({ id: l.id, status: l.status || 'undefined' })))
   
   return listings
+}
+
+// Helper function to get semantic matches from MPNet backend
+async function getSemanticMatches(query, topK = 50) {
+  try {
+    const semanticSearchUrl = process.env.NEXT_PUBLIC_SEMANTIC_SEARCH_URL || 'http://localhost:8000';
+    const res = await fetch(`${semanticSearchUrl}/search`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: query, top_k: topK })
+    });
+    if (!res.ok) return [];
+    const payload = await res.json();
+    return payload.matches || [];
+  } catch (e) {
+    console.error("Semantic matches error", e);
+    return [];
+  }
 }
 
 export const getRecommendedListings = async (cropFarmerId, options = {}) => {
@@ -397,9 +415,23 @@ export const getRecommendedListings = async (cropFarmerId, options = {}) => {
     // Filter out listings owned by the current user (in case they switched roles)
     const filteredListings = allListings.filter(listing => listing.ownerId !== cropFarmerId)
     
+    // Initialize semantic map for boosting - only call backend if searchQuery exists
+    let semanticMap = {};
+    if (searchQuery && searchQuery.trim()) {
+      const semanticMatches = await getSemanticMatches(searchQuery.trim(), 50);
+      semanticMap = semanticMatches.reduce((acc, m) => {
+        acc[m.id] = m.score;
+        return acc;
+      }, {});
+    }
+    
     // Calculate recommendation scores and distances for each listing
     const listingsWithScores = filteredListings.map(listing => {
-      const scoreData = calculateRecommendationScore(listing, cropFarmer)
+      const baseScoreData = calculateRecommendationScore(listing, cropFarmer)
+      const semanticScore = semanticMap[listing.id] || 0;
+
+      // Combine scores: 70% recommendation + 30% semantic
+      const combinedScore = (0.7 * baseScoreData.totalScore) + (0.3 * semanticScore);
       
       // Calculate distance
       let distanceKm = null
@@ -414,8 +446,12 @@ export const getRecommendedListings = async (cropFarmerId, options = {}) => {
       
       return {
         ...listing,
-        recommendationScore: scoreData.totalScore,
-        scoreBreakdown: scoreData.breakdown,
+        recommendationScore: combinedScore,
+        scoreBreakdown: {
+          ...baseScoreData.breakdown,
+          semanticScore: semanticScore,
+          baseRecommendationScore: baseScoreData.totalScore
+        },
         distanceKm: distanceKm
       }
     })

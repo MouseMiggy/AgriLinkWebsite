@@ -81,6 +81,12 @@
   color: #495057;
   position: relative;
   overflow: hidden;
+  word-wrap: break-word;
+  white-space: normal;
+  line-height: 1.4;
+  min-height: auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .suggestionBtn:before {
@@ -110,6 +116,22 @@
   text-align: center;
   color: #6c757d;
   font-size: 12px;
+}
+
+/* Suggestions Locked Indicator */
+.suggestionsLockedIndicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  margin: 8px 0;
+  font-size: 14px;
+  color: #856404;
+  font-weight: 500;
+  font-style: italic;
 }
 
 /* AI Message Styles */
@@ -642,6 +664,14 @@
   background-color: rgba(250, 145, 0, 0.1);
   color: #333;
   border: 1px solid #fa9100;
+  border-bottom-left-radius: 4px;
+}
+
+/* Listing Request Message - White Background */
+.otherMessage .messageContent.listingRequestMessage {
+  background-color: white !important;
+  color: #333;
+  border: 1px solid #e0e0e0 !important;
   border-bottom-left-radius: 4px;
 }
 

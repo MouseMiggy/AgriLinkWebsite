@@ -740,11 +740,6 @@ export default function SignIn() {
                     'Enter your email or phone number'}
                   required
                 />
-                {inputType && (
-                  <small className={styles.inputHint}>
-                    Detected: {inputType === 'email' ? 'email address' : 'phone number'}
-                  </small>
-                )}
               </div>
 
               <div className={styles.inputGroup}>

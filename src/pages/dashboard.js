@@ -6,13 +6,13 @@ import RequestListingHistory from './request-listing-history'
 import ListingHistory from './listing-history'
 import Reports from './reports'
 import Transactions from './transactions'
+import CropfarmerTransactions from './cropfarmer-transactions'
 import UserProfile from './user-profile'
 import ReportModal from '../components/ReportModal'
 import Chat from './chat'
-
+import { usePopup } from '../contexts/PopupContext'
 import { usePostHandlers } from '../components/PostHandlers'
 
-import { usePopup } from '../contexts/PopupContext'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { 
@@ -98,10 +98,50 @@ export default function Dashboard() {
   const [featuredListings, setFeaturedListings] = useState([])
   const [featuredListingsLoading, setFeaturedListingsLoading] = useState(true)
   const [selectedFeaturedListing, setSelectedFeaturedListing] = useState(null)
+  
+  // Login toast state - now using sliding toast
+  const [showLoginToast, setShowLoginToast] = useState(false)
+  const [loginToastMessage, setLoginToastMessage] = useState('')
+  const [loginToastRole, setLoginToastRole] = useState('')
+  
   const dropdownRef = useRef(null)
   const markAsReadTimeoutRef = useRef(null)
   const router = useRouter()
   
+  // Show login toast function - now using sliding toast
+  const triggerLoginToast = (role, forceShow = false) => {
+    // Check if toast was already shown in this session (unless forced)
+    const sessionKey = `loginToastShown_${user?.uid}`
+    if (!forceShow && sessionStorage.getItem(sessionKey)) {
+      return
+    }
+    
+    const messages = {
+      crop_farmer: 'Welcome Crop Farmer! 🌾',
+      livestock_owner: 'Welcome Livestock Owner! 🐄'
+    }
+    
+    // Show sliding toast instead of modal popup
+    setLoginToastMessage(messages[role] || 'Good day! Welcome to AgriLink!')
+    setLoginToastRole(role)
+    setShowLoginToast(true)
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      setShowLoginToast(false)
+    }, 5000)
+    
+    // Mark as shown for this session
+    if (user?.uid) {
+      sessionStorage.setItem(sessionKey, 'true')
+    }
+  }
+
+  // Dismiss login toast
+  const dismissLoginToast = () => {
+    setShowLoginToast(false)
+  }
+
   // Transaction completion confirmation modal
 
   // Use post handlers hook
@@ -538,6 +578,11 @@ export default function Dashboard() {
             const userData = userDoc.data()
             setUserRole(userData.role)
             
+            // Show login toast when role is determined
+            if (userData.role) {
+              triggerLoginToast(userData.role)
+            }
+            
             // Merge Firebase Auth user with Firestore user data
             setUser({
               ...currentUser,
@@ -706,7 +751,7 @@ export default function Dashboard() {
     }
   }, [router])
 
-  // Load featured listings for right sidebar (using recommendation algorithm for crop farmers)
+  // Load featured listings for right sidebar (nearby listings for crop farmers, top listings for livestock owners)
   useEffect(() => {
     if (!db || !user) return
 
@@ -714,68 +759,207 @@ export default function Dashboard() {
       setFeaturedListingsLoading(true)
       
       try {
-        // For crop farmers, use recommendation algorithm to get best matches
+        // For crop farmers, show 4 nearby listings with owner diversity
         if (userRole === 'crop_farmer') {
-          const { getRecommendedListings } = await import('../utils/recommendationAlgorithm')
-          const result = await getRecommendedListings(user.uid, { limit: 4 })
+          const { getEnhancedLivestockListings } = await import('../utils/recommendationAlgorithm')
+          const allListings = await getEnhancedLivestockListings()
           
-          // Fetch owner ratings for each listing
-          const listingsWithRatings = await Promise.all(
-            result.searchResults.map(async (listing) => {
-              if (listing.ownerId) {
-                try {
-                  const ownerDoc = await getDoc(doc(db, 'Users', listing.ownerId))
-                  if (ownerDoc.exists()) {
-                    const ownerData = ownerDoc.data()
-                    return {
-                      ...listing,
-                      ownerRating: ownerData.rating ?? ownerData.averageRating ?? null
-                    }
+          // Get crop farmer location
+          const userDoc = await getDoc(doc(db, 'Users', user.uid))
+          const userData = userDoc.data()
+          
+          if (userData.location) {
+            // Calculate distance for each listing
+            const listingsWithDistance = allListings
+              .filter(listing => 
+                listing.id && 
+                listing.ownerId !== user.uid && // Exclude own listings
+                listing.status !== 'sold' && 
+                listing.status !== 'deleted'
+              )
+              .map(listing => {
+                let distanceKm = null
+                if (listing.ownerLocation) {
+                  // Calculate distance using the same formula as recommendation algorithm
+                  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+                    const R = 6371 // Earth's radius in km
+                    const dLat = (lat2 - lat1) * Math.PI / 180
+                    const dLon = (lon2 - lon1) * Math.PI / 180
+                    const a = 
+                      Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                      Math.sin(dLon/2) * Math.sin(dLon/2)
+                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+                    return R * c
                   }
-                } catch (error) {
-                  console.error('Error fetching owner rating:', error)
+                  
+                  distanceKm = calculateDistance(
+                    userData.location.latitude,
+                    userData.location.longitude,
+                    listing.ownerLocation.latitude,
+                    listing.ownerLocation.longitude
+                  )
                 }
+                return { 
+                  ...listing, 
+                  distanceKm,
+                  category: listing.category || listing.type || 'other' // Normalize category field
+                }
+              })
+              .filter(listing => listing.distanceKm !== null) // Only include listings with valid distance
+            
+            // Filter by maximum distance threshold (50km) to avoid showing too far listings
+            const nearbyListings = listingsWithDistance.filter(listing => listing.distanceKm <= 50)
+            
+            // Group by ownerId to ensure we get different owners
+            const ownerGroups = {}
+            nearbyListings.forEach(listing => {
+              if (!ownerGroups[listing.ownerId]) {
+                ownerGroups[listing.ownerId] = []
               }
-              return { ...listing, ownerRating: null }
+              ownerGroups[listing.ownerId].push(listing)
             })
-          )
-          
-          setFeaturedListings(listingsWithRatings)
-        } else {
-          // For livestock owners, show latest listings
+            
+            // Find the nearest listing from each unique owner
+            const nearestByOwner = []
+            Object.keys(ownerGroups).forEach(ownerId => {
+              const ownerListings = ownerGroups[ownerId]
+              const nearestListing = ownerListings.sort((a, b) => a.distanceKm - b.distanceKm)[0]
+              nearestByOwner.push(nearestListing)
+            })
+            
+            // Sort all nearest-by-owner listings by distance to get the overall nearest
+            const sortedNearest = nearestByOwner.sort((a, b) => a.distanceKm - b.distanceKm)
+            
+            // Take the nearest 4 listings from different owners
+            const finalSelection = sortedNearest.slice(0, 4)
+            
+            // Fallback: If fewer than 4 unique owners nearby, include more from slightly farther away
+            if (finalSelection.length < 4 && listingsWithDistance.length > finalSelection.length) {
+              const additionalOwners = listingsWithDistance
+                .filter(listing => !finalSelection.some(selected => selected.ownerId === listing.ownerId))
+                .sort((a, b) => a.distanceKm - b.distanceKm)
+                .slice(0, 4 - finalSelection.length)
+              finalSelection.push(...additionalOwners)
+            }
+            
+            // Fetch owner ratings for each listing
+            const listingsWithRatings = await Promise.all(
+              finalSelection.map(async (listing) => {
+                if (listing.ownerId) {
+                  try {
+                    const ownerDoc = await getDoc(doc(db, 'Users', listing.ownerId))
+                    if (ownerDoc.exists()) {
+                      const ownerData = ownerDoc.data()
+                      return {
+                        ...listing,
+                        ownerRating: ownerData.rating || 0
+                      }
+                    }
+                  } catch (error) {
+                    console.warn(`Failed to fetch rating for owner ${listing.ownerId}:`, error)
+                  }
+                }
+                return { ...listing, ownerRating: null }
+              })
+            )
+            
+            console.log('🎯 Featured nearby listings selected:', {
+              total: listingsWithRatings.length,
+              categories: listingsWithRatings.map(l => l.category),
+              distances: listingsWithRatings.map(l => `${l.distanceKm?.toFixed(1)}km`)
+            })
+            
+            setFeaturedListings(listingsWithRatings)
+          } else {
+            // If no location, show empty state
+            setFeaturedListings([])
+          }
+        } else if (userRole === 'livestock_owner') {
+          // For livestock owners, show their top 4 listings by today's request count
           const listingsQuery = query(
             collection(db, 'livestock_listings'),
-            orderBy('createdAt', 'desc')
+            where('ownerId', '==', user.uid),
+            where('status', 'in', ['active', 'available']) // Only show active listings
           )
           
           const snapshot = await getDocs(listingsQuery)
-          const listingsData = snapshot.docs.map(docSnap => ({
+          const userListings = snapshot.docs.map(docSnap => ({
             id: docSnap.id,
             ...docSnap.data()
-          })).slice(0, 4)
+          }))
           
-          // Fetch owner ratings for each listing
-          const listingsWithRatings = await Promise.all(
-            listingsData.map(async (listing) => {
-              if (listing.ownerId) {
-                try {
-                  const ownerDoc = await getDoc(doc(db, 'Users', listing.ownerId))
-                  if (ownerDoc.exists()) {
-                    const ownerData = ownerDoc.data()
-                    return {
-                      ...listing,
-                      ownerRating: ownerData.rating ?? ownerData.averageRating ?? null
-                    }
-                  }
-                } catch (error) {
-                  console.error('Error fetching owner rating:', error)
-                }
+          if (userListings.length === 0) {
+            setFeaturedListings([])
+            return
+          }
+          
+          // Get today's start time (midnight)
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          const todayTimestamp = today
+          
+          // Count today's requests and total requests for each listing
+          const listingsWithRequestCount = await Promise.all(
+            userListings.map(async (listing) => {
+              // Count total requests
+              const totalRequestsQuery = query(
+                collection(db, 'listing_requests'),
+                where('listingId', '==', listing.id)
+              )
+              const totalRequestsSnapshot = await getDocs(totalRequestsQuery)
+              const totalRequestCount = totalRequestsSnapshot.size
+              
+              // Count today's requests only
+              const todayRequestsQuery = query(
+                collection(db, 'listing_requests'),
+                where('listingId', '==', listing.id),
+                where('createdAt', '>=', todayTimestamp)
+              )
+              const todayRequestsSnapshot = await getDocs(todayRequestsQuery)
+              const todayRequestCount = todayRequestsSnapshot.size
+              
+              return {
+                ...listing,
+                totalRequestCount,
+                todayRequestCount,
+                ownerRating: 0 // Livestock owner sees their own listing
               }
-              return { ...listing, ownerRating: null }
             })
           )
           
-          setFeaturedListings(listingsWithRatings)
+          // Filter out listings with zero total requests
+          const listingsWithRequests = listingsWithRequestCount.filter(
+            listing => listing.totalRequestCount > 0
+          )
+          
+          if (listingsWithRequests.length === 0) {
+            setFeaturedListings([])
+            return
+          }
+          
+          // Sort by today's requests first (highest), then total requests (highest)
+          const topListings = listingsWithRequests
+            .sort((a, b) => {
+              // Primary sort: today's requests
+              if (b.todayRequestCount !== a.todayRequestCount) {
+                return b.todayRequestCount - a.todayRequestCount
+              }
+              // Secondary sort: total requests
+              return b.totalRequestCount - a.totalRequestCount
+            })
+            .slice(0, 4)
+          
+          console.log('🏆 Your Top Listings selected:', {
+            total: topListings.length,
+            requestCounts: topListings.map(l => 
+              `${l.name}: ${l.todayRequestCount} today, ${l.totalRequestCount} total`
+            )
+          })
+          
+          setFeaturedListings(topListings)
+        } else {
+          setFeaturedListings([])
         }
       } catch (error) {
         console.error('Error fetching featured listings:', error)
@@ -1966,6 +2150,9 @@ export default function Dashboard() {
       // Hide loading popup
       setShowSwitchingRolePopup(false)
       setSwitchingRoleStep(0)
+      
+      // Show welcome toast for the new role
+      triggerLoginToast(newRole, true)
 
       // If user already completed onboarding for target role, stay on dashboard
       if (shouldSkipOnboarding) {
@@ -2632,7 +2819,7 @@ export default function Dashboard() {
                   {user?.firstName ? user.firstName[0].toUpperCase() : 'U'}
                 </div>
                 <div className={styles.clickableTextBox} onClick={openPostModal}>
-                  What's on your mind?
+                  {userRole === 'crop_farmer' ? 'As a Crop Farmer, what\'s on your mind?' : userRole === 'livestock_owner' ? 'As a Livestock Owner, what\'s on your mind?' : 'What\'s on your mind?'}
                 </div>
               </div>
             </div>
@@ -2825,16 +3012,20 @@ export default function Dashboard() {
           >
             <div className={styles.featuredListingsCard}>
               <div className={styles.featuredListingsHeader}>
-                <h3 className={styles.featuredListingsTitle}>Featured Listings</h3>
-                <button 
-                  className={styles.viewAllBtn}
-                  onClick={() => {
-                    setSelectedFeaturedListing(null)
-                    setActiveMenuItem('listings')
-                  }}
-                >
-                  View All
-                </button>
+                <h3 className={styles.featuredListingsTitle}>
+                  {userRole === 'livestock_owner' ? 'Your Top Listings' : 'Featured Listings'}
+                </h3>
+                {userRole !== 'livestock_owner' && (
+                  <button 
+                    className={styles.viewAllBtn}
+                    onClick={() => {
+                      setSelectedFeaturedListing(null)
+                      setActiveMenuItem('listings')
+                    }}
+                  >
+                    View All
+                  </button>
+                )}
               </div>
               
               {featuredListingsLoading ? (
@@ -2844,12 +3035,15 @@ export default function Dashboard() {
               ) : featuredListings.length === 0 ? (
                 <div className={styles.featuredListingsEmpty}>
                   <img 
-                    src="/assets/icons/listing.png" 
+                    src="/assets/icons/trophy.png" 
                     alt="No listings" 
                     className={styles.featuredListingsEmptyIcon}
                   />
                   <p className={styles.featuredListingsEmptyText}>
-                    No listings available yet
+                    {userRole === 'livestock_owner' 
+                      ? 'No listings with requests yet. Your most requested listings will be shown here.' 
+                      : 'No listings available yet'
+                    }
                   </p>
                 </div>
               ) : (
@@ -2864,7 +3058,7 @@ export default function Dashboard() {
                       }}
                     >
                       <img 
-                        src={listing.image || '/assets/images/placeholder-listing.png'} 
+                        src={listing.images?.[0] || listing.imageUrls?.[0] || listing.imageUrl || listing.image || listing.photo || listing.photoUrl || listing.photos?.[0] || '/assets/images/placeholder-listing.png'} 
                         alt={listing.name}
                         className={styles.featuredListingImage}
                         onError={(e) => {
@@ -2969,7 +3163,11 @@ export default function Dashboard() {
             marginLeft: '0',
             position: 'relative'
           }}>
+            {userRole === 'crop_farmer' ? (
+            <CropfarmerTransactions user={user} />
+          ) : (
             <Transactions user={user} />
+          )}
           </div>
         )}
 
@@ -3011,7 +3209,7 @@ export default function Dashboard() {
                   <textarea
                     value={postText}
                     onChange={handleTextChange}
-                    placeholder="What's on your mind?"
+                    placeholder={userRole === 'crop_farmer' ? 'As a Crop Farmer, what\'s on your mind?' : userRole === 'livestock_owner' ? 'As a Livestock Owner, what\'s on your mind?' : 'What\'s on your mind?'}
                     className={styles.modalTextarea}
                     rows={4}
                   />
@@ -3102,7 +3300,7 @@ export default function Dashboard() {
                   <textarea
                     value={editText}
                     onChange={(e) => setEditText(e.target.value)}
-                    placeholder="What's on your mind?"
+                    placeholder={userRole === 'crop_farmer' ? 'As a Crop Farmer, what\'s on your mind?' : userRole === 'livestock_owner' ? 'As a Livestock Owner, what\'s on your mind?' : 'What\'s on your mind?'}
                     className={styles.modalTextarea}
                     rows={4}
                     autoFocus
@@ -3827,6 +4025,17 @@ export default function Dashboard() {
               {switchingRoleStep === 3 && 'Loading Profile...'}
             </p>
           </div>
+        </div>
+      )}
+      
+      {/* Welcome Toast - Sliding from top-right */}
+      {showLoginToast && (
+        <div className={`${styles.toast} ${styles.show}`}>
+          <i className={`fas fa-check-circle ${styles.toastIcon}`}></i>
+          <span className={styles.toastMessage}>{loginToastMessage}</span>
+          <button className={styles.toastClose} onClick={dismissLoginToast}>
+            <i className="fas fa-times"></i>
+          </button>
         </div>
       )}
       

@@ -1,13 +1,17 @@
 /* Onboarding Complete Page Styles */
 .container {
-  min-height: 100vh;
+  width: 1200px;
+  height: 626px;
   background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
   position: relative;
   overflow: hidden;
+  margin: 0 auto;
 }
 
 .backgroundPattern {
@@ -29,6 +33,10 @@
 }
 
 .content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  z-index: 1;
   background: #ffffff;
   border-radius: 16px;
   padding: 30px;
@@ -36,9 +44,61 @@
   width: 100%;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   text-align: center;
-  position: relative;
-  z-index: 1;
   border: 1px solid #f0f0f0;
+}
+
+.topBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 50px;
+}
+
+.spacer {
+  width: 100px;
+}
+
+.mainContent {
+  display: flex;
+  height: calc(100% - 100px);
+}
+
+.leftSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-right: 40px;
+}
+
+.rightSection {
+  flex: 0.8;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.logo {
+  width: 120px;
+  height: auto;
+}
+
+.title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #fa9100;
+  font-family: 'Poppins', sans-serif;
+  margin-bottom: 20px;
+  line-height: 1.2;
+}
+
+.subtitle {
+  font-size: 1.1rem;
+  color: #666;
+  font-family: 'Poppins', sans-serif;
+  line-height: 1.6;
+  margin-bottom: 30px;
 }
 
 .header {
@@ -256,20 +316,20 @@
   background: #fa9100;
   color: white;
   border: none;
-  border-radius: 12px;
-  padding: 15px 40px;
-  font-size: 1.1rem;
+  border-radius: 10px;
+  padding: 14px 32px;
+  margin-top: 20px;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  font-family: 'Poppins', sans-serif;
   min-width: 200px;
   justify-content: center;
 }
 
 .dashboardButton:hover {
+  background: #e88300;
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(250, 145, 0, 0.3);
   background: #e8820e;

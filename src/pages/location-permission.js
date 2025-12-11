@@ -4,10 +4,14 @@ import Head from 'next/head'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { doc, updateDoc, getDoc } from 'firebase/firestore'
+import StepIndicator from '../components/StepIndicator'
 import styles from '../../styles/modules/location-permission.module.css'
 
 export default function LocationPermission() {
   const [loading, setLoading] = useState(false)
+  const [allowLocationLoading, setAllowLocationLoading] = useState(false)
+  const [skipLocationLoading, setSkipLocationLoading] = useState(false)
+  const [currentStep, setCurrentStep] = useState(1) // Step 1: Location permission
   const [user, setUser] = useState(null)
   const [userRole, setUserRole] = useState('')
   const [error, setError] = useState('')
@@ -60,20 +64,15 @@ export default function LocationPermission() {
   }
 
   const requestLocation = () => {
-    setLoading(true)
-
-    if (!navigator.geolocation) {
-      showErrorToast('Geolocation is not supported by this browser')
-      setLoading(false)
-      return
-    }
-
+    setAllowLocationLoading(true)
+    setLocationStatus('pending')
+    
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
           const { latitude, longitude } = position.coords
           
-          // Update user location in Firestore
+          // Update user's location in Firestore
           const userDocRef = doc(db, 'Users', user.uid)
           await updateDoc(userDocRef, {
             location: {
@@ -82,27 +81,28 @@ export default function LocationPermission() {
               timestamp: new Date()
             },
             locationPermissionGranted: true,
+            locationSkipped: false,
             updatedAt: new Date()
           })
-
+          
           setLocationStatus('granted')
           
-          // Wait a moment to show success, then navigate to role-specific onboarding
+          // Navigate to appropriate onboarding after a short delay
           setTimeout(() => {
             navigateToRoleOnboarding()
-          }, 1500)
+          }, 2000)
           
         } catch (err) {
           console.error('Error saving location:', err)
           showErrorToast('Failed to save location. Please try again.')
         } finally {
-          setLoading(false)
+          setAllowLocationLoading(false)
         }
       },
       (error) => {
         console.error('Geolocation error:', error)
         setLocationStatus('denied')
-        setLoading(false)
+        setAllowLocationLoading(false)
         
         let errorMessage = 'Unable to get your location. '
         switch (error.code) {
@@ -130,9 +130,11 @@ export default function LocationPermission() {
     )
   }
 
-  const skipLocation = async () => {
-    setLoading(true)
+  const handleBack = () => {
+    router.push('/role-selection')
+  }
 
+  const skipLocation = async () => {
     try {
       // Update user to indicate they skipped location
       const userDocRef = doc(db, 'Users', user.uid)
@@ -146,50 +148,12 @@ export default function LocationPermission() {
     } catch (err) {
       console.error('Error updating user data:', err)
       showErrorToast('Failed to proceed. Please try again.')
-    } finally {
-      setLoading(false)
     }
   }
 
   const navigateToRoleOnboarding = async () => {
-    try {
-      // Check if user has already completed onboarding for their role
-      const userDocRef = doc(db, 'Users', user.uid)
-      const userDoc = await getDoc(userDocRef)
-      const userData = userDoc.exists() ? userDoc.data() : {}
-      const onboarding = userData.onboarding || {}
-
-      // If onboarding already completed for current role, go to dashboard
-      if (userRole === 'livestock_owner' && onboarding.livestockOnboardingCompleted) {
-        console.log('Livestock onboarding already completed, going to dashboard')
-        router.push('/dashboard')
-        return
-      } else if (userRole === 'crop_farmer' && onboarding.cropOnboardingCompleted) {
-        console.log('Crop farmer onboarding already completed, going to dashboard')
-        router.push('/dashboard')
-        return
-      }
-
-      // Navigate to appropriate onboarding
-      if (userRole === 'livestock_owner') {
-        router.push('/livestock-onboarding')
-      } else if (userRole === 'crop_farmer') {
-        router.push('/crop-onboarding')
-      } else {
-        // Fallback to dashboard if role is unclear
-        router.push('/dashboard')
-      }
-    } catch (err) {
-      console.error('Error checking onboarding status:', err)
-      // Fallback navigation on error
-      if (userRole === 'livestock_owner') {
-        router.push('/livestock-onboarding')
-      } else if (userRole === 'crop_farmer') {
-        router.push('/crop-onboarding')
-      } else {
-        router.push('/dashboard')
-      }
-    }
+    // Go directly to livestock onboarding (step 2) after location permission
+    router.push('/livestock-onboarding')
   }
 
   if (!user) {
@@ -216,113 +180,103 @@ export default function LocationPermission() {
         <div className={styles.backgroundPattern}></div>
         
         <div className={styles.content}>
-          <div className={styles.header}>
-            <div className={styles.logoContainer}>
-              <img 
-                src="/assets/images/AgrilinkLogo.png" 
-                alt="AgriLink Logo" 
-                className={styles.logo}
-              />
-            </div>
+          <div className={styles.topBar}>
+            <button className={styles.backButton} onClick={handleBack}>
+              <i className="fas fa-arrow-left"></i>
+              Back
+            </button>
+            <StepIndicator currentStep={currentStep} totalSteps={4} variant="dots" />
+            <img 
+              src="/assets/images/AgrilinkLogo.png" 
+              alt="AgriLink Logo" 
+              className={styles.logo}
+            />
           </div>
-
+          
           <div className={styles.mainContent}>
-            <div className={styles.iconContainer}>
-              <div className={`${styles.locationIcon} ${locationStatus === 'granted' ? styles.success : ''}`}>
-                {locationStatus === 'granted' ? (
+            <div className={styles.leftSection}>
+              <h1 className={styles.title}>
+                <div>
+                  <div>Allow <span style={{ color: '#2d5a27' }}>Location</span></div>
+                  <div>Access</div>
+                </div>
+              </h1>
+              
+              <p className={styles.subtitle}>
+                Turn on location so AgriLink can match you with farmers and listings that are truly close to you.
+              </p>
+            </div>
+
+            <div className={styles.rightSection}>
+              <div className={styles.benefitsContainer}>
+                <div className={styles.benefit}>
+                  <div className={styles.benefitIcon}>
+                    <i className="fas fa-users"></i>
+                  </div>
+                  <div className={styles.benefitText}>
+                    <h3>Discover Nearby Farmers</h3>
+                    <p>Quickly find livestock owners and crop farmers operating around your location.</p>
+                  </div>
+                </div>
+
+                <div className={styles.benefit}>
+                  <div className={styles.benefitIcon}>
+                    <i className="fas fa-truck"></i>
+                  </div>
+                  <div className={styles.benefitText}>
+                    <h3>Lower Transport Costs</h3>
+                    <p>Exchange waste and inputs with nearby farmers to reduce delivery time and expenses.</p>
+                  </div>
+                </div>
+
+                <div className={styles.benefit}>
+                  <div className={styles.benefitIcon}>
+                    <i className="fas fa-leaf"></i>
+                  </div>
+                  <div className={styles.benefitText}>
+                    <h3>Support Local Agriculture</h3>
+                    <p>Strengthen a sustainable farming network within your community and province.</p>
+                  </div>
+                </div>
+              </div>
+
+              {locationStatus === 'granted' && (
+                <div className={styles.successIndicator}>
                   <i className="fas fa-check-circle"></i>
-                ) : (
-                  <i className="fas fa-map-marker-alt"></i>
-                )}
-              </div>
+                  <span>Location Access Granted</span>
+                </div>
+              )}
+
+              {locationStatus !== 'granted' && (
+                <div className={styles.actionContainer}>
+                  <button 
+                    className={styles.skipButton}
+                    onClick={skipLocation}
+                  >
+                    Skip for Now
+                  </button>
+
+                  <button 
+                    className={styles.allowButton}
+                    onClick={requestLocation}
+                    disabled={allowLocationLoading}
+                  >
+                    {allowLocationLoading ? (
+                      <>
+                        <div className={styles.buttonSpinner}></div>
+                        <span>Getting Location...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="fas fa-location-arrow"></i>
+                        <span>Allow Location Access</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
             </div>
-
-            <h1 className={styles.title}>
-              {locationStatus === 'granted' ? 'Location Saved' : 'Allow Location Access'}
-            </h1>
-            
-            <p className={styles.subtitle}>
-              {locationStatus === 'granted' 
-                ? 'Your location details are now securely stored so we can suggest relevant connections nearby.'
-                : 'Turn on location so AgriLink can match you with farmers and listings that are truly close to you.'
-              }
-            </p>
-
-            <div className={styles.benefitsContainer}>
-              <div className={styles.benefit}>
-                <div className={styles.benefitIcon}>
-                  <i className="fas fa-users"></i>
-                </div>
-                <div className={styles.benefitText}>
-                  <h3>Discover Nearby Farmers</h3>
-                  <p>Quickly find livestock owners and crop farmers operating around your location.</p>
-                </div>
-              </div>
-
-              <div className={styles.benefit}>
-                <div className={styles.benefitIcon}>
-                  <i className="fas fa-truck"></i>
-                </div>
-                <div className={styles.benefitText}>
-                  <h3>Lower Transport Costs</h3>
-                  <p>Exchange waste and inputs with nearby farmers to reduce delivery time and expenses.</p>
-                </div>
-              </div>
-
-              <div className={styles.benefit}>
-                <div className={styles.benefitIcon}>
-                  <i className="fas fa-leaf"></i>
-                </div>
-                <div className={styles.benefitText}>
-                  <h3>Support Local Agriculture</h3>
-                  <p>Strengthen a sustainable farming network within your community and province.</p>
-                </div>
-              </div>
-            </div>
-
-            {locationStatus !== 'granted' && (
-              <div className={styles.actionContainer}>
-                <button 
-                  className={styles.allowButton}
-                  onClick={requestLocation}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <div className={styles.buttonSpinner}></div>
-                      <span>Getting Location...</span>
-                    </>
-                  ) : (
-                    <>
-                      <i className="fas fa-location-arrow"></i>
-                      <span>Allow Location Access</span>
-                    </>
-                  )}
-                </button>
-
-                <button 
-                  className={styles.skipButton}
-                  onClick={skipLocation}
-                  disabled={loading}
-                >
-                  Skip for Now
-                </button>
-
-                <p className={styles.privacyNote}>
-                  <i className="fas fa-shield-alt"></i>
-                  Your location is kept private and only used to show nearby farmers
-                </p>
-              </div>
-            )}
-
-            {locationStatus === 'granted' && (
-              <div className={styles.successContainer}>
-                <div className={styles.successAnimation}>
-                  <i className="fas fa-check"></i>
-                </div>
-                <p className={styles.successText}>Redirecting to complete your profile...</p>
-              </div>
-            )}
           </div>
         </div>
 

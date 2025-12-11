@@ -36,8 +36,8 @@
 }
 
 .title {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 700;
   color: #1a1a1a;
   margin: 0;
 }
@@ -209,6 +209,13 @@
   letter-spacing: 0.5px;
   border-bottom: 1px solid #e4e6ea;
 }
+
+.columnHeader:nth-child(1) { width: 18%; } /* Listing Name */
+.columnHeader:nth-child(2) { width: 32%; } /* Listing Details */
+.columnHeader:nth-child(3) { width: 10%; } /* Price */
+.columnHeader:nth-child(4) { width: 18%; } /* Buyer Name - increased from 15% */
+.columnHeader:nth-child(5) { width: 12%; } /* Date Added */
+.columnHeader:nth-child(6) { width: 14%; } /* Date Sold - adjusted to maintain 100% */
 
 .tableRow {
   border-bottom: 1px solid #f0f0f0;

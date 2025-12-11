@@ -1,15 +1,12 @@
 .container {
-  max-width: 100%;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  padding-top: 90px;
-  padding-bottom: 120px;
-  padding-left: 280px; /* Add space for left container */
+  height: 100vh;
   background-color: #f0f0f0;
-  min-height: calc(100vh - 60px);
-  position: relative;
+  padding: 0;
   font-family: 'Poppins', sans-serif;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  isolation: isolate;
 }
 
 .header {
@@ -79,6 +76,43 @@
   100% { transform: rotate(360deg); }
 }
 
+/* Loading State - identical to transactions */
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  padding: 20px 16px;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  max-width: fit-content;
+  position: fixed;
+  top: 50%;
+  left: calc(50% + 120px);
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+}
+
+.loadingSpinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #f3f4f6;
+  border-top: 3px solid #fa9100;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 12px;
+}
+
+.loadingText {
+  margin: 0;
+  color: #6c757d;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
 .emptyState {
   display: flex;
   flex-direction: column;
@@ -115,28 +149,139 @@
   font-family: 'Poppins', sans-serif;
 }
 
-.tableContainer {
+
+/* Main Content */
+.mainContent {
+  padding-top: 100px;
+  min-height: 100vh;
+  margin-left: 260px;
+  padding-left: 40px;
+  padding-right: 40px;
+}
+
+/* Transactions Table */
+.transactionsTableContainer {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  max-height: calc(100vh - 200px);
-  overflow-y: auto;
-  margin: 20px;
+  border: 1px solid #e4e6ea;
+}
+
+.transactionsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
 }
 
 .tableHeader {
-  display: flex;
   background: #f8f9fa;
-  border-bottom: 1px solid #e4e6ea;
-  padding: 16px 20px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  border-bottom: 2px solid #e4e6ea;
+}
+
+.columnHeader {
+  padding: 16px;
+  text-align: left;
   font-weight: 600;
-  color: #1c1e21;
-  font-family: 'Poppins', sans-serif;
+  color: #1a1a1a;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #e4e6ea;
+}
+
+.columnHeader:nth-child(1) { width: 18%; } /* Listing Name */
+.columnHeader:nth-child(2) { width: 20%; } /* Listing Details - reduced from 25% */
+.columnHeader:nth-child(3) { width: 10%; } /* Price */
+.columnHeader:nth-child(4) { width: 15%; } /* Buyer Name */
+.columnHeader:nth-child(5) { width: 12%; } /* Date Added */
+.columnHeader:nth-child(6) { width: 12%; } /* Date Sold - increased from 10% */
+.columnHeader:nth-child(7) { width: 13%; } /* Date Deleted - increased from 10% */
+
+.tableRow {
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tableRow:hover {
+  background-color: #f8f9fa;
+}
+
+.tableCell {
+  padding: 16px;
+  vertical-align: middle;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.listingName {
+  font-weight: 500;
+  color: #1a1a1a;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listingDetails {
+  color: #65676b;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.price {
+  font-weight: 600 !important;
+  color: #fa9100 !important;
+  text-align: left !important;
+}
+
+.price.free {
+  color: #28a745 !important;
+}
+
+.buyerName {
+  color: #1a1a1a;
+}
+
+.date {
+  color: #65676b;
+  font-size: 13px;
+}
+
+/* Empty Table State */
+.emptyTableCell {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.emptyTableMessage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.emptyIcon img {
+  width: 64px;
+  height: 64px;
+  opacity: 0.5;
+  margin-bottom: 16px;
+}
+
+.emptyTitle {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
+}
+
+.emptyDescription {
   font-size: 14px;
+  color: #65676b;
+  margin: 0;
+  max-width: 400px;
 }
 
 .headerListingName,

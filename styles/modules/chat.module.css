@@ -838,7 +838,7 @@
 }
 
 .browseListingsBtn {
-  background: #4299e1;
+  background: #fa9100;
   color: white;
   border: none;
   padding: 12px 24px;
@@ -847,13 +847,13 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(66, 153, 225, 0.3);
+  box-shadow: 0 2px 4px rgba(250, 145, 0, 0.3);
 }
 
 .browseListingsBtn:hover {
-  background: #3182ce;
+  background: #e58300;
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(66, 153, 225, 0.4);
+  box-shadow: 0 4px 8px rgba(250, 145, 0, 0.4);
 }
 
 /* Done Transaction Button States */

@@ -4,10 +4,11 @@ import Head from 'next/head'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { doc, updateDoc, getDoc } from 'firebase/firestore'
+import StepIndicator from '../components/StepIndicator'
 import styles from '../../styles/modules/livestock-onboarding.module.css'
 
 export default function LivestockOnboarding() {
-  const [currentStep, setCurrentStep] = useState(1)
+  const [currentStep, setCurrentStep] = useState(1) // Step 1: Livestock selection
   const [loading, setLoading] = useState(false)
   const [user, setUser] = useState(null)
   const [error, setError] = useState('')
@@ -17,14 +18,13 @@ export default function LivestockOnboarding() {
   const router = useRouter()
 
   const animalTypes = [
-    { id: 'cattle', name: 'Cattle/Cows', icon: 'fas fa-cow', description: 'Beef cattle, dairy cows' },
-    { id: 'pigs', name: 'Pigs', icon: 'fas fa-pig', description: 'Swine, hogs' },
-    { id: 'chickens', name: 'Chickens', icon: 'fas fa-egg', description: 'Broilers, layers' },
-    { id: 'goats', name: 'Goats', icon: 'fas fa-mountain', description: 'Dairy goats, meat goats' },
-    { id: 'sheep', name: 'Sheep', icon: 'fas fa-sheep', description: 'Wool sheep, meat sheep' },
-    { id: 'ducks', name: 'Ducks', icon: 'fas fa-duck', description: 'Meat ducks, egg ducks' },
-    { id: 'rabbits', name: 'Rabbits', icon: 'fas fa-rabbit', description: 'Meat rabbits, breeding rabbits' },
-    { id: 'other', name: 'Other', icon: 'fas fa-paw', description: 'Other livestock animals' }
+    { id: 'cattle', name: 'Cattle', icon: '/assets/images/cattle.png', description: 'Dairy cows, Beef cattle, Buffalo' },
+    { id: 'poultry', name: 'Poultry', icon: '/assets/images/chicken.png', description: 'Chickens, Ducks, Turkeys, Quails' },
+    { id: 'swine', name: 'Swine', icon: '/assets/images/swine.png', description: 'Pigs, Hogs' },
+    { id: 'goats', name: 'Goats', icon: '/assets/images/goat.png', description: 'Dairy goats, Meat goats' },
+    { id: 'sheep', name: 'Sheep', icon: '/assets/images/sheep.png', description: 'Meat sheep, Wool sheep' },
+    { id: 'rabbits', name: 'Rabbits', icon: '/assets/images/rabbit.png', description: 'Meat rabbits, Backyard rabbits' },
+    { id: 'others', name: 'Others', icon: '/assets/images/livestock.png', description: 'Horses, Carabaos, Aquaculture' }
   ]
 
   const wasteRanges = [
@@ -178,127 +178,98 @@ export default function LivestockOnboarding() {
         <div className={styles.backgroundPattern}></div>
         
         <div className={styles.content}>
-          <div className={styles.header}>
-            <div className={styles.logoContainer}>
-              <img 
-                src="/assets/images/AgrilinkLogo.png" 
-                alt="AgriLink Logo" 
-                className={styles.logo}
-              />
+          <div className={styles.topBar}>
+            <button className={styles.backButton} onClick={handleBack}>
+              <i className="fas fa-arrow-left"></i>
+              Back
+            </button>
+            <StepIndicator currentStep={currentStep + 1} totalSteps={4} variant="dots" />
+            <img 
+              src="/assets/images/AgrilinkLogo.png" 
+              alt="AgriLink Logo" 
+              className={styles.logo}
+            />
+          </div>
+          
+          <div className={styles.mainContent}>
+            <div className={styles.leftSection}>
+              <h1 className={styles.title}>
+                {currentStep === 1 ? (
+                  <>What <span style={{ color: '#2d5a27' }}>Livestock</span><br />animals do you<br />raise?</>
+                ) : (
+                  <>How much <span style={{ color: '#2d5a27' }}>waste</span> does your <br />Livestock animals<br />produce daily?</>
+                )}
+              </h1>
+              
+              {currentStep === 1 && (
+                <p className={styles.subtitle}>
+                  Select the livestock animals you raise so we can connect you with relevant farmers and tailored opportunities.
+                </p>
+              )}
+              
+              {currentStep === 2 && (
+                <p className={styles.subtitle}>
+                  Tell us about your daily waste production to find the best recycling and exchange opportunities.
+                </p>
+              )}
             </div>
             
-            <div className={styles.progressContainer}>
-              <div className={styles.progressBar}>
-                <div 
-                  className={styles.progressFill}
-                  style={{ width: `${(currentStep / 2) * 100}%` }}
-                ></div>
-              </div>
-              <p className={styles.progressText}>Step {currentStep} of 2</p>
-            </div>
-          </div>
-
-          <div className={styles.stepContainer}>
-            {currentStep === 1 && (
-              <div className={styles.step}>
-                <div className={styles.stepHeader}>
-                  <div className={styles.stepIcon}>
-                    <i className="fas fa-cow"></i>
-                  </div>
-                  <h1 className={styles.stepTitle}>What livestock do you raise?</h1>
-                  <p className={styles.stepSubtitle}>
-                    Select all the types of animals you currently have on your farm
-                  </p>
-                </div>
-
-                <div className={styles.optionsGrid}>
-                  {animalTypes.map((animal) => (
-                    <div
-                      key={animal.id}
-                      className={`${styles.optionCard} ${selectedAnimals.includes(animal.id) ? styles.selected : ''}`}
-                      onClick={() => handleAnimalSelect(animal.id)}
-                    >
-                      <div className={styles.optionIcon}>
-                        <i className={animal.icon}></i>
-                      </div>
-                      <h3 className={styles.optionTitle}>{animal.name}</h3>
-                      <p className={styles.optionDescription}>{animal.description}</p>
-                      <div className={styles.selectIndicator}>
-                        <i className="fas fa-check-circle"></i>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {currentStep === 2 && (
-              <div className={styles.step}>
-                <div className={styles.stepHeader}>
-                  <div className={styles.stepIcon}>
-                    <i className="fas fa-weight-hanging"></i>
-                  </div>
-                  <h1 className={styles.stepTitle}>How much waste do you produce daily?</h1>
-                  <p className={styles.stepSubtitle}>
-                    This helps us match you with crop farmers who need the right amount of fertilizer
-                  </p>
-                </div>
-
-                <div className={styles.wasteOptions}>
-                  {wasteRanges.map((range) => (
-                    <div
-                      key={range.id}
-                      className={`${styles.wasteOption} ${selectedWasteRange === range.id ? styles.selected : ''}`}
-                      onClick={() => handleWasteRangeSelect(range.id)}
-                    >
-                      <div className={styles.wasteOptionContent}>
-                        <h3 className={styles.wasteOptionLabel}>{range.label}</h3>
-                        <p className={styles.wasteOptionDescription}>{range.description}</p>
-                      </div>
-                      <div className={styles.selectIndicator}>
-                        <i className="fas fa-check-circle"></i>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className={styles.actionContainer}>
-            <button 
-              className={styles.backButton}
-              onClick={handleBack}
-              disabled={loading}
-            >
-              <i className="fas fa-arrow-left"></i>
-              <span>Back</span>
-            </button>
-
-            <button 
-              className={`${styles.nextButton} ${
-                (currentStep === 1 && selectedAnimals.length > 0) || 
-                (currentStep === 2 && selectedWasteRange) ? styles.active : ''
-              }`}
-              onClick={handleNext}
-              disabled={
-                loading || 
-                (currentStep === 1 && selectedAnimals.length === 0) ||
-                (currentStep === 2 && !selectedWasteRange)
-              }
-            >
-              {loading ? (
+            <div className={styles.rightSection}>
+              {currentStep === 1 && (
                 <>
-                  <div className={styles.buttonSpinner}></div>
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <span>{currentStep === 2 ? 'Complete Setup' : 'Next'}</span>
-                  <i className="fas fa-arrow-right"></i>
+                  <div className={styles.optionsGrid}>
+                    {animalTypes.map((animal) => (
+                      <div
+                        key={animal.id}
+                        className={`${styles.optionCard} ${selectedAnimals.includes(animal.id) ? styles.selected : ''}`}
+                        onClick={() => handleAnimalSelect(animal.id)}
+                      >
+                        <div className={styles.optionIcon}>
+                          <img 
+                            src={animal.icon} 
+                            alt={animal.name} 
+                            className={`${styles.animalIcon} ${animal.id === 'goats' || animal.id === 'sheep' ? styles.flipHorizontal : ''}`} 
+                          />
+                        </div>
+                        <h3 className={styles.optionTitle}>{animal.name}</h3>
+                        <p className={styles.optionDescription}>{animal.description}</p>
+                        <div className={styles.selectIndicator}>
+                          <i className="fas fa-check-circle"></i>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <button className={styles.nextButton} onClick={handleNext}>
+                    Next
+                  </button>
                 </>
               )}
-            </button>
+
+              {currentStep === 2 && (
+                <>
+                  <div className={styles.optionsGrid}>
+                    {wasteRanges.map((range) => (
+                      <div
+                        key={range.id}
+                        className={`${styles.optionCard} ${styles.noIcon} ${selectedWasteRange === range.id ? styles.selected : ''}`}
+                        onClick={() => handleWasteRangeSelect(range.id)}
+                      >
+                        <h3 className={styles.optionTitle}>{range.label}</h3>
+                        <p className={styles.optionDescription}>{range.description}</p>
+                        <div className={styles.selectIndicator}>
+                          <i className="fas fa-check-circle"></i>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <button className={styles.nextButton} onClick={handleNext}>
+                    Done
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
 

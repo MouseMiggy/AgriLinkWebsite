@@ -4,6 +4,7 @@ import Head from 'next/head'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
+import StepIndicator from '../components/StepIndicator'
 import styles from '../../styles/modules/onboarding-complete.module.css'
 
 export default function OnboardingComplete() {
@@ -125,61 +126,46 @@ export default function OnboardingComplete() {
         <div className={styles.backgroundPattern}></div>
         
         <div className={styles.content}>
-          <div className={styles.header}>
-            <div className={styles.logoContainer}>
-              <img 
-                src="/assets/images/AgrilinkLogo.png" 
-                alt="AgriLink Logo" 
-                className={styles.logo}
-              />
-            </div>
+          <div className={styles.topBar}>
+            <div className={styles.spacer}></div>
+            <StepIndicator currentStep={4} totalSteps={4} variant="dots" />
+            <img 
+              src="/assets/images/AgrilinkLogo.png" 
+              alt="AgriLink Logo" 
+              className={styles.logo}
+            />
           </div>
-
+          
           <div className={styles.mainContent}>
-            <div className={styles.successAnimation}>
-              <div className={styles.checkmarkContainer}>
-                <div className={styles.checkmark}>
-                  <i className="fas fa-check"></i>
+            <div className={styles.leftSection}>
+              <div className={styles.successAnimation}>
+                <div className={styles.checkmarkContainer}>
+                  <div className={styles.checkmark}>
+                    <i className="fas fa-check"></i>
+                  </div>
+                </div>
+                <div className={styles.celebrationEmojis}>
+                  <span className={styles.emoji}>🎉</span>
+                  <span className={styles.emoji}>🌱</span>
+                  <span className={styles.emoji}>🚜</span>
+                  <span className={styles.emoji}>🎉</span>
                 </div>
               </div>
-              <div className={styles.celebrationEmojis}>
-                <span className={styles.emoji}>🎉</span>
-                <span className={styles.emoji}>🌱</span>
-                <span className={styles.emoji}>🚜</span>
-                <span className={styles.emoji}>🎉</span>
-              </div>
-            </div>
-
-            <div className={styles.welcomeSection}>
-              <h1 className={styles.title}>Nice! You're all set up!</h1>
+              <h1 className={styles.title}>Welcome to AgriLink!</h1>
               <p className={styles.subtitle}>
-                Welcome to AgriLink, <span className={styles.userName}>{userName}</span>!
+                Congratulations {userName}! Your {getRoleDisplayName(userRole)} profile is now complete.
               </p>
             </div>
-
-            <div className={styles.roleCard}>
-              <div className={styles.roleIcon}>
-                <i className={getRoleIcon(userRole)}></i>
-              </div>
-              <h2 className={styles.roleTitle}>
-                You're registered as a {getRoleDisplayName(userRole)}
-              </h2>
-              <p className={styles.roleDescription}>
-                {getRoleDescription(userRole)}
-              </p>
-            </div>
-
-            <div className={styles.featuresGrid}>
-              <div className={styles.feature}>
-                <div className={styles.featureIcon}>
-                  <i className="fas fa-users"></i>
+            
+            <div className={styles.rightSection}>
+              <div className={styles.roleInfo}>
+                <div className={styles.roleIcon}>
+                  <i className={getRoleIcon(userRole)}></i>
                 </div>
-                <h3 className={styles.featureTitle}>Connect</h3>
-                <p className={styles.featureDescription}>
-                  Find and connect with farmers in your area
-                </p>
+                <h3 className={styles.roleTitle}>{getRoleDisplayName(userRole)}</h3>
+                <p className={styles.roleDescription}>{getRoleDescription(userRole)}</p>
               </div>
-
+              
               <div className={styles.feature}>
                 <div className={styles.featureIcon}>
                   <i className="fas fa-exchange-alt"></i>

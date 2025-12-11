@@ -7,6 +7,7 @@ import styles from '../../styles/modules/listing-history.module.css'
 export default function ListingHistory() {
   const [listings, setListings] = useState([])
   const [loading, setLoading] = useState(true)
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [user, setUser] = useState(null)
   const [userRole, setUserRole] = useState(null)
 
@@ -30,12 +31,13 @@ export default function ListingHistory() {
           }
         } catch (error) {
           console.error('Error fetching user role:', error)
+          setUserRole(null)
         }
       } else {
         setUser(null)
         setUserRole(null)
+        setLoading(false)
       }
-      setLoading(false)
     })
 
     return () => unsubscribe()
@@ -70,9 +72,11 @@ export default function ListingHistory() {
       })
       setListings(listingsData)
       setLoading(false)
+      setHasLoaded(true)
     }, (error) => {
       console.error('Error fetching listings:', error)
       setLoading(false)
+      setHasLoaded(true)
     })
 
     return () => unsubscribe()
@@ -86,9 +90,7 @@ export default function ListingHistory() {
       return date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+        day: 'numeric'
       })
     } catch (error) {
       return 'Invalid date'
@@ -117,7 +119,7 @@ export default function ListingHistory() {
     )
   }
 
-  if (loading) {
+  if (loading || !hasLoaded) {
     return (
       <div className={styles.container}>
         <div className={styles.header}>
@@ -127,8 +129,9 @@ export default function ListingHistory() {
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <div className={styles.loadingContainer}>
           <div className={styles.loadingSpinner}></div>
+          <p className={styles.loadingText}>Loading history...</p>
         </div>
       </div>
     )
@@ -144,62 +147,112 @@ export default function ListingHistory() {
         </div>
       </div>
 
-      {listings.length === 0 ? (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-          <p style={{ fontSize: '16px', color: '#65676b', fontFamily: 'Poppins, sans-serif' }}>
-            No listing sold or deleted yet
-          </p>
+      {/* Main Content */}
+      <div className={styles.mainContent}>
+        <div className={styles.transactionsTableContainer}>
+          <table className={styles.transactionsTable}>
+            <thead>
+              <tr className={styles.tableHeader}>
+                <th className={styles.columnHeader}>Listing Name</th>
+                <th className={styles.columnHeader}>Listing Details</th>
+                <th className={styles.columnHeader}>Price</th>
+                <th className={styles.columnHeader}>Buyer Name</th>
+                <th className={styles.columnHeader}>Date Added</th>
+                <th className={styles.columnHeader}>Date Sold</th>
+                <th className={styles.columnHeader}>Date Deleted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {listings.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className={styles.emptyTableCell}>
+                    <div className={styles.emptyTableMessage}>
+                      <div className={styles.emptyIcon}>
+                        <img src="/assets/icons/time-past.png" alt="No listings" />
+                      </div>
+                      <h3 className={styles.emptyTitle}>No Listing History Yet</h3>
+                      <p className={styles.emptyDescription}>
+                        Your sold and deleted listings will appear here.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                listings.map((listing) => (
+                  <tr 
+                    key={listing.id} 
+                    className={styles.tableRow}
+                  >
+                    <td className={styles.tableCell}>
+                      <div className={styles.listingName}>
+                        {listing.name || listing.title || 'N/A'}
+                      </div>
+                    </td>
+                    <td className={styles.tableCell}>
+                      <div className={styles.listingDetails}>
+                        {listing.description || listing.details || 'N/A'}
+                      </div>
+                    </td>
+                    <td className={styles.tableCell}>
+                      <div className={`${styles.price} ${(listing.isFree || listing.price === 'Free') ? styles.free : ''}`}>
+                        {formatPrice(listing.price, listing.isFree)}
+                      </div>
+                    </td>
+                    <td className={styles.tableCell}>
+                      <div className={styles.buyerName}>
+                        {listing.buyerName || 'N/A'}
+                      </div>
+                    </td>
+                    <td className={styles.tableCell}>
+                      <div className={styles.date}>
+                        {formatDate(listing.createdAt)}
+                      </div>
+                    </td>
+                    <td className={styles.tableCell}>
+                      <div className={styles.date}>
+                        {(() => {
+                          console.log('🔍 Listing data for Date Sold check:', {
+                            id: listing.id,
+                            status: listing.status,
+                            dateSold: listing.dateSold,
+                            soldAt: listing.soldAt,
+                            dateDeleted: listing.dateDeleted,
+                            deletedAt: listing.deletedAt
+                          })
+                          console.log('📋 Raw listing object:', JSON.stringify(listing, null, 2))
+                          
+                          if (listing.status === 'sold') {
+                            const dateField = listing.dateSold || listing.soldAt
+                            return dateField ? formatDate(dateField) : 'N/A'
+                          } else {
+                            return 'N/A'  // Show N/A for deleted listings
+                          }
+                        })()}
+                      </div>
+                    </td>
+                    <td className={styles.tableCell}>
+                      <div className={styles.date}>
+                        {(() => {
+                          if (listing.status === 'deleted') {
+                            const dateField = listing.dateDeleted || listing.deletedAt
+                            console.log('🔍 Deleted listing data:', listing)
+                            console.log('📅 dateDeleted field:', listing.dateDeleted)
+                            console.log('📅 deletedAt field:', listing.deletedAt)
+                            console.log('📅 Using date field:', dateField)
+                            return dateField ? formatDate(dateField) : 'N/A'
+                          } else {
+                            return 'N/A'  // Show N/A for sold listings
+                          }
+                        })()}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      ) : (
-        <div className={styles.tableContainer}>
-          <div className={styles.tableHeader}>
-            <div className={styles.headerListingName}>Listing Name</div>
-            <div className={styles.headerDetails}>Details</div>
-            <div className={styles.headerPrice}>Price</div>
-            <div className={styles.headerQuantity}>Quantity</div>
-            <div className={styles.headerStatus}>Status</div>
-            <div className={styles.headerDateAdded}>Date Added</div>
-            <div className={styles.headerDateSold}>Date Sold/Deleted</div>
-          </div>
-          
-          <div className={styles.listingsList}>
-            {listings.map((listing, index) => (
-              <div 
-                key={listing.id} 
-                className={`${styles.listingCard} ${index === listings.length - 1 ? styles.lastItem : ''}`}
-              >
-                <div className={styles.listingName} title={listing.name || 'Unnamed Listing'}>
-                  {truncateText(listing.name || 'Unnamed Listing', 25)}
-                </div>
-                
-                <div className={styles.details} title={listing.details || 'No details'}>
-                  {truncateText(listing.details || 'No details', 40)}
-                </div>
-                
-                <div className={styles.price}>
-                  {formatPrice(listing.price, listing.isFree)}
-                </div>
-                
-                <div className={styles.quantity}>
-                  {listing.measurements ? `${listing.measurements} ${listing.measurementUnit || ''}` : '-'}
-                </div>
-                
-                <div className={styles.status}>
-                  {getStatusBadge(listing.status)}
-                </div>
-                
-                <div className={styles.dateAdded}>
-                  {formatDate(listing.createdAt)}
-                </div>
-                
-                <div className={styles.dateSold}>
-                  {formatDate(listing.status === 'sold' ? listing.soldAt : listing.deletedAt)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   )
 }

@@ -1,10 +1,27 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { db, auth } from '../lib/firebase'
-import { collection, doc, getDoc, getDocs, query, where, orderBy, onSnapshot, addDoc, updateDoc, serverTimestamp, writeBatch, getDocsFromCache } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { storage } from '../lib/firebase'
-import styles from '../../styles/modules/chat.module.css'
+import { db, auth, storage } from '../lib/firebase'
+import { 
+  doc, 
+  getDoc, 
+  getDocs, 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  updateDoc, 
+  addDoc, 
+  serverTimestamp, 
+  setDoc, 
+  deleteDoc, 
+  arrayUnion, 
+  arrayRemove, 
+  writeBatch
+} from 'firebase/firestore'
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import AIChatService from '../lib/aiChatService'
+import { createTransaction } from '../lib/transactionService'
+import styles from '../../styles/modules/chat.module.css'
 
 const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   // Chat state variables
@@ -46,6 +63,8 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   const [unreadChats, setUnreadChats] = useState(0)
   const [aiSuggestions, setAiSuggestions] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [isSuggestionsLocked, setIsSuggestionsLocked] = useState(false)
+  const [suggestionsLockedUntil, setSuggestionsLockedUntil] = useState(0)
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(true)
   const [showSummary, setShowSummary] = useState(false)
   const [transactionSummary, setTransactionSummary] = useState(null)
@@ -168,17 +187,17 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       console.log('📁 Creating storage path:', `chatImages/${selectedChat.chatId}/${filename}`)
       
       // Create storage reference
-      const storageRef = ref(storage, `chatImages/${selectedChat.chatId}/${filename}`)
-      console.log('🔗 Storage reference created:', storageRef)
+      const storageReference = storageRef(storage, `chatImages/${selectedChat.chatId}/${filename}`)
+      console.log('🔗 Storage reference created:', storageReference)
       
       // Upload file to Firebase Storage
       console.log('📤 Uploading file to Firebase Storage...')
-      await uploadBytes(storageRef, file)
+      await uploadBytes(storageReference, file)
       console.log('✅ File uploaded successfully')
       
       // Get download URL
       console.log('🔗 Getting download URL...')
-      const downloadURL = await getDownloadURL(storageRef)
+      const downloadURL = await getDownloadURL(storageReference)
       console.log('✅ Download URL obtained:', downloadURL)
       
       return downloadURL
@@ -300,9 +319,22 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   }, [hasTransactionCompleted, selectedChat?.id, user?.uid])
   const aiSuggestionsCache = useRef(new Map())
   
+  // Clear cache on component mount to ensure fresh payment filtering
+  useEffect(() => {
+    console.log('🗑️ Clearing AI suggestions cache for fresh payment filtering')
+    aiSuggestionsCache.current.clear()
+  }, [])
+  
   // Trigger AI suggestions when new message arrives
   const triggerAISuggestions = async (messages) => {
     if (!user || !selectedChat || messages.length === 0) return;
+    
+    // Check if suggestions are locked (4-second cooldown)
+    const now = Date.now()
+    if (isSuggestionsLocked && now < suggestionsLockedUntil) {
+      console.log('🔒 Suggestions locked in triggerAISuggestions, skipping update. Remaining:', Math.ceil((suggestionsLockedUntil - now) / 1000), 'seconds')
+      return;
+    }
     
     try {
       console.log('🤖 Triggering AI suggestions for chat:', selectedChat.id);
@@ -315,8 +347,23 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       if (aiSuggestionsCache.current.has(cacheKey)) {
         console.log('🤖 Using cached AI suggestions for:', cacheKey);
         const cachedSuggestions = aiSuggestionsCache.current.get(cacheKey);
+        
+        // Lock suggestions for 4 seconds even when using cache
+        const lockUntil = now + 4000
+        setIsSuggestionsLocked(true)
+        setSuggestionsLockedUntil(lockUntil)
+        
+        console.log('🔒 Locking cached suggestions for 4 seconds until:', new Date(lockUntil).toLocaleTimeString())
+        
         setAiSuggestions(cachedSuggestions);
         setShowSuggestions(true);
+        
+        // Unlock suggestions after 4 seconds
+        setTimeout(() => {
+          console.log('🔓 Unlocking cached suggestions - new updates can now occur')
+          setIsSuggestionsLocked(false)
+        }, 4000)
+        
         return;
       }
       
@@ -348,11 +395,50 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       if (result && result.suggestions) {
         console.log('🤖 AI Suggestions received:', result);
         
-        // Store suggestions in cache
-        aiSuggestionsCache.current.set(cacheKey, result.suggestions);
+        // HARD FILTER: Remove ALL payment-related suggestions (phrase-based detection)
+        const paymentPhrases = [
+          'cash on', 'cash upon', 'cash for', 'cash payment',
+          'card payment', 'credit card', 'debit card',
+          'bank transfer', 'bank deposit',
+          'gcash payment', 'paypal payment',
+          'pay with cash', 'pay by cash',
+          'payment method', 'payment option',
+          'cod', 'cash on delivery'
+        ]
         
-        setAiSuggestions(result.suggestions);
+        const filteredSuggestions = result.suggestions.filter(suggestion => {
+          const suggestionText = suggestion.toLowerCase()
+          const containsPayment = paymentPhrases.some(phrase => suggestionText.includes(phrase))
+          
+          if (containsPayment) {
+            console.log('🚫 BLOCKED payment suggestion in triggerAISuggestions:', suggestion)
+            return false
+          } else {
+            console.log('✅ ALLOWED suggestion in triggerAISuggestions:', suggestion)
+            return true
+          }
+        }).slice(0, 3) // Limit to exactly 3 suggestions
+        
+        console.log('🔍 FINAL in triggerAISuggestions: Filtered', result.suggestions.length, 'suggestions to', filteredSuggestions.length, '(max 3)')
+        
+        // Lock suggestions for 2 seconds to prevent changes
+        const lockUntil = now + 2000
+        setIsSuggestionsLocked(true)
+        setSuggestionsLockedUntil(lockUntil)
+        
+        console.log('🔒 Locking suggestions for 2 seconds until:', new Date(lockUntil).toLocaleTimeString())
+        
+        // Store suggestions in cache
+        aiSuggestionsCache.current.set(cacheKey, filteredSuggestions);
+        
+        setAiSuggestions(filteredSuggestions);
         setShowSuggestions(true);
+        
+        // Unlock suggestions after 2 seconds
+        setTimeout(() => {
+          console.log('🔓 Unlocking suggestions - new updates can now occur')
+          setIsSuggestionsLocked(false)
+        }, 2000)
         
         // Update chat-specific transaction state
         setChatTransactionStates(prev => ({
@@ -381,6 +467,13 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   // Generate contextual AI suggestions based on transaction stage
   const generateContextualSuggestions = async () => {
     if (!user || !selectedChat || !userRole) return
+
+    // Check if suggestions are locked (2-second cooldown)
+    const now = Date.now()
+    if (isSuggestionsLocked && now < suggestionsLockedUntil) {
+      console.log('🔒 Suggestions locked, skipping update. Remaining:', Math.ceil((suggestionsLockedUntil - now) / 1000), 'seconds')
+      return
+    }
 
     try {
       console.log('🤖 Generating contextual AI suggestions for chat:', selectedChat.id)
@@ -434,9 +527,49 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       console.log('📥 AI response received:', result)
       
       if (result && result.suggestions && result.suggestions.length > 0) {
-        console.log('✅ Setting AI suggestions:', result.suggestions)
-        setAiSuggestions(result.suggestions)
-        setShowSuggestions(true)
+        console.log('✅ Raw AI suggestions received:', result.suggestions)
+        
+        // HARD FILTER: Remove ALL payment-related suggestions (phrase-based detection)
+        const paymentPhrases = [
+          'cash on', 'cash upon', 'cash for', 'cash payment',
+          'card payment', 'credit card', 'debit card',
+          'bank transfer', 'bank deposit',
+          'gcash payment', 'paypal payment',
+          'pay with cash', 'pay by cash',
+          'payment method', 'payment option',
+          'cod', 'cash on delivery'
+        ]
+        
+        const filteredSuggestions = result.suggestions.filter(suggestion => {
+          const suggestionText = suggestion.toLowerCase()
+          const containsPayment = paymentPhrases.some(phrase => suggestionText.includes(phrase))
+          
+          if (containsPayment) {
+            console.log('🚫 BLOCKED payment suggestion:', suggestion)
+            return false
+          } else {
+            console.log('✅ ALLOWED suggestion:', suggestion)
+            return true
+          }
+        }).slice(0, 3) // Limit to exactly 3 suggestions
+        
+        console.log('🔍 FINAL: Filtered', result.suggestions.length, 'suggestions to', filteredSuggestions.length, '(max 3)')
+        
+        // Lock suggestions for 2 seconds to prevent changes
+        const lockUntil = now + 2000
+        setIsSuggestionsLocked(true)
+        setSuggestionsLockedUntil(lockUntil)
+        
+        console.log('🔒 Locking suggestions for 2 seconds until:', new Date(lockUntil).toLocaleTimeString())
+        
+        setAiSuggestions(filteredSuggestions)
+        setShowSuggestions(true) // Always show suggestions, never hide
+        
+        // Unlock suggestions after 2 seconds
+        setTimeout(() => {
+          console.log('🔓 Unlocking suggestions - new updates can now occur')
+          setIsSuggestionsLocked(false)
+        }, 2000)
         
         // Update chat-specific transaction state from AI response
         const updatedChatState = {
@@ -469,9 +602,13 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         }
       } else {
         console.log('❌ No suggestions received from AI')
+        // Keep suggestions visible even if no new ones
+        setShowSuggestions(true)
       }
     } catch (error) {
       console.error('❌ Error generating contextual suggestions:', error)
+      // Keep suggestions visible even on error
+      setShowSuggestions(true)
     }
   }
 
@@ -542,53 +679,44 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     }
   }, [chatMessages, selectedChat?.id])
 
-  // Auto-generate AI suggestions when other user replies
-  useEffect(() => {
-    if (requestStatus === 'approved' && userRole && listingName && chatMessages.length > 0) {
-      // Get the last message
-      const lastMessage = chatMessages[chatMessages.length - 1]
-      
-      // Check if the last message is from the OTHER user ( not current user)
-      if (lastMessage && lastMessage.senderId !== user?.uid) {
-        console.log('🤖 Other user replied, triggering AI suggestions')
-        generateContextualSuggestions()
-      }
-    }
-  }, [chatMessages.length, requestStatus, userRole, listingName, user?.uid])
-
-  // Close AI suggestions when current user sends a message or clicks suggestion
-  useEffect(() => {
-    if (chatMessages.length > 0) {
-      const lastMessage = chatMessages[chatMessages.length - 1]
-      
-      // If last message is from current user, close suggestions and wait for reply
-      if (lastMessage && lastMessage.senderId === user?.uid) {
-        setShowSuggestions(false)
-      }
-    }
-  }, [chatMessages.length, user?.uid])
-
-  // Generate AI suggestions when other user replies (intelligent flow)
+  // Generate AI suggestions when other user replies (CONSOLIDATED to prevent race conditions)
   useEffect(() => {
     if (chatMessages.length > 0) {
       const lastMessage = chatMessages[chatMessages.length - 1]
       const isOtherUserReply = lastMessage.senderId !== user?.uid
       
-      console.log('🤖 Dashboard Intelligent AI Flow Analysis:', { 
+      console.log('🤖 CONSOLIDATED AI Flow Analysis:', { 
         messageCount: chatMessages.length,
         requestStatus, 
         userRole, 
         isOtherUserReply,
-        lastMessageSender: lastMessage?.senderId === user?.uid ? 'current user' : 'other user'
+        lastMessageSender: lastMessage?.senderId === user?.uid ? 'current user' : 'other user',
+        lastMessageText: lastMessage?.text?.slice(50) + '...'
       })
       
-      // Only trigger suggestions when OTHER user replies and there's an approved request
-      if (isOtherUserReply && requestStatus === 'approved' && userRole && listingName) {
-        console.log('🤖 Conditions met: Other user replied with approved request')
+      // Clear cache on every new message to ensure fresh context
+      console.log('🗑️ Clearing AI suggestions cache for fresh context')
+      aiSuggestionsCache.current.clear()
+      
+      // If last message is from current user, show thinking state
+      if (lastMessage && lastMessage.senderId === user?.uid) {
+        console.log('🤖 Current user sent message, showing thinking state')
+        setIsSuggestionsLocked(true)
+        setSuggestionsLockedUntil(Date.now() + 2000) // Reduced to 2 seconds
+        setShowSuggestions(true)
+        
+        // Unlock after 2 seconds
+        setTimeout(() => {
+          setIsSuggestionsLocked(false)
+        }, 2000)
+      }
+      // Always trigger suggestions when OTHER user replies and there's an approved request
+      else if (isOtherUserReply && requestStatus === 'approved' && userRole && listingName) {
+        console.log('🤖 Other user replied, generating fresh suggestions')
         generateContextualSuggestions()
       }
     }
-  }, [chatMessages.length, requestStatus, userRole, listingName]) // Remove waitingForReply dependency
+  }, [chatMessages.length, requestStatus, userRole, listingName, user?.uid])
 
   // Check if there's already an unanswered transaction completion message
   const hasUnansweredTransactionCompletion = (messages) => {
@@ -756,6 +884,11 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     alert('Coming soon')
   }
 
+  // Handle complete transaction button click
+  const handleCompleteTransaction = () => {
+    sendTransactionCompletionConfirmation()
+  }
+
   // Handle response to transaction popup (user messages with proper cleanup)
   const handleTransactionPopupResponse = async (response) => {
     if (!pendingTransactionPopup || !selectedChat || !user || !db) return
@@ -808,6 +941,85 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         
         if (bothSaidYes) {
           console.log('✅ Both users said yes - transaction completed')
+          
+          // Create transaction record for both users
+          try {
+            const listingId = extractListingIdFromChat()
+            if (listingId) {
+              console.log('🔍 Creating transaction record for listing:', listingId)
+              
+              // Get participant IDs (buyer and seller)
+              const participantIds = Object.keys(responses)
+              console.log('👥 Participants:', participantIds)
+              
+              // Determine buyer and seller by checking user roles
+              let buyerId = null
+              let sellerId = null
+              
+              for (const participantId of participantIds) {
+                const userDoc = await getDoc(doc(db, 'Users', participantId))
+                if (userDoc.exists()) {
+                  const userData = userDoc.data()
+                  console.log(`🔍 User ${participantId} role:`, userData.role)
+                  
+                  if (userData.role === 'crop_farmer') {
+                    buyerId = participantId
+                  } else if (userData.role === 'livestock_owner') {
+                    sellerId = participantId
+                  }
+                }
+              }
+              
+              if (!buyerId || !sellerId) {
+                console.error('❌ Could not determine buyer/seller roles:', { buyerId, sellerId })
+                throw new Error('Unable to determine buyer and seller roles')
+              }
+              
+              console.log('✅ Determined roles:', { buyerId, sellerId })
+              
+              // Get user details for both participants
+              const buyerDoc = await getDoc(doc(db, 'Users', buyerId))
+              const sellerDoc = await getDoc(doc(db, 'Users', sellerId))
+              
+              const buyerData = buyerDoc.exists() ? buyerDoc.data() : {}
+              const sellerData = sellerDoc.exists() ? sellerDoc.data() : {}
+              
+              // Get listing details
+              const listingDoc = await getDoc(doc(db, 'livestock_listings', listingId))
+              const listingData = listingDoc.exists() ? listingDoc.data() : {}
+              
+              // Format user names
+              const buyerName = `${buyerData.firstName || ''} ${buyerData.lastName || ''}`.trim() || 
+                              buyerData.email?.split('@')[0] || 'Unknown Buyer'
+              const sellerName = `${sellerData.firstName || ''} ${sellerData.lastName || ''}`.trim() || 
+                               sellerData.email?.split('@')[0] || 'Unknown Seller'
+              
+              // Create transaction data
+              const transactionData = {
+                buyerId,
+                sellerId,
+                listingId,
+                listingName: listingData.title || 'Untitled Listing',
+                listingDetails: listingData.description || listingData.details || '',
+                price: listingData.price || 0,
+                dateAdded: listingData.createdAt || new Date(),
+                buyerName,
+                sellerName,
+                chatId: selectedChat?.id || chatId
+              }
+              
+              console.log('💾 Transaction data prepared:', transactionData)
+              
+              // Create the transaction record
+              await createTransaction(transactionData)
+              console.log('✅ Transaction record created successfully')
+            } else {
+              console.log('⚠️ No listing ID found, skipping transaction creation')
+            }
+          } catch (error) {
+            console.error('❌ Error creating transaction record:', error)
+            // Don't break the completion flow if transaction creation fails
+          }
         }
         
         // Clear the popup and transaction status
@@ -1086,6 +1298,11 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
     })
 
     // Set up real-time listener for chats (without orderBy to avoid index requirement)
+    if (!db || !user?.uid) {
+      console.log('⚠️ Firebase db or user not available, skipping chat listener setup')
+      return
+    }
+    
     const chatsQuery = query(
       collection(db, 'chats'),
       where('participants', 'array-contains', user.uid)
@@ -1385,6 +1602,92 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       setHasTransactionCompleted(!!completedTransactionMessage || isTransactionCompletedByYesCount)
       
       // Check if current user has already rated the other user for this transaction
+      
+      // Create transaction record when both users agree
+      if (isTransactionCompletedByYesCount && selectedChat) {
+        createTransactionFromChat(selectedChat, messages)
+      }
+      
+      // Function to create transaction from chat data
+      const createTransactionFromChat = async (chatData, messages) => {
+        console.log('🔄 Creating transaction from chat:', chatData)
+        
+        // Check if transaction already exists for this chat
+        try {
+          const existingTransactionQuery = query(
+            collection(db, 'transactions'),
+            where('chatId', '==', chatData.id)
+          )
+          const existingSnapshot = await getDocs(existingTransactionQuery)
+          if (!existingSnapshot.empty) {
+            console.log('⚠️ Transaction already exists for chat:', chatData.id)
+            return
+          }
+        } catch (error) {
+          console.error('Error checking existing transaction:', error)
+        }
+        
+        // Extract listing information from chat
+        const listingData = chatData.listing || {}
+        const participants = chatData.participants || []
+        
+        // Determine buyer and seller based on roles
+        let buyerId, sellerId, buyerName, sellerName
+        
+        if (participants.length >= 2) {
+          // Assume first participant is buyer, second is seller (adjust based on your data structure)
+          buyerId = participants[0].uid || participants[0]
+          sellerId = participants[1].uid || participants[1]
+          
+          // Fetch user names
+          try {
+            const buyerDoc = await getDoc(doc(db, 'Users', buyerId))
+            const sellerDoc = await getDoc(doc(db, 'Users', sellerId))
+            
+            if (buyerDoc.exists()) {
+              const buyerData = buyerDoc.data()
+              buyerName = `${buyerData.firstName || ''} ${buyerData.lastName || ''}`.trim() || buyerData.email?.split('@')[0] || 'Unknown Buyer'
+            }
+            
+            if (sellerDoc.exists()) {
+              const sellerData = sellerDoc.data()
+              sellerName = `${sellerData.firstName || ''} ${sellerData.lastName || ''}`.trim() || sellerData.email?.split('@')[0] || 'Unknown Seller'
+            }
+          } catch (error) {
+            console.error('Error fetching user names:', error)
+            buyerName = 'Unknown Buyer'
+            sellerName = 'Unknown Seller'
+          }
+        }
+        
+        // Create transaction data
+        const transactionData = {
+          buyerId,
+          sellerId,
+          listingId: listingData.id || chatData.listingId,
+          listingName: listingData.title || listingData.name || 'Unknown Listing',
+          listingDetails: listingData.description || listingData.details || '',
+          price: listingData.price || 0,
+          dateAdded: listingData.createdAt || new Date(),
+          buyerName,
+          sellerName,
+          chatId: chatData.id
+        }
+        
+        // Create the transaction
+        try {
+          await createTransaction(transactionData)
+          console.log('✅ Transaction created successfully for chat:', chatData.id)
+          
+          // Mark chat as having transaction created to prevent duplicates
+          await updateDoc(doc(db, 'chats', chatData.id), {
+            transactionCreated: true,
+            transactionCreatedAt: serverTimestamp()
+          })
+        } catch (error) {
+          console.error('❌ Error creating transaction:', error)
+        }
+      }
       if (isTransactionCompletedByYesCount && user && selectedChat) {
         const checkUserRating = async () => {
           try {
@@ -1619,6 +1922,43 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         requestStatus: status
       })
       
+      // CRITICAL FIX: Also update the listing_requests collection for real-time sync
+      if (message.listingId && message.senderId) {
+        console.log('🔄 Updating listing_requests collection for real-time sync:', {
+          listingId: message.listingId,
+          senderId: message.senderId,
+          status: status
+        })
+        
+        try {
+          const listingRequestsQuery = query(
+            collection(db, 'listing_requests'),
+            where('listingId', '==', message.listingId),
+            where('requesterId', '==', message.senderId)
+          )
+          
+          const requestSnapshot = await getDocs(listingRequestsQuery)
+          if (!requestSnapshot.empty) {
+            const requestDoc = requestSnapshot.docs[0]
+            await updateDoc(doc(db, 'listing_requests', requestDoc.id), {
+              status: status,
+              updatedAt: serverTimestamp(),
+              responseMessage: status === 'approved' 
+                ? '✅ Request approved! You can now chat freely.'
+                : '❌ Request declined. Thank you for your interest.'
+            })
+            console.log('✅ listing_requests collection updated successfully')
+          } else {
+            console.log('⚠️ No matching document found in listing_requests collection')
+          }
+        } catch (listingUpdateError) {
+          console.error('❌ Failed to update listing_requests collection:', listingUpdateError)
+          // Don't fail the approval flow - chat message update already succeeded
+        }
+      } else {
+        console.log('⚠️ Missing listingId or requesterId in message - skipping listing_requests update')
+      }
+      
       // Send a response message
       const responseText = status === 'approved' 
         ? '✅ Request approved! You can now chat freely.'
@@ -1844,6 +2184,15 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                 <h3 className={styles.chatHeaderName}>{formatChatListDisplayName(selectedChat.otherUserName, selectedChat.listingName)}</h3>
               </div>
               <div className={styles.chatHeaderActions}>
+                {/* Done Transaction Button */}
+                <button 
+                  className={styles.doneTransactionBtn}
+                  onClick={handleCompleteTransaction}
+                  title="Mark this transaction as completed"
+                >
+                  Done Transaction
+                </button>
+                
                 {/* Report Button - same size as Rate User button was */}
                 <button 
                   className={styles.reportBtn}
@@ -1875,7 +2224,7 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                   {/* For messages with text or pending uploads, use messageBubble wrapper */}
                   {(message.text || message.imageUrl === 'pending') && (
                     <div className={`${styles.messageBubble} ${message.senderId === user?.uid ? styles.sent : styles.received}`}>
-                      <div className={styles.messageContent}>
+                      <div className={`${styles.messageContent} ${message.text?.includes("I am interested in your listing") ? styles.listingRequestMessage : ''}`}>
                         {/* Display text if present */}
                         {message.text && (
                           <p className={styles.messageText}>{message.text}</p>
@@ -2030,15 +2379,21 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                   {/* Collapsible Content */}
                   {isSuggestionsOpen && (
                     <div className={styles.aiSuggestionsList}>
-                      {aiSuggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          className={styles.suggestionBtn}
-                          onClick={() => useSuggestion(suggestion)}
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
+                      {isSuggestionsLocked ? (
+                        <div className={styles.suggestionsLockedIndicator}>
+                          <span>Thinking ...</span>
+                        </div>
+                      ) : (
+                        aiSuggestions.map((suggestion, index) => (
+                          <button
+                            key={index}
+                            className={styles.suggestionBtn}
+                            onClick={() => useSuggestion(suggestion)}
+                          >
+                            {suggestion}
+                          </button>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>

@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+sentence-transformers
+google-cloud-firestore
+python-dotenv
+numpy

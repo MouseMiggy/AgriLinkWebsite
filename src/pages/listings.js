@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { db, auth } from '../lib/firebase'
 import { collection, onSnapshot, query, where, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { getRecommendedListings } from '../utils/recommendationAlgorithm'
+import { getRecommendedListings, calculateDistance } from '../utils/recommendationAlgorithm'
 import { onAuthStateChanged } from 'firebase/auth'
 import { usePopup } from '../contexts/PopupContext'
 import ReportModal from '../components/ReportModal'
@@ -18,6 +18,10 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   const [filteredListings, setFilteredListings] = useState([])
   const [searchResults, setSearchResults] = useState([])
   const [outsideSearchResults, setOutsideSearchResults] = useState([])
+  
+  // Toast state for location permission
+  const [showLocationToast, setShowLocationToast] = useState(false)
+  const [locationToastMessage, setLocationToastMessage] = useState('')
   const [recentSearches, setRecentSearches] = useState([])
   const [showRecentSearches, setShowRecentSearches] = useState(false)
   const [user, setUser] = useState(null)
@@ -74,13 +78,6 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     }
   }, [initialSelectedListing])
 
-  // Function to truncate title to 20 characters
-  const truncateTitle = (title, maxLength = 20) => {
-    if (!title) return 'Unnamed Listing'
-    if (title.length <= maxLength) return title
-    return title.substring(0, maxLength) + '...'
-  }
-
   // Image modal functions
   const openImageModal = (imageUrl, imageAlt) => {
     setSelectedImage(imageUrl)
@@ -134,23 +131,12 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     }
   }
 
-  // Helper function to parse AI response into separate text and image analysis
-  const parseAIResponse = (reason) => {
+  // Helper function to get AI image analysis reason
+  const getAIImageAnalysis = (reason) => {
     if (!reason) {
-      return { textAnalysis: 'No analysis available', imageAnalysis: 'No analysis available' }
+      return 'No analysis available'
     }
-
-    // Try to split the response into text and image sections
-    const textMatch = reason.match(/Text Analysis:[\s\S]*?(?=Image Analysis:|$)/i)
-    const imageMatch = reason.match(/Image Analysis:[\s\S]*?(?=Overall Assessment:|$)/i)
-    
-    const textAnalysis = textMatch ? textMatch[0].replace('Text Analysis:', '').trim() : reason
-    const imageAnalysis = imageMatch ? imageMatch[0].replace('Image Analysis:', '').trim() : reason
-    
-    return {
-      textAnalysis: textAnalysis || 'No text analysis available',
-      imageAnalysis: imageAnalysis || 'No image analysis available'
-    }
+    return reason.trim()
   }
 
   // Modal functions
@@ -353,8 +339,9 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         // Update listing status to 'deleted' instead of deleting
         await updateDoc(doc(db, 'livestock_listings', listing.id), {
           status: 'deleted',
-          deletedAt: serverTimestamp()
+          dateDeleted: serverTimestamp()
         })
+        console.log('✅ Successfully deleted listing ID:', listing.id)
         showSuccessPopup('Success', 'Listing deleted successfully')
       } catch (error) {
         console.error('Error deleting listing:', error)
@@ -375,7 +362,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       try {
         await updateDoc(doc(db, 'livestock_listings', listing.id), {
           status: 'sold',
-          soldAt: serverTimestamp()
+          dateSold: serverTimestamp()
         })
         showSuccessPopup('Success', 'Listing marked as sold')
       } catch (error) {
@@ -386,6 +373,13 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   }
 
   const openDetailsModal = (listing) => {
+    console.log('🔍 OPENING DETAILS MODAL - listing object:', listing)
+    console.log('🔍 OPENING DETAILS MODAL - has semanticScore:', 'semanticScore' in listing)
+    console.log('🔍 OPENING DETAILS MODAL - semanticScore value:', listing.semanticScore)
+    console.log('🔍 OPENING DETAILS MODAL - listing keys:', Object.keys(listing))
+    console.log('🔍 OPENING DETAILS MODAL - searchResults length:', searchResults.length)
+    console.log('🔍 OPENING DETAILS MODAL - filteredListings length:', filteredListings.length)
+    
     setSelectedListing(listing)
     setShowDetailsModal(true)
     // Prevent background scrolling
@@ -586,6 +580,10 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         console.log('🔄 Updating existing listing:', editingListing.id)
         await updateDoc(doc(db, 'livestock_listings', editingListing.id), listingData)
         console.log('✅ Listing updated successfully')
+        
+        // Generate embedding for updated listing (fire-and-forget)
+        generateListingEmbedding(editingListing.id)
+        
         showSuccessPopup('Success', 'Listing updated successfully')
       } else {
         // Create new listing
@@ -593,6 +591,10 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         console.log('🆕 Creating new listing...')
         const docRef = await addDoc(collection(db, 'livestock_listings'), listingData)
         console.log('✅ New listing created with ID:', docRef.id)
+        
+        // Generate embedding for new listing (fire-and-forget)
+        generateListingEmbedding(docRef.id)
+        
         showSuccessPopup('Success', 'Listing created successfully')
       }
       
@@ -1314,40 +1316,49 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       setAuthLoading(false)
       return
     }
-
+    
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser)
+        console.log('🔍 User authenticated:', currentUser.uid)
         
         // Get user role from Firestore
         try {
           const userDoc = await getDoc(doc(db, 'Users', currentUser.uid))
           if (userDoc.exists()) {
             const userData = userDoc.data()
+            console.log('🔍 User profile loaded:', userData)
+            console.log('🔍 User location data:', userData.location)
+            
             setUserRole(userData.role)
             if (userData.location && typeof userData.location === 'object') {
+              console.log('🔍 DEBUG: Raw user location from Firestore:', userData.location)
+              console.log('🔍 DEBUG: Location field names:', Object.keys(userData.location))
               setUserLocation(userData.location)
+              console.log('✅ User location set:', userData.location)
             } else {
               setUserLocation(null)
+              console.log('❌ No valid user location found')
             }
           } else {
             setUserRole('crop_farmer')
             setUserLocation(null)
           }
         } catch (error) {
-          setError('Failed to load user role')
+          console.error('❌ Error loading user profile:', error)
           setUserRole('crop_farmer')
           setUserLocation(null)
         }
       } else {
         setUser(null)
         setUserRole(null)
+        setUserLocation(null)
       }
       setAuthLoading(false)
     })
 
-    return () => unsubscribe()
-  }, [auth, db])
+    return unsubscribe
+  }, [auth])
 
   // Load existing requests for crop farmers
   useEffect(() => {
@@ -1388,6 +1399,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     if (!user || !db || userRole !== 'crop_farmer') return
 
     console.log('🔍 Setting up listener for all request statuses by user:', user.uid)
+    console.log('🔄 LISTINGS COMPONENT MOUNTED - Starting real-time sync')
     
     const q = query(
       collection(db, 'listing_requests'),
@@ -1396,18 +1408,52 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const statuses = {}
+      console.log('📊 DEBUG: Raw snapshot docs count:', snapshot.size)
+      
       snapshot.forEach((doc) => {
         const data = doc.data()
+        console.log('📊 DEBUG: Request document:', {
+          id: doc.id,
+          listingId: data.listingId,
+          status: data.status,
+          requesterId: data.requesterId
+        })
         statuses[data.listingId] = data.status
       })
       
+      console.log('📊 DEBUG: Final request statuses object:', statuses)
       console.log('📊 Updated request statuses:', statuses)
       setRequestStatuses(statuses)
+      
+      // CRITICAL: Force re-render check
+      console.log('🔄 React state updated with request statuses')
     }, (error) => {
       console.error('Error loading request statuses:', error)
     })
 
-    return () => unsubscribe()
+    // FORCE REFRESH: Also fetch immediately on mount to ensure latest data
+    const forceRefresh = async () => {
+      try {
+        console.log('🔄 FORCE REFRESH: Fetching latest request statuses...')
+        const snapshot = await getDocs(q)
+        const statuses = {}
+        snapshot.forEach((doc) => {
+          const data = doc.data()
+          statuses[data.listingId] = data.status
+        })
+        console.log('🔄 FORCE REFRESH: Updated statuses:', statuses)
+        setRequestStatuses(statuses)
+      } catch (error) {
+        console.error('🔄 FORCE REFRESH: Error fetching statuses:', error)
+      }
+    }
+    
+    forceRefresh()
+
+    return () => {
+      console.log('🔄 LISTINGS COMPONENT UNMOUNTED - Cleaning up listener')
+      unsubscribe()
+    }
   }, [user, userRole])
 
 
@@ -1450,6 +1496,29 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     return () => unsubscribe()
   }, [db, user, userRole, authLoading])
 
+  // Check if user has location enabled and show toast if not
+  useEffect(() => {
+    if (!authLoading && user && userRole === 'crop_farmer' && !userLocation) {
+      setLocationToastMessage('Please enable your location in account settings to see distance to listings. This helps you find the nearest agricultural products.')
+      setShowLocationToast(true)
+      
+      // Auto-hide after 8 seconds
+      setTimeout(() => {
+        setShowLocationToast(false)
+      }, 8000)
+    }
+  }, [authLoading, user, userRole, userLocation])
+
+  // Handle toast click to navigate to account settings
+  const handleLocationToastClick = () => {
+    window.location.href = '/dashboard?tab=account'
+  }
+
+  // Dismiss toast
+  const dismissLocationToast = () => {
+    setShowLocationToast(false)
+  }
+
   // Fetch listings for crop farmers using context-based recommendation algorithm
   useEffect(() => {
     if (!db || authLoading || !user || userRole !== 'crop_farmer') return
@@ -1470,15 +1539,13 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
           minScore: 0.0,
           searchQuery: searchQuery.trim() || null
         })
-
-        console.log('✅ Recommended listings loaded:', {
-          totalListings: result.searchResults?.length || 0,
-          outsideSearchResults: result.outsideSearchResults?.length || 0,
-          hasSearchQuery: result.hasSearchQuery
-        })
-
-        // Set separate result arrays for dual pagination
-        setSearchResults(result.searchResults || [])
+        
+        console.log('📊 Recommended listings loaded:', result.length)
+        
+        // Don't overwrite searchResults if semantic search is active (has searchQuery)
+        if (!searchQuery) {
+          setSearchResults(result.searchResults || [])
+        }
         setOutsideSearchResults(result.outsideSearchResults || [])
         
         // Reset pagination pages when new data loads
@@ -1489,9 +1556,9 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         const allListings = result.searchResults || []
         const activeListings = allListings.filter(listing => 
           listing.status !== 'sold' && listing.status !== 'deleted'
-        )
-        setListings(activeListings)
-        setFilteredListings(activeListings)
+        );
+        setListings(activeListings);
+        setFilteredListings(activeListings);
       } catch (err) {
         console.error('❌ Error loading recommended listings for crop farmer:', err)
         setError('Failed to load listings')
@@ -1501,11 +1568,42 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     }
 
     loadRecommendedListings()
-  }, [db, user, userRole, authLoading, searchQuery])
+  }, [db, user, userRole, authLoading])
 
   // Search handling functions
+  const generateListingEmbedding = async (listingId) => {
+    try {
+      const semanticSearchUrl = process.env.NEXT_PUBLIC_SEMANTIC_SEARCH_URL || 'http://localhost:8000';
+      const response = await fetch(`${semanticSearchUrl}/embed-listing`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ listingId }),
+      });
+      
+      if (response.ok) {
+        console.log(`✅ Embedding generated for listing ${listingId}`);
+      } else {
+        console.warn(`⚠️ Failed to generate embedding for listing ${listingId}:`, response.status);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Error generating embedding for listing ${listingId}:`, error);
+      // Don't throw error - embedding generation is non-critical
+    }
+  };
+
   const handleSearchInputChange = (e) => {
     setSearchInput(e.target.value)
+  }
+
+  // Clear search function
+  const handleClearSearch = () => {
+    setSearchInput('')
+    setSearchQuery('')
+    setSearchResults([])
+    setShowRecentSearches(false)
+    console.log('🧹 Search cleared - returning to main listings')
   }
 
   const handleSearchKeyPress = (e) => {
@@ -1515,42 +1613,548 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     }
   }
 
-  const performSearch = (query) => {
-    setSearchQuery(query)
-    setSearchInput(query) // Keep the input value
+  // Helper function to categorize search queries
+  const categorizeSearch = (searchText) => {
+    const lowerText = searchText.toLowerCase();
     
-    // Save to recent searches
-    const updated = [query, ...recentSearches.filter(s => s !== query)].slice(0, 10)
-    setRecentSearches(updated)
-    localStorage.setItem('listingRecentSearches', JSON.stringify(updated))
+    // Poultry categories
+    if (lowerText.includes('manok') || lowerText.includes('chicken') || 
+        lowerText.includes('poultry') || lowerText.includes('itlog') || 
+        lowerText.includes('egg') || lowerText.includes('pugo') || 
+        lowerText.includes('pato') || lowerText.includes('itik')) {
+      return 'poultry';
+    }
+    
+    // Livestock categories
+    if (lowerText.includes('baka') || lowerText.includes('cow') || 
+        lowerText.includes('cattle') || lowerText.includes('kalabaw') || 
+        lowerText.includes('carabao') || lowerText.includes('kanding') || 
+        lowerText.includes('goat') || lowerText.includes('kuneho') || 
+        lowerText.includes('rabbit') || lowerText.includes('baboy') || 
+        lowerText.includes('pig') || lowerText.includes('swine')) {
+      return 'livestock';
+    }
+    
+    // Crop categories
+    if (lowerText.includes('palay') || lowerText.includes('rice') || 
+        lowerText.includes('mais') || lowerText.includes('corn') || 
+        lowerText.includes('kamote') || lowerText.includes('sweet potato') || 
+        lowerText.includes('talong') || lowerText.includes('eggplant') || 
+        lowerText.includes('sili') || lowerText.includes('chili')) {
+      return 'crops';
+    }
+    
+    // Fertilizer/Manure categories
+    if (lowerText.includes('fertilizer') || lowerText.includes('tahi') || 
+        lowerText.includes('dumi') || lowerText.includes('manure') || 
+        lowerText.includes('organic')) {
+      return 'fertilizer';
+    }
+    
+    return 'general';
+  };
 
-    // Filter listings
-    if (userRole === 'crop_farmer') {
-      const searchLower = query.toLowerCase()
-      const matchingListings = listings.filter(listing =>
-        listing.name?.toLowerCase().includes(searchLower) ||
-        listing.details?.toLowerCase().includes(searchLower) ||
-        listing.ownerName?.toLowerCase().includes(searchLower)
-      )
+  // Analyze search history to detect user interests
+  const analyzeUserInterests = async () => {
+    if (!user || !userRole) return null;
+    
+    try {
+      const userRef = doc(db, 'Users', user.uid);
+      const userDoc = await getDoc(userRef);
       
-      const nonMatchingListings = listings.filter(listing =>
-        !(listing.name?.toLowerCase().includes(searchLower) ||
-          listing.details?.toLowerCase().includes(searchLower) ||
-          listing.ownerName?.toLowerCase().includes(searchLower))
-      )
+      if (!userDoc.exists()) return null;
       
-      // Sort both by distance (nearest first)
-      const sortByDistance = (a, b) => {
-        const distA = a.distanceKm ?? Infinity
-        const distB = b.distanceKm ?? Infinity
-        return distA - distB
+      const userData = userDoc.data();
+      const searchHistory = userData.searchHistory || [];
+      
+      if (searchHistory.length < 5) return null; // Need at least 5 searches to detect interests
+      
+      // Count category frequency
+      const categoryCounts = {};
+      searchHistory.forEach(search => {
+        const category = search.category || 'general';
+        categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+      });
+      
+      // Calculate interest scores (0-1 scale)
+      const totalSearches = searchHistory.length;
+      const interestScores = {};
+      const detectedInterests = [];
+      
+      Object.entries(categoryCounts).forEach(([category, count]) => {
+        const score = count / totalSearches;
+        interestScores[category] = score;
+        
+        // Detect interest if category appears 25%+ of searches (at least 5 times)
+        if (count >= 5 && score >= 0.25) {
+          detectedInterests.push(category);
+        }
+      });
+      
+      // Store detected interests in Firestore
+      if (detectedInterests.length > 0) {
+        await updateDoc(userRef, {
+          detectedInterests: detectedInterests,
+          interestScores: interestScores,
+          lastInterestAnalysis: new Date().toISOString()
+        });
+        
+        console.log('🎯 User interests detected:', {
+          interests: detectedInterests,
+          scores: interestScores
+        });
+        
+        return { detectedInterests, interestScores };
       }
       
-      matchingListings.sort(sortByDistance)
-      nonMatchingListings.sort(sortByDistance)
+      return null;
+    } catch (error) {
+      console.error('❌ Error analyzing user interests:', error);
+      return null;
+    }
+  };
+
+  // Store search history in Firestore
+  const storeSearchHistory = async (searchText, category) => {
+    if (!user || !userRole) return;
+    
+    try {
+      const userRef = doc(db, 'Users', user.uid);
+      const searchEntry = {
+        query: searchText,
+        category: category,
+        timestamp: new Date().toISOString()
+      };
       
-      setSearchResults(matchingListings)
-      setOutsideSearchResults(nonMatchingListings)
+      await updateDoc(userRef, {
+        searchHistory: arrayUnion(searchEntry)
+      });
+      
+      // Keep only last 30 searches
+      const userDoc = await getDoc(userRef);
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const searchHistory = userData.searchHistory || [];
+        
+        if (searchHistory.length > 30) {
+          // Keep only the most recent 30 searches
+          const recentHistory = searchHistory.slice(-30);
+          await updateDoc(userRef, { searchHistory: recentHistory });
+        }
+      }
+      
+      console.log('📝 Search history stored:', { query: searchText, category });
+      
+      // Analyze interests after storing search history
+      await analyzeUserInterests();
+    } catch (error) {
+      console.error('❌ Error storing search history:', error);
+    }
+  };
+
+  // Boost listings based on user interests
+  const boostListingsByInterests = (listings, userInterests) => {
+    if (!userInterests || !userInterests.detectedInterests || userInterests.detectedInterests.length === 0) {
+      return listings;
+    }
+    
+    return listings.map(listing => {
+      let boostedScore = listing.semanticScore || 0;
+      const listingName = (listing.name || '').toLowerCase();
+      const listingDetails = (listing.details || '').toLowerCase();
+      
+      // Boost score based on detected interests
+      userInterests.detectedInterests.forEach(interest => {
+        const interestScore = userInterests.interestScores[interest] || 0;
+        
+        switch (interest) {
+          case 'poultry':
+            if (listingName.includes('manok') || listingName.includes('chicken') || 
+                listingName.includes('poultry') || listingName.includes('itlog') || 
+                listingName.includes('egg') || listingDetails.includes('poultry')) {
+              boostedScore += (interestScore * 0.3); // Boost by 30% of interest score
+            }
+            break;
+            
+          case 'livestock':
+            if (listingName.includes('baka') || listingName.includes('cow') || 
+                listingName.includes('kalabaw') || listingName.includes('goat') || 
+                listingName.includes('baboy') || listingDetails.includes('livestock')) {
+              boostedScore += (interestScore * 0.3);
+            }
+            break;
+            
+          case 'crops':
+            if (listingName.includes('palay') || listingName.includes('rice') || 
+                listingName.includes('mais') || listingName.includes('corn') || 
+                listingDetails.includes('crop') || listingDetails.includes('vegetable')) {
+              boostedScore += (interestScore * 0.3);
+            }
+            break;
+            
+          case 'fertilizer':
+            if (listingName.includes('fertilizer') || listingName.includes('manure') || 
+                listingName.includes('tahi') || listingDetails.includes('organic')) {
+              boostedScore += (interestScore * 0.3);
+            }
+            break;
+        }
+      });
+      
+      return { ...listing, boostedSemanticScore: boostedScore };
+    }).sort((a, b) => (b.boostedSemanticScore || 0) - (a.boostedSemanticScore || 0));
+  };
+
+  const performSearch = async (searchText) => {
+    console.log('🚀 PERFORM SEARCH CALLED with query:', searchText)
+    console.log('🚀 User role:', userRole)
+    console.log('🚀 Search results length before:', searchResults.length)
+    
+    // Categorize and store search
+    const searchCategory = categorizeSearch(searchText);
+    await storeSearchHistory(searchText, searchCategory);
+    
+    // Helper function to normalize coordinate format
+    const normalizeCoordinates = (location) => {
+      if (!location || typeof location !== 'object') return null;
+      
+      // Handle latitude/longitude format (preferred)
+      if (location.latitude != null && location.longitude != null) {
+        return {
+          latitude: parseFloat(location.latitude),
+          longitude: parseFloat(location.longitude)
+        };
+      }
+      
+      // Handle lat/lng format (fallback)
+      if (location.lat != null && location.lng != null) {
+        return {
+          latitude: parseFloat(location.lat),
+          longitude: parseFloat(location.lng)
+        };
+      }
+      
+      return null;
+    };
+    
+    // Clear previous results first
+    setSearchResults([]);
+    setOutsideSearchResults([]);
+    setCurrentPage(1);
+    setOutsideSearchPage(1);
+    setIsPaginating(true);
+    setShowRecentSearches(false);
+    setSearchQuery(searchText); // Keep the input value
+  
+  // Save to recent searches
+  const updated = [searchText, ...recentSearches.filter(s => s !== searchText)].slice(0, 10)
+  setRecentSearches(updated)
+  localStorage.setItem('listingRecentSearches', JSON.stringify(updated))
+
+  // Enhance search query with English translations for better multilingual matching
+  let enhancedSearchText = searchText.toLowerCase();
+  const tagalogToEnglish = {
+    'manok': ' chicken poultry',
+    'baka': ' cattle cow beef',
+    'kalabaw': ' water buffalo carabao',
+    'kabaw': ' water buffalo carabao',
+    'kanding': ' goat',
+    'kambing': ' goat',
+    'itlog': ' egg poultry duck itik pugo pato',
+    'pugo': ' quail duck',
+    'pato': ' duck',
+    'kuneho': ' rabbit',
+    'baboy': ' pig swine boar'
+  };
+  
+  // Check if search contains Tagalog terms and append English translations
+  for (const [tagalog, english] of Object.entries(tagalogToEnglish)) {
+    if (enhancedSearchText.includes(tagalog)) {
+      enhancedSearchText += english;
+      console.log(`🌐 Enhanced query: "${searchText}" -> "${enhancedSearchText}"`);
+      break;
+    }
+  }
+
+  try {
+    // Try semantic search first
+    const semanticSearchUrl = process.env.NEXT_PUBLIC_SEMANTIC_SEARCH_URL || 'http://localhost:8000';
+    console.log('📡 Calling backend at:', semanticSearchUrl)
+    console.log('🔍 Search query:', enhancedSearchText)
+    console.log('🌐 Environment check - NEXT_PUBLIC_SEMANTIC_SEARCH_URL:', process.env.NEXT_PUBLIC_SEMANTIC_SEARCH_URL)
+    
+    // Quick connection test
+    try {
+      const healthResponse = await fetch(`${semanticSearchUrl}/`, { method: 'GET' });
+      console.log('🏥 Backend health check:', healthResponse.status)
+    } catch (healthErr) {
+      console.log('❌ Backend health check failed:', healthErr)
+    }
+    
+    const res = await fetch(`${semanticSearchUrl}/search`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        text: enhancedSearchText, // Use enhanced query with translations
+        top_k: 50, // Increased from 20 to show more related results
+      })
+    });
+
+    console.log('📥 Backend response status:', res.status)
+    console.log('📥 Backend response ok:', res.ok)
+
+    if (res.ok) {
+    console.log('✅ SEMANTIC SEARCH PATH ACTIVATED - Debug logs should appear below')
+    console.log('✅ Semantic search successful - processing results...')
+    const payload = await res.json();
+    console.log('📊 Backend returned matches:', payload.matches.length)
+    console.log('🎯 Top 3 matches:', payload.matches.slice(0, 3).map(m => ({ id: m.id, score: m.score })))
+    
+    // Extract listing IDs from backend response
+    const listingIds = payload.matches.map(m => m.id)
+    console.log('🔍 Listing IDs from backend:', listingIds.slice(0, 10))
+
+    console.log('🔥 Fetching matched listings with optimized batch query...')
+    console.log('🔍 DEBUG: User location at search start:', userLocation)
+
+    // Fetch matched listings directly from Firestore
+    const matchedListings = []
+    const batchSize = 10
+
+    for (let i = 0; i < listingIds.length; i += batchSize) {
+      const batch = listingIds.slice(i, i + batchSize)
+      console.log(`📦 Fetching batch ${Math.floor(i/batchSize) + 1}:`, batch)
+
+      for (const listingId of batch) {
+        try {
+          const listingRef = doc(db, 'livestock_listings', listingId)
+          const listingDoc = await getDoc(listingRef)
+
+          if (listingDoc.exists()) {
+            const listingData = { id: listingDoc.id, ...listingDoc.data() }
+            console.log(`🔍 DEBUG: Raw listing data for "${listingData.name}":`, {
+              id: listingData.id,
+              name: listingData.name,
+              ownerLocation: listingData.ownerLocation,
+              location: listingData.location,
+              ownerLocationType: typeof listingData.ownerLocation,
+              ownerLocationKeys: listingData.ownerLocation ? Object.keys(listingData.ownerLocation) : 'null'
+            })
+            matchedListings.push(listingData)
+          } else {
+            console.log(`❌ Listing not found: ${listingId}`)
+          }
+        } catch (err) {
+          console.error(`❌ Error fetching listing ${listingId}:`, err)
+        }
+      }
+    }
+    
+    // Filter out deleted and sold listings
+    const activeListings = matchedListings.filter(listing => {
+      const isDeleted = listing.status === 'deleted';
+      const isSold = listing.status === 'sold';
+      
+      if (isDeleted || isSold) {
+        console.log(`🚫 Filtering out listing "${listing.name}" - Status: ${listing.status}`);
+        return false;
+      }
+      
+      return true;
+    });
+    
+    console.log(`📊 Filtered ${matchedListings.length - activeListings.length} deleted/sold listings`);
+    console.log(`✅ ${activeListings.length} active listings remaining for search`);
+
+    // Get user location once (same as getRecommendedListings method)
+    let userProfileLocation = null;
+    try {
+      const userDoc = await getDoc(doc(db, 'Users', user.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        userProfileLocation = userData.location;
+        console.log('🔍 DEBUG: User profile location cached for search:', userProfileLocation);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching user profile for search distance:', error);
+    }
+
+    // Map scores to listings and calculate distances
+    const idToScore = {};
+    payload.matches.forEach(m => idToScore[m.id] = m.score);
+    console.log('🗺️ Score mapping created for', Object.keys(idToScore).length, 'listings')
+
+    const ordered = activeListings
+      .map(l => {
+        const listingWithScore = { ...l, semanticScore: idToScore[l.id] };
+        
+        // Calculate distance using user profile location (same as regular listings)
+        if (userProfileLocation && l.ownerLocation) {
+          try {
+            console.log('🔍 DEBUG: Search distance calculation:', {
+              listingName: l.name,
+              hasUserProfileLocation: !!userProfileLocation,
+              hasOwnerLocation: !!l.ownerLocation,
+              userProfileLocation,
+              ownerLocation: l.ownerLocation
+            });
+            
+            if (userProfileLocation.latitude && userProfileLocation.longitude && 
+                l.ownerLocation.latitude && l.ownerLocation.longitude) {
+              const distance = calculateDistance(
+                userProfileLocation.latitude,
+                userProfileLocation.longitude,
+                l.ownerLocation.latitude,
+                l.ownerLocation.longitude
+              );
+              listingWithScore.distanceKm = distance;
+              console.log(`📍 Search distance calculated for "${l.name}": ${distance.toFixed(1)} km`);
+            } else {
+              listingWithScore.distanceKm = null;
+              console.log(`📍 Invalid coordinates for search distance: "${l.name}"`);
+            }
+          } catch (error) {
+            listingWithScore.distanceKm = null;
+            console.error(`❌ Error calculating search distance for "${l.name}":`, error);
+          }
+        } else {
+          listingWithScore.distanceKm = null;
+          if (!userProfileLocation) {
+            console.log(`📍 No user profile location for search distance: "${l.name}"`);
+          } else if (!l.ownerLocation) {
+            console.log(`📍 No owner location for search distance: "${l.name}"`);
+          }
+        }
+        
+        return listingWithScore;
+      })
+      .sort((a, b) => (b.semanticScore || 0) - (a.semanticScore || 0));
+
+    console.log('✨ Final search results:', ordered.length, 'listings')
+    console.log('🔍 Sample result with semanticScore:', ordered[0])
+        
+        // Log similarity scores to check threshold
+        console.log('📊 Similarity scores:', ordered.slice(0, 10).map(l => ({
+          name: l.name,
+          score: l.semanticScore
+        })))
+        
+        // Filter out sold and deleted listings from semantic search results
+        const activeSearchResults = ordered.filter(listing => 
+          !listing.isSold && !listing.deletedAt
+        );
+        console.log('🎯 Filtered out sold/deleted listings:', ordered.length - activeSearchResults.length, 'removed')
+        console.log('🔍 DEBUG: userLocation state:', userLocation)
+        console.log('🔍 DEBUG: Sample listing with distance:', activeSearchResults[0]?.distanceKm)
+        
+        // Apply similarity threshold - raised to 60% for better quality multilingual matching
+        console.log('🔍 DEBUG: All similarity scores before filtering:')
+        ordered.slice(0, 20).forEach((listing, index) => {
+          console.log(`${index + 1}. "${listing.name}" - Score: ${(listing.semanticScore || 0).toFixed(3)} - Distance: ${listing.distanceKm}`)
+        })
+        
+        const highQualityResults = activeSearchResults.filter(listing =>
+          (listing.semanticScore || 0) >= 0.60
+        );
+        console.log('🎯 Filtered out low similarity matches (<60%):', activeSearchResults.length - highQualityResults.length, 'removed')
+        console.log('📊 Final high-quality results count:', highQualityResults.length)
+        
+        // Show what passed the threshold
+        console.log('🔍 DEBUG: Results that passed 60% threshold:')
+        highQualityResults.slice(0, 10).forEach((listing, index) => {
+          console.log(`${index + 1}. "${listing.name}" - Score: ${(listing.semanticScore || 0).toFixed(3)}`)
+        })
+        
+        // If no results pass 60% threshold, lower it to 50%, then 40% for debugging
+        let finalResults = highQualityResults;
+        if (highQualityResults.length === 0 && activeSearchResults.length > 0) {
+          console.log('⚠️ No results passed 60% threshold, lowering to 50%...')
+          finalResults = activeSearchResults.filter(listing =>
+            (listing.semanticScore || 0) >= 0.50
+          )
+          console.log('📊 Results with 50% threshold:', finalResults.length)
+          
+          // If still no results, try 40%
+          if (finalResults.length === 0) {
+            console.log('⚠️ No results passed 50% threshold, lowering to 40%...')
+            finalResults = activeSearchResults.filter(listing =>
+              (listing.semanticScore || 0) >= 0.40
+            )
+            console.log('📊 Results with 40% threshold:', finalResults.length)
+            console.log('📊 Top 10 results at 40% threshold:', finalResults.slice(0, 10).map(l => ({
+              name: l.name,
+              score: l.semanticScore
+            })))
+          }
+        }
+        
+        // Get user interests and boost relevant listings
+        try {
+          const userRef = doc(db, 'Users', user.uid);
+          const userDoc = await getDoc(userRef);
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const userInterests = userData.detectedInterests ? {
+              detectedInterests: userData.detectedInterests,
+              interestScores: userData.interestScores || {}
+            } : null;
+            
+            // Apply interest-based boosting if user has detected interests
+            const boostedResults = userInterests ? 
+              boostListingsByInterests(finalResults, userInterests) : finalResults;
+            
+            console.log('🎯 Interest-based boosting applied:', {
+              hasInterests: !!userInterests,
+              interests: userInterests?.detectedInterests || [],
+              originalCount: finalResults.length,
+              boostedCount: boostedResults.length
+            });
+            
+            setSearchResults(boostedResults);
+            console.log(`Semantic search returned ${boostedResults.length} interest-boosted results`);
+          } else {
+            setSearchResults(finalResults);
+            console.log(`Semantic search returned ${finalResults.length} high-quality results`);
+          }
+        } catch (error) {
+          console.error('❌ Error applying interest-based boosting:', error);
+          setSearchResults(finalResults);
+          console.log(`Semantic search returned ${finalResults.length} high-quality results`);
+        }
+        
+        setIsPaginating(false); // Fix loading state
+      } else {
+        console.log('❌ Backend search failed - status:', res.status)
+        throw new Error("Semantic search service unavailable");
+      }
+    } catch (err) {
+      console.error("❌ Semantic search failed, falling back to keyword search:", err);
+      
+      // Fallback to original keyword search
+      setSearchQuery(searchText);
+      setSearchInput(searchText); // Keep the input value
+      
+      // Save to recent searches (already done above)
+      
+      // Filter listings using original keyword logic
+      if (userRole === 'crop_farmer') {
+        const searchLower = searchText.toLowerCase()
+        const matchingListings = listings.filter(listing =>
+          listing.name?.toLowerCase().includes(searchLower) ||
+          listing.details?.toLowerCase().includes(searchLower) ||
+          listing.ownerName?.toLowerCase().includes(searchLower)
+        )
+        
+        const nonMatchingListings = listings.filter(listing =>
+          !(listing.name?.toLowerCase().includes(searchLower) ||
+            listing.details?.toLowerCase().includes(searchLower) ||
+            listing.ownerName?.toLowerCase().includes(searchLower))
+        )
+        
+        setSearchResults(matchingListings)
+        setOutsideSearchResults(nonMatchingListings)
+      }
     }
   }
 
@@ -1567,14 +2171,23 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
 
   const clearSearch = () => {
     setSearchQuery('')
-    setSearchInput('')
-    setSearchResults([])
-    setOutsideSearchResults([])
+    const activeListings = listings.filter(listing => 
+      listing.status !== 'sold' && listing.status !== 'deleted'
+    )
+    
+    if (userRole === 'crop_farmer') {
+      // For crop farmers, listings already come from the recommendation algorithm
+      setFilteredListings(activeListings)
+      return
+    }
+
+    setFilteredListings(activeListings)
   }
 
-  // Filter listings based on search query for livestock owners only
+  // Filter listings based on search query
   useEffect(() => {
-    // Filter out sold and deleted listings for all users
+    if (!listings.length) return
+    
     const activeListings = listings.filter(listing => 
       listing.status !== 'sold' && listing.status !== 'deleted'
     )
@@ -1588,21 +2201,37 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     if (!searchQuery.trim()) {
       setFilteredListings(activeListings)
     } else {
-      const filtered = activeListings.filter((listing) =>
-        listing.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        listing.details?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        listing.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        listing.ownerName?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-      setFilteredListings(filtered)
+      // IMPORTANT: Use searchResults directly when search is active to preserve semanticScore
+      if (searchResults.length > 0) {
+        console.log('🎯 Using searchResults with semanticScore:', searchResults.length, 'listings')
+        setFilteredListings(searchResults)
+      } else {
+        // Fallback keyword filtering (no semanticScore available)
+        const filtered = activeListings.filter((listing) =>
+          listing.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          listing.details?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          listing.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          listing.ownerName?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        console.log('🔍 Using keyword filtered results:', filtered.length, 'listings')
+        setFilteredListings(filtered)
+      }
     }
-  }, [searchQuery, listings, userRole])
+  }, [searchQuery, listings, userRole]) // Remove searchResults to prevent overwriting semantic search
 
   // Calculate pagination values for main listings
-  const totalMainPages = Math.ceil(filteredListings.length / itemsPerPage)
+  // Use searchResults during search, otherwise use filteredListings (recommendations)
+  const mainListingsSource = searchQuery ? searchResults : filteredListings
+  console.log('🔍 DEBUG: mainListingsSource =', searchQuery ? 'searchResults' : 'filteredListings')
+  console.log('🔍 DEBUG: searchQuery =', searchQuery)
+  console.log('🔍 DEBUG: searchResults.length =', searchResults.length)
+  console.log('🔍 DEBUG: filteredListings.length =', filteredListings.length)
+  console.log('🔍 DEBUG: mainListingsSource.length =', mainListingsSource.length)
+  
+  const totalMainPages = Math.ceil(mainListingsSource.length / itemsPerPage)
   const mainStartIndex = (currentPage - 1) * itemsPerPage
   const mainEndIndex = mainStartIndex + itemsPerPage
-  const currentMainListings = filteredListings.slice(mainStartIndex, mainEndIndex)
+  const currentMainListings = mainListingsSource.slice(mainStartIndex, mainEndIndex)
 
   // Calculate pagination values for outside search results (20 per page)
   const outsideItemsPerPage = 20
@@ -1855,7 +2484,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       <div className={styles.cardContent}>
         <div className={styles.cardHeader}>
           <h3 className={styles.listingName}>
-            {truncateTitle(listing.name || listing.title || listing.productName)}
+            {listing.name || listing.title || listing.productName || 'Unnamed Listing'}
           </h3>
           <div className={styles.price}>
             {formatPrice(listing.price || listing.cost || listing.amount, listing.isFree)}
@@ -1885,6 +2514,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
           <span className={styles.listingDate}>
             Posted {formatDate(listing.createdAt || listing.timestamp || listing.dateCreated)}
           </span>
+          {/* Debug logging for distance display */}
+          {console.log(`🔍 Distance Debug for "${listing.name}": userLocation=${!!userLocation}, distanceKm=${listing.distanceKm}, condition=${userRole === 'crop_farmer' && listing.distanceKm != null}`)}
           {userRole === 'crop_farmer' && listing.distanceKm != null && (
             <span className={styles.listingLocation}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill={listing.distanceKm < 5 ? "#2d5a27" : "#fa9100"} xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '4px' }}>
@@ -1900,7 +2531,24 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         <div className={styles.cardActions}>
           {userRole === 'crop_farmer' ? (
             (() => {
+              // COMPREHENSIVE LOGGING: Verify button state for every listing
+              console.log('🔍 DEBUG: Rendering button for ALL LISTINGS:', {
+                listingId: listing.id,
+                listingName: listing.name || listing.title,
+                currentStatus: requestStatuses[listing.id],
+                allStatuses: Object.keys(requestStatuses),
+                buttonShouldBeApproved: requestStatuses[listing.id] === 'approved',
+                buttonShouldBePending: requestStatuses[listing.id] === 'pending'
+              })
+              
               const buttonState = getButtonState(listing.id)
+              console.log('🔍 DEBUG: Button state calculated for listing:', {
+                listingId: listing.id,
+                buttonState: buttonState,
+                finalButtonText: buttonState.text,
+                isDisabled: buttonState.disabled
+              })
+              
               return (
                 <button 
                   className={`${styles.requestButton} ${
@@ -1987,8 +2635,16 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                     onChange={handleSearchInputChange}
                     onKeyPress={handleSearchKeyPress}
                     className={styles.searchInput}
-                    disabled
                   />
+                  {searchInput && (
+                    <button 
+                      className={styles.clearSearchButton}
+                      onClick={handleClearSearch}
+                      title="Clear search"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -2057,8 +2713,12 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                   onFocus={() => setShowRecentSearches(true)}
                   className={styles.searchInput}
                 />
-                {searchQuery && (
-                  <button onClick={clearSearch} className={styles.clearSearchButton}>
+                {searchInput && (
+                  <button 
+                    onClick={handleClearSearch}
+                    className={styles.clearSearchButton}
+                    title="Clear search"
+                  >
                     ×
                   </button>
                 )}
@@ -2122,22 +2782,29 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
             </button>
           </div>
         )}
+
+        {/* Search Results Loading State */}
+        {searchQuery && userRole === 'crop_farmer' && isPaginating && (
+          <div className={styles.searchSection}>
+            <div className={styles.listingsGrid}>
+              <div className={styles.listingsLoadingContainer}>
+                <div className={styles.listingsLoadingSpinner}></div>
+                <p className={styles.listingsLoadingText}>Loading listings...</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Search Results Section - Dual Pagination */}
-        {searchQuery && userRole === 'crop_farmer' ? (
+        {searchQuery && userRole === 'crop_farmer' && !isPaginating ? (
           <>
             {/* Search Results Header */}
             <div className={styles.searchSection}>
               <h3 className={styles.sectionTitle}>
-                Search Results ({searchResults.length} found)
+                Search Results
               </h3>
               <div className={styles.listingsGrid}>
-                {isPaginating ? (
-                  <div className={styles.listingsLoadingContainer}>
-                    <div className={styles.listingsLoadingSpinner}></div>
-                    <p className={styles.listingsLoadingText}>Loading listings...</p>
-                  </div>
-                ) : (
-                  currentMainListings.map((listing) => (
+                {currentMainListings.map((listing) => (
                     <div 
                       key={listing.id} 
                       className={styles.listingCard}
@@ -2146,10 +2813,16 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                     >
                       {renderListingCard(listing)}
                     </div>
-                  ))
-                )}
+                  ))}
               </div>
             </div>
+
+            {/* End of Results - Only show when not loading and no more pages */}
+            {!isPaginating && totalMainPages <= 1 && currentMainListings.length > 0 && (
+              <div className={styles.endOfResults}>
+                <p>End of results</p>
+              </div>
+            )}
 
             {/* Pagination for Search Results - At the end */}
             {!isPaginating && totalMainPages > 1 && (
@@ -2199,13 +2872,6 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
               </div>
             )}
 
-            {/* End of Results Message */}
-            {searchResults.length > 0 && (
-              <div className={styles.endOfResults}>
-                <p>End of results</p>
-              </div>
-            )}
-
             {/* No Search Results Message */}
             {searchResults.length === 0 && (
               <div className={styles.noSearchResults}>
@@ -2216,8 +2882,21 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         ) : (
           /* Regular Listings Display - Non-search mode */
           filteredListings.length === 0 ? (
-            <div className={styles.emptyState}>
-              <p>no listing found</p>
+            <div className={styles.simpleEmptyState}>
+              <div className={styles.emptyIcon}>
+                <img src="/assets/icons/time-past.png" alt="No listings" />
+              </div>
+              <h3>No listings yet</h3>
+              <p className={styles.emptyStateDescription}>
+                Start sharing your livestock <br />
+                waste with the AgriLink community
+              </p>
+              <button 
+                className={styles.addListingButton}
+                onClick={openAddModal}
+              >
+                + Add Listings
+              </button>
             </div>
           ) : (
             <>
@@ -2365,35 +3044,35 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
               {modalStep === 2 && (
                 <div className={styles.stepContent}>
                   <h3 className={styles.stepTitle}>Measurements & Quantity</h3>
+                  <div className={styles.stepDescription}>
+                    <p>Enter the amount of livestock waste you have available and select the appropriate unit of measurement. This helps buyers understand exactly what quantity they're purchasing.</p>
+                  </div>
                   <div className={styles.formGroup}>
                     <label>Quantity *</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      className={styles.input}
-                      placeholder="e.g., 50, 100, 500"
-                      value={formData.measurements}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/[^0-9]/g, '')
-                        setFormData({...formData, measurements: value})
-                      }}
-                    />
-                  </div>
-                  
-                  <div className={styles.formGroup}>
-                    <label>Unit of Measurement *</label>
-                    <div className={styles.measurementButtons}>
-                      {measurementUnits.map((unit) => (
-                        <button
-                          key={unit}
-                          type="button"
-                          className={`${styles.measurementButton} ${formData.measurementUnit === unit ? styles.active : ''}`}
-                          onClick={() => setFormData({...formData, measurementUnit: unit})}
-                        >
-                          {unit}
-                        </button>
-                      ))}
+                    <div className={styles.quantityInputGroup}>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        className={styles.quantityInput}
+                        placeholder="e.g., 50, 100, 500"
+                        value={formData.measurements}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '')
+                          setFormData({...formData, measurements: value})
+                        }}
+                      />
+                      <select
+                        className={styles.unitSelect}
+                        value={formData.measurementUnit}
+                        onChange={(e) => setFormData({...formData, measurementUnit: e.target.value})}
+                      >
+                        {measurementUnits.map((unit) => (
+                          <option key={unit} value={unit}>
+                            {unit}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -2403,34 +3082,33 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
               {modalStep === 3 && (
                 <div className={styles.stepContent}>
                   <h3 className={styles.stepTitle}>Pricing</h3>
+                  <div className={styles.stepDescription}>
+                    <p>Set a competitive price for your livestock waste or offer it for free. Consider factors like quantity, quality, and local market rates when pricing your listing.</p>
+                  </div>
                   <div className={styles.formGroup}>
-                    <label>Set Price</label>
-                    <div className={styles.pricingOptions}>
+                    <label>Price</label>
+                    <div className={styles.pricingInputGroup}>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        className={styles.priceInput}
+                        placeholder="0.00"
+                        value={formData.isFree ? '' : formData.price}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^0-9.]/g, '')
+                          setFormData({...formData, price: value, isFree: false})
+                        }}
+                        disabled={formData.isFree}
+                      />
                       <button
                         type="button"
-                        className={`${styles.freeButton} ${formData.isFree ? styles.active : ''}`}
-                        onClick={() => setFormData({...formData, isFree: true, price: ''})}
+                        className={`${styles.freeToggle} ${formData.isFree ? styles.active : ''}`}
+                        onClick={() => setFormData({...formData, isFree: !formData.isFree, price: ''})}
                       >
                         Free
                       </button>
                     </div>
-                  </div>
-                  
-                  <div className={styles.formGroup}>
-                    <label>Price (₱) {!formData.isFree && '*'}</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      className={styles.input}
-                      placeholder="Enter price in Philippine Peso"
-                      value={formData.price}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/[^0-9]/g, '')
-                        setFormData({...formData, price: value})
-                      }}
-                      onFocus={() => setFormData({...formData, isFree: false})}
-                    />
                   </div>
                 </div>
               )}
@@ -2443,11 +3121,13 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                   {/* AI Verification Info Box */}
                   {userRole === 'livestock_owner' && (
                     <div className={styles.verificationInfoBox}>
-                      <div className={styles.infoIcon}>ℹ️</div>
                       <div className={styles.infoText}>
                         <strong>AI Image Verification (Optional)</strong>
                         <p>Your image will be verified by AI to confirm it contains legitimate livestock waste or processed fertilizer. You can still create your listing even if verification fails or if the image isn't recognized as livestock waste.</p>
-                        <p><strong>Note:</strong> If the listing is not verified by AI, the listing might be reported for non-agricultural content.</p>
+                      </div>
+                      
+                      <div className={styles.noteContainer}>
+                        <p><strong>Note: </strong>If the listing is not verified by AI, the listing might be reported for non-agricultural content or not a livestock waste.</p>
                       </div>
                     </div>
                   )}
@@ -2487,36 +3167,31 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                               </div>
                             ) : imageValidationResult ? (
                               <>
-                                {/* AI Text Analysis Section */}
-                                <div className={styles.analysisContainer}>
-                                  <h4 className={styles.analysisHeader}>Text Analysis</h4>
-                                  <div className={styles.analysisContent}>
-                                    {imageValidationResult ? (() => {
-                                      const parsed = parseAIResponse(imageValidationResult.reason)
-                                      return parsed.textAnalysis
-                                    })() : 'No text analysis available'}
-                                  </div>
-                                </div>
-
                                 {/* AI Image Analysis Section */}
                                 <div className={styles.analysisContainer}>
-                                  <h4 className={styles.analysisHeader}>Image Analysis</h4>
+                                  <h4 className={styles.analysisHeader}>AI Verification</h4>
                                   <div className={styles.analysisContent}>
-                                    {imageValidationResult ? (() => {
-                                      const parsed = parseAIResponse(imageValidationResult.reason)
-                                      return parsed.imageAnalysis
-                                    })() : 'No image analysis available'}
+                                    {imageValidationResult ? getAIImageAnalysis(imageValidationResult.reason) : 'No analysis available'}
                                   </div>
-                                  <button 
-                                    className={styles.revalidateButton}
-                                    onClick={revalidateImage}
-                                    disabled={isImageValidating}
-                                  >
-                                    {isImageValidating ? 'Re-validating...' : 'Re-validate Image'}
-                                  </button>
                                 </div>
+                                
+                                <button 
+                                  className={styles.revalidateButton}
+                                  onClick={revalidateImage}
+                                  disabled={isImageValidating}
+                                >
+                                  Re-analyze Image
+                                </button>
                               </>
-                            ) : null}
+                            ) : (
+                              <button 
+                                className={styles.validateButton}
+                                onClick={() => validateImageWithAI(modalImage)}
+                                disabled={isImageValidating}
+                              >
+                                {isImageValidating ? 'Analyzing...' : 'Verify with AI'}
+                              </button>
+                            )}
                           </div>
                         )}
                       </>
@@ -2623,7 +3298,9 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
             <div className={styles.modalHeader}>
               <div className={styles.headerContent}>
                 <div className={styles.headerTitleRow}>
-                  <h2>{selectedListing.name || 'Unnamed Listing'}</h2>
+                  <div>
+                    <h2>{selectedListing.name || 'Unnamed Listing'}</h2>
+                  </div>
                   <span className={styles.headerPrice}>
                     {formatPrice(selectedListing.price, selectedListing.isFree)}
                   </span>
@@ -2671,34 +3348,27 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                 <div className={styles.detailsRight}>
                   {/* Owner Info */}
                   <div className={styles.detailsSection}>
+                    <h4>Listing owner:</h4>
                     <p className={styles.detailsOwner}>
-                      by {selectedListing.ownerName || 'Unknown Owner'}
+                      {selectedListing.ownerName || 'Unknown Owner'}
                       <span className={styles.detailsRating}>
                         ⭐ {typeof selectedListing.ownerRating === 'number' ? selectedListing.ownerRating.toFixed(1) : '0.0'}
                       </span>
                     </p>
                   </div>
                   
-                  {/* Description */}
-                  {selectedListing.details && (
-                    <div className={styles.detailsSection}>
-                      <h4>Description</h4>
-                      <p className={styles.detailsDescription}>{selectedListing.details}</p>
-                    </div>
-                  )}
-                  
                   {/* Quantity and Distance/Location */}
                   <div className={styles.detailsRow}>
                     {selectedListing.measurements && (
                       <div className={styles.detailsSection}>
-                        <h4>Quantity</h4>
+                        <h4>Quantity:</h4>
                         <p>{selectedListing.measurements} {selectedListing.measurementUnit || 'units'}</p>
                       </div>
                     )}
                     
                     {userRole === 'crop_farmer' && selectedListing.distanceKm != null && (
                       <div className={styles.detailsSection}>
-                        <h4>Distance</h4>
+                        <h4>Distance:</h4>
                         <p style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <svg width="16" height="16" viewBox="0 0 24 24" fill={selectedListing.distanceKm < 5 ? "#2d5a27" : "#fa9100"} xmlns="http://www.w3.org/2000/svg">
                             <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
@@ -2711,6 +3381,31 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                     )}
                   </div>
                   
+                  {/* Similarity Score - Always visible for debugging */}
+                  <div className={styles.detailsSection}>
+                    <h4>Similarity score:</h4>
+                    <div className={styles.similarityScore}>
+                      {selectedListing?.semanticScore ? 
+                        `Match: ${(selectedListing.semanticScore * 100).toFixed(1)}%` : 
+                        'No score available'
+                      }
+                    </div>
+                    {(() => {
+                      console.log('🔍 MODAL RENDER DEBUG - selectedListing:', selectedListing)
+                      console.log('🔍 MODAL RENDER DEBUG - semanticScore:', selectedListing?.semanticScore)
+                      console.log('🔍 MODAL RENDER DEBUG - semanticScore type:', typeof selectedListing?.semanticScore)
+                      return null
+                    })()}
+                  </div>
+                  
+                  {/* Description */}
+                  {selectedListing.details && (
+                    <div className={styles.detailsSection}>
+                      <h4>Description:</h4>
+                      <p className={styles.detailsDescription}>{selectedListing.details}</p>
+                    </div>
+                  )}
+                  
                 </div>
               </div>
             </div>
@@ -2722,10 +3417,30 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                   return (
                     <div className={styles.cropFarmerActions}>
                       <button 
-                        className={`${styles.requestButton} ${
+                        className={styles.reportListingButton}
+                        onClick={() => {
+                          closeDetailsModal()
+                          handleReportListing(selectedListing)
+                        }}
+                        title="Report this listing"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 9v4M12 17h.01M5.07 19H19a2 2 0 001.75-2.96l-7-12a2 2 0 00-3.5 0l-7 12A2 2 0 005.07 19z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Report
+                      </button>
+                      <button 
+                        className={`${styles.reportListingButton} ${
                           requestStatuses[selectedListing?.id] === 'pending' ? styles.cancelButton : 
                           requestStatuses[selectedListing?.id] === 'approved' ? styles.approvedButton : ''
                         }`}
+                        style={{
+                          backgroundColor: requestStatuses[selectedListing?.id] === 'pending' ? '#fff' : '#fa9100',
+                          color: 'white',
+                          outline: 'none',
+                          border: 'none',
+                          boxShadow: 'none'
+                        }}
                         disabled={buttonState.disabled}
                         onClick={() => {
                           if (requestStatuses[selectedListing?.id] === 'pending') {
@@ -2745,19 +3460,6 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
                         }}
                       >
                         {buttonState.text}
-                      </button>
-                      <button 
-                        className={styles.reportListingButton}
-                        onClick={() => {
-                          closeDetailsModal()
-                          handleReportListing(selectedListing)
-                        }}
-                        title="Report this listing"
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M12 9v4M12 17h.01M5.07 19H19a2 2 0 001.75-2.96l-7-12a2 2 0 00-3.5 0l-7 12A2 2 0 005.07 19z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                        Report
                       </button>
                     </div>
                   )
@@ -2833,6 +3535,24 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         </div>,
         document.body
       )}
+      
+      {/* Location Permission Toast - Sliding from top-right */}
+      {showLocationToast && (
+        <div 
+          className={`${styles.toast} ${styles.show}`}
+          onClick={handleLocationToastClick}
+          style={{ cursor: 'pointer' }}
+        >
+          <i className={`fas fa-map-marker-alt ${styles.toastIcon}`}></i>
+          <span className={styles.toastMessage}>{locationToastMessage}</span>
+          <button className={styles.toastClose} onClick={(e) => {
+            e.stopPropagation()
+            dismissLocationToast()
+          }}>
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      )}
     </div>
-  )
+  );
 }

@@ -158,13 +158,15 @@ export default function RoleSelection() {
         <div className={styles.content}>
           <div className={styles.header}>
             <div className={styles.logoContainer}>
-              <img 
-                src="/assets/images/AgrilinkLogo.png" 
-                alt="AgriLink Logo" 
-                className={styles.logo}
-              />
+            
             </div>
-            <h1 className={styles.title}>Welcome to AgriLink</h1>
+            <h1 className={styles.title}>
+              Welcome to   <img 
+                src="/assets/images/AgrilinkLogo.png" 
+                alt="AgriLink" 
+                className={styles.titleLogo}
+              />
+            </h1>
             <p className={styles.subtitle}>
               Select your role to continue
             </p>
@@ -217,9 +219,6 @@ export default function RoleSelection() {
                 )}
               </button>
               
-              <p className={styles.helpText}>
-                You can change this later in settings
-              </p>
             </div>
           </div>
         </div>

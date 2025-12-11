@@ -9,6 +9,88 @@
   isolation: isolate;
 }
 
+/* Toast Notification - Sliding from top-right */
+.toast {
+  position: fixed;
+  top: 6rem;
+  right: 1rem;
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 8px 32px rgba(238, 90, 36, 0.3);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 300px;
+  max-width: 400px;
+  transform: translateX(100%);
+  opacity: 0;
+  transition: all 0.3s ease;
+  font-family: 'Poppins', sans-serif;
+  cursor: pointer;
+}
+
+.toast.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toastIcon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.toastMessage {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.toastClose {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.5rem;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.toastClose:hover {
+  opacity: 1;
+}
+
+/* Clear Search Button */
+.clearSearchButton {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  outline: none;
+  border-radius: 15px;
+  color: #000000; /* Black X icon */
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
+.clearSearchButton:hover {
+  background: #d7d7d7;
+  color: #333;
+}
+
+.clearSearchButton:active {
+  background: #e0e0e0;
+}
+
 /* Header Container */
 .headerContainer {
   background: white;
@@ -244,12 +326,84 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 320px;
+  min-height: 380px; /* Fixed minimum height for uniform cards */
 }
 
 .listingCard:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.simpleEmptyState {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+}
+
+.simpleEmptyState.stepTitle {
+  font-size: 20px;
+  color: #1c1e21;
+  margin: 0 0 16px 0;
+  font-family: 'Poppins', sans-serif;
+}
+
+.stepDescription {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-left: 4px solid #fa9100;
+  border-radius: 4px;
+}
+
+.stepDescription p {
+  margin: 0;
+  color: #6c757d;
+  font-size: 14px;
+  line-height: 1.5;
+  font-family: 'Poppins', sans-serif;
+}
+
+.emptyIcon {
+  margin-bottom: 16px;
+}
+
+.emptyIcon img {
+  width: 60px;
+  height: 60px;
+  opacity: 0.3;
+}
+
+.emptyStateDescription {
+  font-size: 14px;
+  color: #65676b;
+  margin: 0 0 24px 0;
+  line-height: 1.4;
+}
+
+.addListingBtn {
+  background: #2d5a27;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.addListingBtn:hover {
+  background: #3a6b34;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(45, 90, 39, 0.3);
+}
+
+.addListingBtn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(45, 90, 39, 0.2);
 }
 
 .imageContainer {
@@ -326,6 +480,7 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 220px; /* Fixed height for content area below image */
 }
 
 .cardHeader {
@@ -342,6 +497,14 @@
   margin: 0;
   flex: 1;
   margin-right: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
+  height: 2.8em; /* Fixed height: exactly 2 lines * 1.4 line-height */
+  min-height: 2.8em; /* Ensure minimum height */
 }
 
 .price {
@@ -668,22 +831,6 @@
   align-items: center;
 }
 
-.clearSearchButton {
-  position: absolute;
-  right: 12px;
-  background: none;
-  border: none;
-  font-size: 24px;
-  color: #65676b;
-  cursor: pointer;
-  padding: 4px 8px;
-  line-height: 1;
-}
-
-.clearSearchButton:hover {
-  color: #1c1e21;
-}
-
 .recentSearchesDropdown {
   position: absolute;
   top: calc(100% + 8px);
@@ -776,9 +923,11 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin: 12px 0;
+  margin-top: auto; /* Push to bottom of card */
+  margin-bottom: 0;
   font-size: 12px;
   color: #65676b;
+  min-height: 40px; /* Fixed height for date and distance section */
 }
 
 .listingDate {
@@ -794,8 +943,58 @@
 .emptyState {
   grid-column: 1 / -1;
   text-align: center;
-  padding: 60px 20px;
+  padding: 80px 40px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: 2px dashed #e1e5e9;
+  max-width: 600px;
+  margin: 40px auto;
+}
+
+.emptyIcon {
+  font-size: 80px;
+  margin-bottom: 24px;
+  opacity: 0.8;
+}
+
+.emptyState h3 {
+  font-size: 28px;
+  margin: 0 0 16px 0;
+  color: #1c1e21;
+  font-weight: 600;
+}
+
+.emptyState p {
+  font-size: 16px;
+  line-height: 1.6;
+  max-width: 480px;
+  margin: 0 auto 32px auto;
   color: #65676b;
+}
+
+.createFirstListingBtn {
+  background: linear-gradient(135deg, #fa9100, #ff8c00);
+  color: white;
+  border: none;
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(250, 145, 0, 0.3);
+}
+
+.createFirstListingBtn:hover {
+  background: linear-gradient(135deg, #ff8c00, #ff7700);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(250, 145, 0, 0.4);
+}
+
+.createFirstListingBtn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(250, 145, 0, 0.3);
 }
 
 .emptyIcon {
@@ -1400,15 +1599,36 @@
 }
 
 .detailsDescription {
-  max-height: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 5;
-  line-clamp: 5;
-  -webkit-box-orient: vertical;
   font-size: 16px;
   line-height: 1.5;
+}
+
+.similarityScore {
+  font-size: 14px;
+  color: #42b883;
+  font-weight: 600;
+  margin-top: 4px;
+  background: rgba(66, 184, 131, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.similarityScoreSection {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(66, 184, 131, 0.05);
+  border: 1px solid rgba(66, 184, 131, 0.2);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.similarityScoreSection .similarityScore {
+  font-size: 16px;
+  margin-top: 0;
+  background: rgba(66, 184, 131, 0.15);
+  padding: 6px 12px;
+  border-radius: 6px;
 }
 
 /* Mobile responsive */
@@ -1737,7 +1957,7 @@
 
 /* Fix modal content overflow */
 .stepContent {
-  padding: 32px 0;
+  padding: 10px 0;
   overflow-y: visible;
 }
 
@@ -2249,7 +2469,7 @@
 
 .contentArea {
   flex: 1;
-  padding: 30px;
+  padding: 0px 10px 30px 20px;
   overflow-y: auto;
   background: white;
   height: calc(100vh - 200px);
@@ -2276,7 +2496,97 @@
   appearance: textfield;
 }
 
-/* Measurement Buttons */
+/* Measurement Input Group */
+.quantityInputGroup {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.quantityInput {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #dddfe2;
+  border-radius: 6px;
+  font-size: 14px;
+  background-color: white;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  font-family: 'Poppins', sans-serif;
+}
+
+.quantityInput:focus {
+  border-color: #fa9100;
+}
+
+.unitSelect {
+  min-width: 120px;
+  padding: 10px;
+  border: 1px solid #dddfe2;
+  border-radius: 6px;
+  font-size: 14px;
+  background-color: white;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  font-family: 'Poppins', sans-serif;
+}
+
+/* Pricing Input Group */
+.pricingInputGroup {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.priceInput {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #dddfe2;
+  border-radius: 6px;
+  font-size: 14px;
+  background-color: white;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  font-family: 'Poppins', sans-serif;
+}
+
+.priceInput:focus {
+  border-color: #fa9100;
+}
+
+.priceInput:disabled {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  cursor: not-allowed;
+}
+
+.freeToggle {
+  min-width: 80px;
+  padding: 10px 16px;
+  border: 2px solid #dddfe2;
+  background: white;
+  color: #6c757d;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Poppins', sans-serif;
+}
+
+.freeToggle:hover {
+  border-color: #fa9100;
+  color: #fa9100;
+}
+
+.freeToggle.active {
+  background: #fa9100;
+  color: white;
+  border-color: #fa9100;
+}
 .measurementButtons {
   display: flex;
   flex-wrap: wrap;
@@ -2387,9 +2697,7 @@
 }
 
 .verificationInfoBox {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  display: block;
   padding: 16px;
   margin-bottom: 20px;
   background: #e7f3ff;
@@ -2405,7 +2713,25 @@
 }
 
 .infoText {
-  flex: 1;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.noteContainer {
+  display: block;
+  padding: 12px;
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.noteContainer p {
+  margin: 0;
+  color: #856404;
+  font-size: 13px;
+  line-height: 1.4;
+  font-family: 'Poppins', sans-serif;
 }
 
 .infoText strong {
@@ -2425,7 +2751,6 @@
 /* AI Validation Styles */
 .validationStatus {
   margin-top: 16px;
-  padding: 12px;
   border-radius: 8px;
   background: #f8f9fa;
 }

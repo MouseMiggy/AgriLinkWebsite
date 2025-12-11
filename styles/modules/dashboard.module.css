@@ -9,6 +9,61 @@
   scrollbar-width: none;  /* Firefox */
 }
 
+/* Toast Notification - Sliding from top-right */
+.toast {
+  position: fixed;
+  top: 6rem;
+  right: 1rem;
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 8px 32px rgba(40, 167, 69, 0.3);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 300px;
+  max-width: 400px;
+  transform: translateX(100%);
+  opacity: 0;
+  transition: all 0.3s ease;
+  font-family: 'Poppins', sans-serif;
+}
+
+.toast.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toastIcon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.toastMessage {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.toastClose {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.5rem;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.toastClose:hover {
+  opacity: 1;
+}
+
 .container::-webkit-scrollbar {
   display: none;
 }
@@ -1332,7 +1387,7 @@
 }
 
 .menuDropdownItem:hover {
-  background: rgba(250, 145, 0, 0.1);
+  background: #f0f2f5;
 }
 
 .menuDropdownIcon {
@@ -1369,11 +1424,54 @@
 }
 
 .leftLogo {
-  max-width: 120px;
-  max-height: 60px;
+  max-width: 100px;
+  max-height: 50px;
   width: auto;
   height: auto;
   object-fit: contain;
+}
+
+/* Login Toast */
+.loginToast {
+  position: fixed;
+  top: 10px;
+  right: 90px;
+  z-index: 10000;
+  padding: 16px 24px;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  min-width: 300px;
+  max-width: 400px;
+  background: #2d5a27;
+  color: white;
+}
+
+.cropFarmerToast {
+  background: #2d5a27;
+  color: white;
+}
+
+.livestockOwnerToast {
+  background: #fa9100;
+  color: white;
+}
+
+.defaultToast {
+  background: #2d5a27;
+  color: white;
+}
+
+.toastMessage {
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-align: center;
+  flex: 1;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* Left Container Profile Header */
@@ -4049,11 +4147,11 @@
   width: 360px;
   padding: 20px 12px;
   position: fixed;
-  right: 0;
+  right: 50px;
   height: calc(100vh - 120px);
   max-height: 650px;
   overflow-y: auto;
-  background: #f0f2f5;
+  background: #f0f2f500;
   top: 90px;
 }
 

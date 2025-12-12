@@ -67,6 +67,14 @@ export default function LocationPermission() {
     setAllowLocationLoading(true)
     setLocationStatus('pending')
     
+    // Check if geolocation is supported
+    if (!navigator.geolocation) {
+      setAllowLocationLoading(false)
+      setLocationStatus('denied')
+      showErrorToast('Geolocation is not supported by your browser.')
+      return
+    }
+    
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
@@ -107,25 +115,25 @@ export default function LocationPermission() {
         let errorMessage = 'Unable to get your location. '
         switch (error.code) {
           case error.PERMISSION_DENIED:
-            errorMessage += 'Location access was denied.'
+            errorMessage += 'Please allow location access in your browser settings and try again.'
             break
           case error.POSITION_UNAVAILABLE:
-            errorMessage += 'Location information is unavailable.'
+            errorMessage += 'Location information is unavailable. Please check your device settings.'
             break
           case error.TIMEOUT:
-            errorMessage += 'Location request timed out.'
+            errorMessage += 'Location request timed out. Please try again or skip for now.'
             break
           default:
-            errorMessage += 'An unknown error occurred.'
+            errorMessage += 'An unknown error occurred. Please try again.'
             break
         }
         
         showErrorToast(errorMessage)
       },
       {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000
+        enableHighAccuracy: false,
+        timeout: 30000,
+        maximumAge: 0
       }
     )
   }

@@ -352,6 +352,12 @@ app.post("/send-code", async (req, res) => {
       return res.status(400).json({ success: false, error: "All fields are required" });
     }
 
+    // Check if email already exists in Users collection
+    const existingUserQuery = await db.collection('Users').where('email', '==', email).get();
+    if (!existingUserQuery.empty) {
+      return res.status(400).json({ success: false, error: "Email already exists" });
+    }
+
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Hash password before storing
@@ -422,6 +428,13 @@ app.post("/send-sms-code", async (req, res) => {
     // Validate phone number length
     if (cleanedPhone.length < 10 || cleanedPhone.length > 15) {
       return res.status(400).json({ success: false, error: "Invalid phone number format" });
+    }
+
+    // Check if phone number already exists in Users collection
+    const formattedPhoneWithPlus = `+${cleanedPhone}`;
+    const existingUserQuery = await db.collection('Users').where('phoneNumber', '==', formattedPhoneWithPlus).get();
+    if (!existingUserQuery.empty) {
+      return res.status(400).json({ success: false, error: "Phone number already exists" });
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -2076,6 +2089,16 @@ app.post("/send-email-verification", async (req, res) => {
       return res.status(400).json({ success: false, error: "Invalid email format" });
     }
 
+    // Check if email already exists in Users collection (excluding current user)
+    const existingUserQuery = await db.collection('Users').where('email', '==', email).get();
+    if (!existingUserQuery.empty) {
+      // Check if it's not the current user's email
+      const existingUser = existingUserQuery.docs[0];
+      if (existingUser.id !== userId) {
+        return res.status(400).json({ success: false, error: "Email already exists" });
+      }
+    }
+
     // Generate 6-digit code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -2615,6 +2638,27 @@ app.post("/send-account-verification-sms", async (req, res) => {
     }
 
     console.log(`📱 Sending account verification OTP to: ${phoneNumber}`);
+
+    // Format phone number to +63 format for consistency
+    let formattedPhone = phoneNumber;
+    if (!phoneNumber.startsWith('+')) {
+      const digitsOnly = phoneNumber.replace(/\D/g, '');
+      if (digitsOnly.startsWith('639')) {
+        formattedPhone = `+${digitsOnly}`;
+      } else if (digitsOnly.startsWith('09')) {
+        formattedPhone = `+63${digitsOnly.substring(1)}`;
+      }
+    }
+
+    // Check if phone number already exists in Users collection (excluding current user)
+    const existingUserQuery = await db.collection('Users').where('phoneNumber', '==', formattedPhone).get();
+    if (!existingUserQuery.empty) {
+      // Check if it's not the current user's phone
+      const existingUser = existingUserQuery.docs[0];
+      if (existingUser.id !== userId) {
+        return res.status(400).json({ success: false, error: "Phone number already exists" });
+      }
+    }
 
     // Generate OTP code and send using secure SMS function - use carrier-friendly format
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();

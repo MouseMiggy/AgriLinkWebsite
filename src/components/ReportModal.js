@@ -210,8 +210,31 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
         }
         
         console.log('🔗 Full listing report validation URL:', backendUrl)
+      } else if (contentType === 'message' || contentType === 'chat') {
+        // Use message-specific validation endpoint for chat/message reports
+        // For messages, only mark as VALID if content contains offensive/bad words
+        backendUrl = 'https://ai-backend-6-565d.onrender.com/validate-message-report'
+        
+        const messageText = content?.caption || content?.text || content?.content || ''
+        
+        requestBody = {
+          reporterId,
+          reportedUserId: targetUser?.id || targetUser,
+          contentType: 'message',
+          contentId: content?.id || '',
+          messageText: messageText,
+          mediaType: hasValidMedia ? 'image' : 'text',
+          mediaUrl: cleanMediaUrl || cleanImageUrl,
+          imageUrls: cleanImageUrls,
+          reportType: 'offensive', // Messages are reported for offensive content only
+          additionalNote: 'Check for offensive language, harassment, or inappropriate content. Agricultural content is allowed.',
+          timestamp
+        }
+        
+        console.log('🔗 Full message report validation URL:', backendUrl)
+        console.log('📝 Message validation note: Only offensive/bad words should be marked as VALID')
       } else {
-        // Use general report validation endpoint for other content
+        // Use general report validation endpoint for other content (posts, comments)
         backendUrl = 'https://ai-backend-6-565d.onrender.com/validate-report'
         
         // Prepare caption based on content type

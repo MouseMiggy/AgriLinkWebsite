@@ -26,6 +26,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   const [showRecentSearches, setShowRecentSearches] = useState(false)
   const [user, setUser] = useState(null)
   const [userRole, setUserRole] = useState(null)
+  const [userCropTypes, setUserCropTypes] = useState([])
+  const [bestForCropsListings, setBestForCropsListings] = useState([])
   const [authLoading, setAuthLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -1312,87 +1314,96 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
 
   // Auth state listener
   useEffect(() => {
-    if (!auth) {
-      setAuthLoading(false)
-      return
-    }
-    
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser)
-        console.log('🔍 User authenticated:', currentUser.uid)
-        
-        // Get user role from Firestore
-        try {
-          const userDoc = await getDoc(doc(db, 'Users', currentUser.uid))
-          if (userDoc.exists()) {
-            const userData = userDoc.data()
-            console.log('🔍 User profile loaded:', userData)
-            console.log('🔍 User location data:', userData.location)
-            
-            setUserRole(userData.role)
-            if (userData.location && typeof userData.location === 'object') {
-              console.log('🔍 DEBUG: Raw user location from Firestore:', userData.location)
-              console.log('🔍 DEBUG: Location field names:', Object.keys(userData.location))
-              setUserLocation(userData.location)
-              console.log('✅ User location set:', userData.location)
-            } else {
-              setUserLocation(null)
-              console.log('❌ No valid user location found')
-            }
+  if (!auth) {
+    setAuthLoading(false)
+    return
+  }
+  
+  const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    if (currentUser) {
+      setUser(currentUser)
+      console.log('🔍 User authenticated:', currentUser.uid)
+      
+      // Get user role from Firestore
+      try {
+        const userDoc = await getDoc(doc(db, 'Users', currentUser.uid))
+        if (userDoc.exists()) {
+          const userData = userDoc.data()
+          console.log('🔍 User profile loaded:', userData)
+          console.log('🔍 User location data:', userData.location)
+          
+          setUserRole(userData.role)
+          
+          // Get crop types for crop farmers
+          if (userData.role === 'crop_farmer' && userData.cropFarmer?.cropType) {
+            setUserCropTypes(userData.cropFarmer.cropType)
+            console.log('🌾 User crop types loaded:', userData.cropFarmer.cropType)
           } else {
-            setUserRole('crop_farmer')
-            setUserLocation(null)
+            setUserCropTypes([])
           }
-        } catch (error) {
-          console.error('❌ Error loading user profile:', error)
+          
+          if (userData.location && typeof userData.location === 'object') {
+            console.log('🔍 DEBUG: Raw user location from Firestore:', userData.location)
+            console.log('🔍 DEBUG: Location field names:', Object.keys(userData.location))
+            setUserLocation(userData.location)
+            console.log('✅ User location set:', userData.location)
+          } else {
+            setUserLocation(null)
+            console.log('❌ No valid user location found')
+          }
+        } else {
           setUserRole('crop_farmer')
           setUserLocation(null)
         }
-      } else {
-        setUser(null)
-        setUserRole(null)
+      } catch (error) {
+        console.error('❌ Error loading user profile:', error)
+        setUserRole('crop_farmer')
         setUserLocation(null)
       }
-      setAuthLoading(false)
+    } else {
+      setUser(null)
+      setUserRole(null)
+      setUserLocation(null)
+    }
+    setAuthLoading(false)
+  })
+
+  return unsubscribe
+}, [auth])
+
+// Load existing requests for crop farmers
+useEffect(() => {
+  if (!user || !db || userRole !== 'crop_farmer') return
+
+  console.log('🔍 Setting up real-time listener for requests by user:', user.uid)
+  
+  const q = query(
+    collection(db, 'listing_requests'),
+    where('requesterId', '==', user.uid),
+    where('status', '==', 'pending')
+  )
+
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    console.log('📊 Requested listings snapshot update:', {
+      size: snapshot.size,
+      docChanges: snapshot.docChanges().length
     })
-
-    return unsubscribe
-  }, [auth])
-
-  // Load existing requests for crop farmers
-  useEffect(() => {
-    if (!user || !db || userRole !== 'crop_farmer') return
-
-    console.log('🔍 Setting up real-time listener for requests by user:', user.uid)
     
-    const q = query(
-      collection(db, 'listing_requests'),
-      where('requesterId', '==', user.uid),
-      where('status', '==', 'pending')
-    )
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      console.log('📊 Requested listings snapshot update:', {
-        size: snapshot.size,
-        docChanges: snapshot.docChanges().length
-      })
-      
-      const requestedIds = new Set()
-      snapshot.forEach((doc) => {
-        const data = doc.data()
-        console.log('📋 Found request for listing:', data.listingId)
-        requestedIds.add(data.listingId)
-      })
-      
-      console.log('✅ Updated requestedListings state:', Array.from(requestedIds))
-      setRequestedListings(requestedIds)
-    }, (error) => {
-      console.error('Error loading existing requests:', error)
+    const requestedIds = new Set()
+    snapshot.forEach((doc) => {
+      const data = doc.data()
+      console.log('📋 Found request for listing:', data.listingId)
+      requestedIds.add(data.listingId)
     })
+    
+    console.log('✅ Updated requestedListings state:', Array.from(requestedIds))
+    setRequestedListings(requestedIds)
+  }, (error) => {
+    console.error('Error loading existing requests:', error)
+  })
 
-    return () => unsubscribe()
-  }, [user, userRole])
+  return () => unsubscribe()
+}, [user, userRole])
 
   // Load all request statuses for crop farmers (to track approved/rejected requests)
   useEffect(() => {
@@ -1569,6 +1580,18 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
 
     loadRecommendedListings()
   }, [db, user, userRole, authLoading])
+
+  // Calculate best listings for user's crops when search results change
+  useEffect(() => {
+    if (userRole === 'crop_farmer' && userCropTypes.length > 0 && searchQuery && searchResults.length > 0) {
+      console.log('🌾 Calculating best listings for crops:', userCropTypes);
+      const bestListings = getBestListingsForCrops(searchResults, userCropTypes);
+      setBestForCropsListings(bestListings);
+      console.log('✅ Best for crops listings updated:', bestListings.length);
+    } else {
+      setBestForCropsListings([]);
+    }
+  }, [searchResults, userCropTypes, userRole, searchQuery]);
 
   // Search handling functions
   const generateListingEmbedding = async (listingId) => {
@@ -1805,6 +1828,103 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     }).sort((a, b) => (b.boostedSemanticScore || 0) - (a.boostedSemanticScore || 0));
   };
 
+  // Match listings to user's crop types - returns best waste/manure for their crops
+  const getBestListingsForCrops = (listings, cropTypes) => {
+    if (!cropTypes || cropTypes.length === 0 || !listings || listings.length === 0) {
+      return [];
+    }
+
+    // Crop-to-manure matching database
+    const cropToManureMap = {
+      'rice': ['chicken_manure', 'cow_manure', 'carabao_manure', 'organic_fertilizer', 'compost'],
+      'corn': ['chicken_manure', 'pig_manure', 'cow_manure', 'organic_fertilizer'],
+      'vegetables': ['chicken_manure', 'goat_manure', 'vermicompost', 'organic_fertilizer', 'compost'],
+      'fruits': ['cow_manure', 'goat_manure', 'chicken_manure', 'organic_fertilizer'],
+      'root_crops': ['pig_manure', 'chicken_manure', 'cow_manure', 'compost'],
+      'leafy_vegetables': ['chicken_manure', 'vermicompost', 'goat_manure', 'organic_fertilizer'],
+      'legumes': ['cow_manure', 'chicken_manure', 'compost', 'organic_fertilizer']
+    };
+
+    // Keywords to identify manure types in listings
+    const manureKeywords = {
+      'chicken_manure': ['chicken', 'manok', 'poultry', 'itlog'],
+      'cow_manure': ['cow', 'baka', 'cattle', 'beef'],
+      'pig_manure': ['pig', 'baboy', 'swine', 'pork'],
+      'goat_manure': ['goat', 'kanding', 'kambing'],
+      'carabao_manure': ['carabao', 'kalabaw', 'buffalo'],
+      'vermicompost': ['vermi', 'worm', 'earthworm'],
+      'organic_fertilizer': ['organic', 'fertilizer', 'compost', 'tahi', 'dumi'],
+      'compost': ['compost', 'organic']
+    };
+
+    console.log('🌾 Finding best listings for crops:', cropTypes);
+
+    // Score each listing based on crop compatibility
+    const scoredListings = listings.map(listing => {
+      const listingName = (listing.name || '').toLowerCase();
+      const listingDetails = (listing.details || '').toLowerCase();
+      const combinedText = `${listingName} ${listingDetails}`;
+      
+      let matchScore = 0;
+      let matchedCrops = [];
+      let manureType = null;
+
+      // Identify what type of manure this listing is
+      for (const [type, keywords] of Object.entries(manureKeywords)) {
+        if (keywords.some(keyword => combinedText.includes(keyword))) {
+          manureType = type;
+          break;
+        }
+      }
+
+      if (!manureType) {
+        return { ...listing, cropMatchScore: 0, matchedCrops: [] };
+      }
+
+      // Check if this manure type matches any of the user's crops
+      cropTypes.forEach(cropType => {
+        const recommendedManures = cropToManureMap[cropType] || [];
+        if (recommendedManures.includes(manureType)) {
+          // Higher score for better matches (earlier in the recommended list)
+          const position = recommendedManures.indexOf(manureType);
+          const score = (recommendedManures.length - position) / recommendedManures.length;
+          matchScore += score;
+          matchedCrops.push(cropType);
+        }
+      });
+
+      return {
+        ...listing,
+        cropMatchScore: matchScore,
+        matchedCrops: matchedCrops,
+        manureType: manureType
+      };
+    });
+
+    // Filter and sort by match score
+    const matchedListings = scoredListings
+      .filter(listing => listing.cropMatchScore > 0)
+      .sort((a, b) => {
+        // Primary sort: match score
+        if (b.cropMatchScore !== a.cropMatchScore) {
+          return b.cropMatchScore - a.cropMatchScore;
+        }
+        // Secondary sort: semantic score if available
+        return (b.semanticScore || 0) - (a.semanticScore || 0);
+      });
+
+    console.log('✅ Found', matchedListings.length, 'listings matching user crops');
+    console.log('🎯 Top matches:', matchedListings.slice(0, 3).map(l => ({
+      name: l.name,
+      score: l.cropMatchScore,
+      crops: l.matchedCrops,
+      type: l.manureType
+    })));
+
+    // Return top 4-8 best matches
+    return matchedListings.slice(0, 8);
+  };
+
   const performSearch = async (searchText) => {
     console.log('🚀 PERFORM SEARCH CALLED with query:', searchText)
     console.log('🚀 User role:', userRole)
@@ -1895,7 +2015,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
         text: enhancedSearchText, // Use enhanced query with translations
-        top_k: 50, // Increased from 20 to show more related results
+        top_k: 200, // Increased to get all results above 60% threshold
       })
     });
 
@@ -1931,15 +2051,38 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
 
           if (listingDoc.exists()) {
             const listingData = { id: listingDoc.id, ...listingDoc.data() }
-            console.log(`🔍 DEBUG: Raw listing data for "${listingData.name}":`, {
-              id: listingData.id,
-              name: listingData.name,
-              ownerLocation: listingData.ownerLocation,
-              location: listingData.location,
-              ownerLocationType: typeof listingData.ownerLocation,
-              ownerLocationKeys: listingData.ownerLocation ? Object.keys(listingData.ownerLocation) : 'null'
+            
+            // Fetch owner location data
+            let ownerLocation = null
+            if (listingData.ownerId) {
+              try {
+                const ownerRef = doc(db, 'Users', listingData.ownerId)
+                const ownerDoc = await getDoc(ownerRef)
+                if (ownerDoc.exists()) {
+                  const ownerData = ownerDoc.data()
+                  ownerLocation = ownerData.location || null
+                  console.log(`📍 Fetched owner location for "${listingData.name}":`, ownerLocation)
+                }
+              } catch (ownerErr) {
+                console.error(`❌ Error fetching owner data for listing ${listingId}:`, ownerErr)
+              }
+            }
+            
+            const enrichedListing = {
+              ...listingData,
+              ownerLocation: ownerLocation,
+              location: ownerLocation // Also add as location for compatibility
+            }
+            
+            console.log(`🔍 DEBUG: Enriched listing data for "${enrichedListing.name}":`, {
+              id: enrichedListing.id,
+              name: enrichedListing.name,
+              ownerLocation: enrichedListing.ownerLocation,
+              location: enrichedListing.location,
+              ownerLocationType: typeof enrichedListing.ownerLocation,
+              ownerLocationKeys: enrichedListing.ownerLocation ? Object.keys(enrichedListing.ownerLocation) : 'null'
             })
-            matchedListings.push(listingData)
+            matchedListings.push(enrichedListing)
           } else {
             console.log(`❌ Listing not found: ${listingId}`)
           }
@@ -2056,12 +2199,13 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
           (listing.semanticScore || 0) >= 0.60
         );
         console.log('🎯 Filtered out low similarity matches (<60%):', activeSearchResults.length - highQualityResults.length, 'removed')
-        console.log('📊 Final high-quality results count:', highQualityResults.length)
+        console.log('📊 Final high-quality results count (60%+):', highQualityResults.length)
+        console.log('📄 Total pages at 40 items per page:', Math.ceil(highQualityResults.length / 40))
         
         // Show what passed the threshold
-        console.log('🔍 DEBUG: Results that passed 60% threshold:')
-        highQualityResults.slice(0, 10).forEach((listing, index) => {
-          console.log(`${index + 1}. "${listing.name}" - Score: ${(listing.semanticScore || 0).toFixed(3)}`)
+        console.log('🔍 DEBUG: All results that passed 60% threshold:')
+        highQualityResults.forEach((listing, index) => {
+          console.log(`${index + 1}. "${listing.name}" - Score: ${(listing.semanticScore || 0).toFixed(3)} (${(listing.semanticScore * 100).toFixed(1)}%)`)
         })
         
         // If no results pass 60% threshold, lower it to 50%, then 40% for debugging
@@ -2110,6 +2254,13 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
               boostedCount: boostedResults.length
             });
             
+            // Debug: Check if distance is preserved in boosted results
+            console.log('🔍 DEBUG: Distance in boosted results:', boostedResults.slice(0, 3).map(l => ({
+              name: l.name,
+              distanceKm: l.distanceKm,
+              hasDistance: l.distanceKm != null
+            })));
+            
             setSearchResults(boostedResults);
             console.log(`Semantic search returned ${boostedResults.length} interest-boosted results`);
           } else {
@@ -2139,21 +2290,90 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       // Filter listings using original keyword logic
       if (userRole === 'crop_farmer') {
         const searchLower = searchText.toLowerCase()
-        const matchingListings = listings.filter(listing =>
-          listing.name?.toLowerCase().includes(searchLower) ||
-          listing.details?.toLowerCase().includes(searchLower) ||
-          listing.ownerName?.toLowerCase().includes(searchLower)
-        )
         
-        const nonMatchingListings = listings.filter(listing =>
-          !(listing.name?.toLowerCase().includes(searchLower) ||
+        // Get user location for distance calculation
+        let userProfileLocation = null;
+        try {
+          const userDoc = await getDoc(doc(db, 'Users', user.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            userProfileLocation = userData.location;
+          }
+        } catch (error) {
+          console.error('❌ Error fetching user profile for fallback search distance:', error);
+        }
+        
+        const matchingListings = listings
+          .filter(listing =>
+            listing.name?.toLowerCase().includes(searchLower) ||
             listing.details?.toLowerCase().includes(searchLower) ||
-            listing.ownerName?.toLowerCase().includes(searchLower))
-        )
+            listing.ownerName?.toLowerCase().includes(searchLower)
+          )
+          .map(listing => {
+            const listingWithDistance = { ...listing };
+            
+            if (userProfileLocation && listing.ownerLocation) {
+              try {
+                if (userProfileLocation.latitude && userProfileLocation.longitude && 
+                    listing.ownerLocation.latitude && listing.ownerLocation.longitude) {
+                  const distance = calculateDistance(
+                    userProfileLocation.latitude,
+                    userProfileLocation.longitude,
+                    listing.ownerLocation.latitude,
+                    listing.ownerLocation.longitude
+                  );
+                  listingWithDistance.distanceKm = distance;
+                } else {
+                  listingWithDistance.distanceKm = null;
+                }
+              } catch (error) {
+                listingWithDistance.distanceKm = null;
+              }
+            } else {
+              listingWithDistance.distanceKm = null;
+            }
+            
+            return listingWithDistance;
+          });
+        
+        const nonMatchingListings = listings
+          .filter(listing =>
+            !(listing.name?.toLowerCase().includes(searchLower) ||
+              listing.details?.toLowerCase().includes(searchLower) ||
+              listing.ownerName?.toLowerCase().includes(searchLower))
+          )
+          .map(listing => {
+            const listingWithDistance = { ...listing };
+            
+            if (userProfileLocation && listing.ownerLocation) {
+              try {
+                if (userProfileLocation.latitude && userProfileLocation.longitude && 
+                    listing.ownerLocation.latitude && listing.ownerLocation.longitude) {
+                  const distance = calculateDistance(
+                    userProfileLocation.latitude,
+                    userProfileLocation.longitude,
+                    listing.ownerLocation.latitude,
+                    listing.ownerLocation.longitude
+                  );
+                  listingWithDistance.distanceKm = distance;
+                } else {
+                  listingWithDistance.distanceKm = null;
+                }
+              } catch (error) {
+                listingWithDistance.distanceKm = null;
+              }
+            } else {
+              listingWithDistance.distanceKm = null;
+            }
+            
+            return listingWithDistance;
+          });
         
         setSearchResults(matchingListings)
         setOutsideSearchResults(nonMatchingListings)
       }
+      
+      setIsPaginating(false);
     }
   }
 
@@ -2436,7 +2656,17 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   }
 
   // Render listing card content
-  const renderListingCard = (listing) => (
+  const renderListingCard = (listing) => {
+    console.log('🎴 Rendering card for:', listing.name, '| Distance:', listing.distanceKm, '| Has distance:', listing.distanceKm != null);
+    console.log('🎴 Full listing object:', {
+      id: listing.id,
+      name: listing.name,
+      distanceKm: listing.distanceKm,
+      ownerLocation: listing.ownerLocation,
+      allKeys: Object.keys(listing)
+    });
+    
+    return (
     <>
       {/* Image Container */}
       <div className={styles.imageContainer}>
@@ -2513,9 +2743,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
           <span className={styles.listingDate}>
             Posted {formatDate(listing.createdAt || listing.timestamp || listing.dateCreated)}
           </span>
-          {/* Debug logging for distance display */}
-          {console.log(`🔍 Distance Debug for "${listing.name}": userLocation=${!!userLocation}, distanceKm=${listing.distanceKm}, condition=${userRole === 'crop_farmer' && listing.distanceKm != null}`)}
-          {userRole === 'crop_farmer' && listing.distanceKm != null && (
+          {/* Show distance for ALL users when available */}
+          {listing.distanceKm != null && (
             <span className={styles.listingLocation}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill={listing.distanceKm < 5 ? "#2d5a27" : "#fa9100"} xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '4px' }}>
                 <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
@@ -2605,7 +2834,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         </div>
       </div>
     </>
-  )
+    )
+  } // Added missing closing brace here
 
   if (authLoading || !user) {
     return null
@@ -2797,6 +3027,61 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         {/* Search Results Section - Dual Pagination */}
         {searchQuery && userRole === 'crop_farmer' && !isPaginating ? (
           <>
+            {/* Best for Your Crops Section */}
+            {bestForCropsListings.length > 0 && (
+              <div className={styles.searchSection} style={{ marginBottom: '2rem' }}>
+                <h3 className={styles.sectionTitle} style={{ 
+                  background: 'linear-gradient(135deg, #2d5a27 0%, #4a8b3f 100%)',
+                  color: 'white',
+                  padding: '1rem 1.5rem',
+                  borderRadius: '8px',
+                  marginBottom: '1.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <span style={{ fontSize: '1.5rem' }}>🌾</span>
+                  Best for Your Crops
+                  <span style={{ 
+                    fontSize: '0.85rem', 
+                    fontWeight: 'normal',
+                    opacity: 0.9,
+                    marginLeft: '0.5rem'
+                  }}>
+                    ({bestForCropsListings.length} matched)
+                  </span>
+                </h3>
+                <div className={styles.listingsGrid}>
+                  {bestForCropsListings.map((listing) => (
+                    <div 
+                      key={listing.id} 
+                      className={styles.listingCard}
+                      onClick={() => openDetailsModal(listing)}
+                      style={{ 
+                        cursor: 'pointer',
+                        border: '2px solid #4a8b3f',
+                        boxShadow: '0 4px 12px rgba(74, 139, 63, 0.15)'
+                      }}
+                    >
+                      {renderListingCard(listing)}
+                      {listing.matchedCrops && listing.matchedCrops.length > 0 && (
+                        <div style={{
+                          padding: '0.75rem',
+                          background: 'linear-gradient(135deg, #f0f7ed 0%, #e8f5e3 100%)',
+                          borderTop: '1px solid #d4e8cf',
+                          fontSize: '0.85rem',
+                          color: '#2d5a27',
+                          fontWeight: '500'
+                        }}>
+                          ✓ Perfect for: {listing.matchedCrops.map(crop => crop.replace('_', ' ')).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Search Results Header */}
             <div className={styles.searchSection}>
               <h3 className={styles.sectionTitle}>

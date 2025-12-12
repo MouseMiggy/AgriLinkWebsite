@@ -815,24 +815,21 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         })
         console.log('✅ Request status updated to cancelled successfully')
         
-        // The onSnapshot listener will automatically update requestedListings
-        // when the document status is updated
-        console.log('✅ Request deleted from database, waiting for real-time update...')
+        // Immediately update local state to allow re-requesting
+        setRequestStatuses(prev => ({
+          ...prev,
+          [listingId]: 'cancelled'
+        }))
+        console.log('✅ Local state updated - button should now show "Request"')
         
-        // Fallback: Force state update after a short delay if real-time doesn't work
-        setTimeout(() => {
-          setRequestedListings(prev => {
-            const newSet = new Set(prev)
-            if (newSet.has(listingId)) {
-              console.log('⚠️ Fallback: Manually removing listing from state')
-              newSet.delete(listingId)
-              return newSet
-            }
-            return prev
-          })
-        }, 1000) // Wait 1 second for real-time update, then fallback
+        // Remove from requestedListings set
+        setRequestedListings(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(listingId)
+          return newSet
+        })
         
-        showSuccessPopup('Request Cancelled', 'Your request has been cancelled successfully and the owner has been notified.')
+        showSuccessPopup('Request Cancelled', 'Your request has been cancelled successfully and the owner has been notified. You can request this listing again if needed.')
       } else {
         console.error('❌ No request found to cancel')
         console.log('🔍 Debugging info:', {
@@ -898,15 +895,21 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
           cancelledAt: serverTimestamp()
         })
         
-        // Force immediate state update
+        // Immediately update local state to allow re-requesting
+        setRequestStatuses(prev => ({
+          ...prev,
+          [listingId]: 'cancelled'
+        }))
+        
+        // Remove from requestedListings set
         setRequestedListings(prev => {
           const newSet = new Set(prev)
           newSet.delete(listingId)
           return newSet
         })
         
-        console.log('✅ Simplified cancellation successful')
-        showSuccessPopup('Request Cancelled', 'Your request has been cancelled successfully!')
+        console.log('✅ Simplified cancellation successful - button should now show "Request"')
+        showSuccessPopup('Request Cancelled', 'Your request has been cancelled successfully! You can request this listing again if needed.')
       } else {
         showInfoPopup('No Active Request', 'No active request found for this listing.')
       }
@@ -3088,16 +3091,28 @@ useEffect(() => {
                 Search Results
               </h3>
               <div className={styles.listingsGrid}>
-                {currentMainListings.map((listing) => (
+                {currentMainListings
+                  .filter(listing => {
+                    // Hide listings with valid report verdict from public
+                    if (listing.reportVerdict === 'VALID' && listing.ownerId !== user?.uid) {
+                      return false
+                    }
+                    return true
+                  })
+                  .map((listing) => {
+                    // Check if listing is hidden due to valid report
+                    const isHiddenListing = listing.reportVerdict === 'VALID' && listing.ownerId === user?.uid
+                    return (
                     <div 
                       key={listing.id} 
                       className={styles.listingCard}
                       onClick={() => openDetailsModal(listing)}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', opacity: isHiddenListing ? 0.5 : 1 }}
                     >
                       {renderListingCard(listing)}
                     </div>
-                  ))}
+                    )
+                  })}
               </div>
             </div>
 
@@ -3191,16 +3206,28 @@ useEffect(() => {
                     <p className={styles.listingsLoadingText}>Loading listings...</p>
                   </div>
                 ) : (
-                  currentMainListings.map((listing) => (
-                    <div 
-                      key={listing.id} 
-                      className={styles.listingCard}
-                      onClick={() => openDetailsModal(listing)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {renderListingCard(listing)}
-                    </div>
-                  ))
+                  currentMainListings
+                    .filter(listing => {
+                      // Hide listings with valid report verdict from public
+                      if (listing.reportVerdict === 'VALID' && listing.ownerId !== user?.uid) {
+                        return false
+                      }
+                      return true
+                    })
+                    .map((listing) => {
+                      // Check if listing is hidden due to valid report
+                      const isHiddenListing = listing.reportVerdict === 'VALID' && listing.ownerId === user?.uid
+                      return (
+                      <div 
+                        key={listing.id} 
+                        className={styles.listingCard}
+                        onClick={() => openDetailsModal(listing)}
+                        style={{ cursor: 'pointer', opacity: isHiddenListing ? 0.5 : 1 }}
+                      >
+                        {renderListingCard(listing)}
+                      </div>
+                      )
+                    })
                 )}
               </div>
 

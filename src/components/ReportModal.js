@@ -343,32 +343,56 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
             updateData.imageAnalysis = parsed.imageAnalysis
           }
           
-          // Hide listing if report is VALID (violation found)
+          // Hide content if report is VALID (violation found)
           const finalVerdict = updateData.aiValidationResult?.verdict || result.result.verdict
-          if (finalVerdict === 'VALID' && contentType === 'listing') {
-            console.log('🚫 Report is VALID - hiding listing')
+          if (finalVerdict === 'VALID') {
+            console.log('🚫 Report is VALID - hiding content')
             try {
-              // Update listing status to hidden
-              const listingRef = doc(db, 'livestock_listings', content.id)
-              await updateDoc(listingRef, {
-                status: 'hidden',
-                hiddenAt: new Date(),
-                hiddenBy: 'report_validation',
-                reportId: reportRef.id
-              })
+              // Update content based on type
+              if (contentType === 'listing') {
+                const listingRef = doc(db, 'livestock_listings', content.id)
+                await updateDoc(listingRef, {
+                  status: 'hidden',
+                  reportVerdict: 'VALID',
+                  hiddenAt: new Date(),
+                  hiddenBy: 'report_validation',
+                  reportId: reportRef.id
+                })
+              } else if (contentType === 'post') {
+                const postRef = doc(db, 'Posts', content.id)
+                await updateDoc(postRef, {
+                  reportVerdict: 'VALID',
+                  hiddenAt: new Date(),
+                  hiddenBy: 'report_validation',
+                  reportId: reportRef.id
+                })
+                console.log('✅ Post updated with reportVerdict: VALID')
+              } else if (contentType === 'comment') {
+                const commentRef = doc(db, 'comments', content.id)
+                await updateDoc(commentRef, {
+                  reportVerdict: 'VALID',
+                  hiddenAt: new Date(),
+                  hiddenBy: 'report_validation',
+                  reportId: reportRef.id
+                })
+              }
               
-              // Send notification to listing owner
-              const listingOwnerId = content.ownerId || content.userId
-              if (listingOwnerId) {
+              // Send notification to content owner
+              const contentOwnerId = content.ownerId || content.userId
+              if (contentOwnerId) {
+                const contentName = content.name || content.title || content.text || content.caption || 'content'
+                const contentTypeLabel = contentType === 'listing' ? 'listing' : contentType === 'post' ? 'post' : 'comment'
+                const navigateTo = contentType === 'listing' ? '/listings' : '/dashboard'
+                
                 const notificationData = {
-                  userId: listingOwnerId,
-                  title: 'Listing Hidden',
-                  message: `Your listing "${content.name || content.title || content.caption}" has been hidden due to a valid report.`,
-                  type: 'listing_hidden',
+                  userId: contentOwnerId,
+                  title: `${contentTypeLabel.charAt(0).toUpperCase() + contentTypeLabel.slice(1)} Hidden`,
+                  message: `Your ${contentTypeLabel} "${contentName}" has been hidden due to a valid report.`,
+                  type: `${contentType}_hidden`,
                   data: {
-                    listingId: content.id,
+                    contentId: content.id,
                     reportId: reportRef.id,
-                    navigateTo: '/listings'
+                    navigateTo: navigateTo
                   },
                   isRead: false,
                   createdAt: new Date(),
@@ -376,7 +400,7 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
                 }
                 
                 await addDoc(collection(db, 'notifications'), notificationData)
-                console.log('📬 Notification sent to listing owner')
+                console.log(`📬 Notification sent to ${contentTypeLabel} owner`)
               }
             } catch (hideError) {
               console.error('❌ Error hiding listing:', hideError)

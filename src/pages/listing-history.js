@@ -156,7 +156,7 @@ export default function ListingHistory() {
                 <th className={styles.columnHeader}>Listing Name</th>
                 <th className={styles.columnHeader}>Listing Details</th>
                 <th className={styles.columnHeader}>Price</th>
-                <th className={styles.columnHeader}>Buyer Name</th>
+                <th className={styles.columnHeader}>Quantity</th>
                 <th className={styles.columnHeader}>Date Added</th>
                 <th className={styles.columnHeader}>Date Sold</th>
                 <th className={styles.columnHeader}>Date Deleted</th>
@@ -185,12 +185,12 @@ export default function ListingHistory() {
                   >
                     <td className={styles.tableCell}>
                       <div className={styles.listingName}>
-                        {listing.name || listing.title || 'N/A'}
+                        {listing.name || listing.title || listing.productName || '-'}
                       </div>
                     </td>
                     <td className={styles.tableCell}>
                       <div className={styles.listingDetails}>
-                        {listing.description || listing.details || 'N/A'}
+                        {truncateText(listing.description || listing.details || listing.info || '-', 100)}
                       </div>
                     </td>
                     <td className={styles.tableCell}>
@@ -199,13 +199,13 @@ export default function ListingHistory() {
                       </div>
                     </td>
                     <td className={styles.tableCell}>
-                      <div className={styles.buyerName}>
-                        {listing.buyerName || 'N/A'}
+                      <div className={styles.quantity}>
+                        {listing.quantity || listing.amount || listing.stock || '-'}
                       </div>
                     </td>
                     <td className={styles.tableCell}>
                       <div className={styles.date}>
-                        {formatDate(listing.createdAt)}
+                        {formatDate(listing.createdAt) || '-'}
                       </div>
                     </td>
                     <td className={styles.tableCell}>

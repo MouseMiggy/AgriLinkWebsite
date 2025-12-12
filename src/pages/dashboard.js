@@ -2856,8 +2856,31 @@ export default function Dashboard() {
               // Regular Posts Feed or Search Results - only show search results after Enter is pressed
               (searchSubmitted && searchResults.length > 0 ? searchResults : 
                searchSubmitted && searchResults.length === 0 ? [] : 
-               posts).map((post) => (
-              <div key={post.id} className={styles.post}>
+               posts)
+              .filter(post => {
+                // Hide posts with valid report verdict from public
+                console.log('🔍 Filtering post:', {
+                  postId: post.id,
+                  reportVerdict: post.reportVerdict,
+                  postUserId: post.userId,
+                  currentUserId: user?.uid,
+                  shouldHide: post.reportVerdict === 'VALID' && post.userId !== user?.uid
+                })
+                if (post.reportVerdict === 'VALID' && post.userId !== user?.uid) {
+                  console.log('🚫 Hiding post with valid report:', post.id)
+                  return false
+                }
+                return true
+              })
+              .map((post) => {
+                // Check if post is hidden due to valid report
+                const isHiddenPost = post.reportVerdict === 'VALID' && post.userId === user?.uid
+                return (
+              <div 
+                key={post.id} 
+                className={styles.post}
+                style={isHiddenPost ? { opacity: 0.5 } : {}}
+              >
                 <div className={styles.postHeader}>
                   <div className={styles.postAvatar}>
                     {post.userProfilePicture ? (
@@ -3004,7 +3027,8 @@ export default function Dashboard() {
                 </div>
                 
               </div>
-              ))
+                )
+              })
             )}
           </div>
         </main>
@@ -3626,10 +3650,25 @@ export default function Dashboard() {
               {/* Comments List */}
               <div className={styles.modalCommentsSection}>
                 {selectedPost.comments && selectedPost.comments.length > 0 ? (
-                  selectedPost.comments.map((comment, index) => {
+                  selectedPost.comments
+                    .filter(comment => {
+                      // Hide comments with valid report verdict from public
+                      if (comment.reportVerdict === 'VALID' && comment.userId !== user?.uid && comment.userEmail !== user?.email) {
+                        return false
+                      }
+                      return true
+                    })
+                    .map((comment, index) => {
                     const commentId = comment.id || comment.commentId || `comment-${index}-${comment.text?.substring(0, 10)}`
+                    // Check if comment is hidden due to valid report
+                    const isHiddenComment = comment.reportVerdict === 'VALID' && (comment.userId === user?.uid || comment.userEmail === user?.email)
                     return (
-                      <div key={commentId} className={styles.modalComment} data-comment-id={commentId}>
+                      <div 
+                        key={commentId} 
+                        className={styles.modalComment} 
+                        data-comment-id={commentId}
+                        style={isHiddenComment ? { opacity: 0.5 } : {}}
+                      >
                         <div className={styles.commentAvatar}>
                           {comment.userProfilePicture ? (
                             <img src={comment.userProfilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
@@ -3668,7 +3707,7 @@ export default function Dashboard() {
                           ) : (
                             <div className={styles.commentContent}>
                               {/* Bubble with menu button - fixed position */}
-                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, position: 'relative' }}>
                                 <div className={styles.commentBubble}>
                                   <span className={styles.commentAuthor}>{comment.userName}</span>
                                   <p className={styles.commentText}>
@@ -3676,27 +3715,70 @@ export default function Dashboard() {
                                     {comment.editedAt && <span className={styles.editedIndicator}> (edited)</span>}
                                   </p>
                                 </div>
-                                {/* Menu button right next to bubble */}
-                                <div className={`${styles.commentMenuContainer} comment-menu-container ${showCommentMenu === commentId ? styles.menuOpen : ''}`}>
+                                {/* Menu button right next to bubble - ALWAYS VISIBLE */}
+                                <div style={{ position: 'relative' }}>
                                   <button 
                                     className={styles.commentMenuBtn}
                                     onClick={(e) => {
                                       e.preventDefault()
                                       e.stopPropagation()
+                                      console.log('🔘 Comment menu button clicked for:', commentId)
                                       setShowCommentMenu(showCommentMenu === commentId ? null : commentId)
                                     }}
                                   >
                                     ⋯
                                   </button>
+                                  {/* Dropdown menu - positioned relative to button */}
                                   {showCommentMenu === commentId && (
-                                    <div className={styles.commentDropdown}>
+                                    <div 
+                                      className={styles.commentDropdown}
+                                      style={{
+                                        position: 'absolute',
+                                        top: '100%',
+                                        right: 0,
+                                        marginTop: '4px',
+                                        zIndex: 999999,
+                                        backgroundColor: 'white',
+                                        border: '1px solid #e4e6ea',
+                                        borderRadius: '8px',
+                                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
+                                        minWidth: '120px'
+                                      }}
+                                    >
+                                      {(() => {
+                                        console.log('🔍 Dropdown rendering for comment:', commentId)
+                                        console.log('🔍 Comment userId:', comment.userId, 'User uid:', user?.uid)
+                                        console.log('🔍 Comment userEmail:', comment.userEmail, 'User email:', user?.email)
+                                        const isOwner = comment.userId === user?.uid || (!comment.userId && comment.userEmail === user?.email)
+                                        console.log('🔍 Is owner?', isOwner)
+                                        return null
+                                      })()}
                                       {(comment.userId === user?.uid || (!comment.userId && comment.userEmail === user?.email)) ? (
                                         <>
                                           <button onClick={() => handleEditComment(comment)} className={styles.commentMenuItem}>Edit</button>
                                           <button onClick={() => handleDeleteComment(commentId)} className={`${styles.commentMenuItem} ${styles.deleteMenuItem}`}>Delete</button>
                                         </>
                                       ) : (
-                                        <button onClick={() => handleReportComment(commentId)} className={`${styles.commentMenuItem} ${styles.reportMenuItem}`}>Report</button>
+                                        <button 
+                                          onClick={() => {
+                                            console.log('🔘 Report button clicked!')
+                                            handleReportComment(commentId)
+                                          }} 
+                                          className={`${styles.commentMenuItem} ${styles.reportMenuItem}`}
+                                          style={{
+                                            display: 'block',
+                                            width: '100%',
+                                            padding: '8px 12px',
+                                            background: 'none',
+                                            border: 'none',
+                                            textAlign: 'left',
+                                            fontSize: '14px',
+                                            color: '#1c1e21',
+                                            cursor: 'pointer'
+                                          }}
+                                        >
+                                          Report
+                                        </button>
                                       )}
                                     </div>
                                   )}
@@ -3720,10 +3802,25 @@ export default function Dashboard() {
                               {/* Replies section - directly under the comment */}
                               {comment.replies && comment.replies.length > 0 && (
                                 <div style={{ marginTop: 8, marginLeft: 40, display: 'grid', gap: 8 }}>
-                                  {comment.replies.map((reply, rIdx) => {
+                                  {comment.replies
+                                    .filter(reply => {
+                                      // Hide replies with valid report verdict from public
+                                      if (reply.reportVerdict === 'VALID' && reply.userId !== user?.uid && reply.userEmail !== user?.email) {
+                                        return false
+                                      }
+                                      return true
+                                    })
+                                    .map((reply, rIdx) => {
                                     const replyId = reply.id || `reply-${rIdx}`
+                                    // Check if reply is hidden due to valid report
+                                    const isHiddenReply = reply.reportVerdict === 'VALID' && (reply.userId === user?.uid || reply.userEmail === user?.email)
                                     return (
-                                      <div key={replyId} className={styles.modalComment} data-reply-id={replyId}>
+                                      <div 
+                                        key={replyId} 
+                                        className={styles.modalComment} 
+                                        data-reply-id={replyId}
+                                        style={isHiddenReply ? { opacity: 0.5 } : {}}
+                                      >
                                         {/* Profile Picture */}
                                         <div className={styles.commentAvatar}>
                                           {reply.userProfilePicture ? (
@@ -3735,25 +3832,35 @@ export default function Dashboard() {
                                         {/* Reply Content */}
                                         <div className={styles.commentContent}>
                                           {/* Bubble with menu button */}
-                                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, position: 'relative' }}>
                                             <div className={styles.commentBubble}>
                                               <span className={styles.commentAuthor}>{reply.userName}</span>
                                               <p className={styles.commentText} dangerouslySetInnerHTML={{ __html: reply.text }}></p>
                                             </div>
                                             {/* Menu button right next to bubble */}
-                                            <div className={`${styles.commentMenuContainer} comment-menu-container ${showCommentMenu === replyId ? styles.menuOpen : ''}`}>
+                                            <div style={{ position: 'relative' }}>
                                               <button 
                                                 className={styles.commentMenuBtn}
                                                 onClick={(e) => {
                                                   e.preventDefault()
                                                   e.stopPropagation()
+                                                  console.log('🔘 Reply menu button clicked for:', replyId)
                                                   setShowCommentMenu(showCommentMenu === replyId ? null : replyId)
                                                 }}
                                               >
                                                 ⋯
                                               </button>
+                                              {/* Dropdown menu - positioned relative to button */}
                                               {showCommentMenu === replyId && (
-                                                <div className={styles.commentDropdown}>
+                                                <div 
+                                                  className={styles.commentDropdown}
+                                                  style={{
+                                                    position: 'absolute',
+                                                    top: '100%',
+                                                    right: 0,
+                                                    marginTop: '4px'
+                                                  }}
+                                                >
                                                   {(reply.userId === user?.uid || (!reply.userId && reply.userEmail === user?.email)) ? (
                                                     <>
                                                       <button onClick={() => handleEditReply(reply, commentId)} className={styles.commentMenuItem}>Edit</button>

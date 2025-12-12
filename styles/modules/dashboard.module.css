@@ -3837,6 +3837,7 @@
   display: inline-block;
   max-width: fit-content;
   position: relative;
+  z-index: 1;
 }
 
 .commentBubbleWrapper {
@@ -4118,6 +4119,7 @@
   padding: 16px 20px 32px 20px;
   position: relative;
   z-index: 1;
+  overflow: visible;
 }
 
 .modalComment {
@@ -4643,31 +4645,32 @@
   align-items: center;
   align-self: flex-start;
   margin-left: 4px;
-  z-index: 10;
+  z-index: 99999;
   position: relative;
   pointer-events: auto;
   flex-shrink: 0;
 }
 
 .commentMenuBtn {
-  background: none;
-  border: none;
-  color: #65676b;
-  font-size: 14px;
-  padding: 2px 4px;
-  cursor: pointer;
-  border-radius: 4px;
+  background: #f0f2f5 !important;
+  border: none !important;
+  color: #65676b !important;
+  font-size: 16px !important;
+  padding: 4px !important;
+  cursor: pointer !important;
+  border-radius: 50% !important;
   transition: all 0.2s;
-  opacity: 0;
-  visibility: hidden;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  z-index: 100;
-  pointer-events: auto;
+  opacity: 1 !important;
+  visibility: visible !important;
+  width: 28px !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+  flex-shrink: 0 !important;
 }
 
 .commentMenuBtn:hover {
@@ -4677,9 +4680,28 @@
 /* Show menu button on comment hover */
 .modalComment:hover .commentMenuBtn,
 .comment:hover .commentMenuBtn,
-.commentBubbleWrapper:hover .commentMenuBtn {
+.commentBubbleWrapper:hover .commentMenuBtn,
+.commentContent:hover .commentMenuBtn {
   opacity: 1;
   visibility: visible;
+}
+
+/* Also show on hover of the parent flex container */
+.commentMenuContainer:hover .commentMenuBtn {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Make button always visible on mobile or touch devices */
+@media (hover: none) {
+  .commentMenuBtn {
+    opacity: 0.7;
+    visibility: visible;
+  }
+  
+  .commentMenuBtn:active {
+    opacity: 1;
+  }
 }
 
 /* Keep menu button visible when dropdown is open */
@@ -4691,31 +4713,32 @@
 }
 
 .commentDropdown {
-  position: fixed;
-  background: white;
-  border: 1px solid #e4e6ea;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  z-index: 99999;
-  min-width: 120px;
-  overflow: hidden;
-  pointer-events: auto;
+  position: absolute;
+  background: white !important;
+  border: 1px solid #e4e6ea !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+  z-index: 999999 !important;
+  min-width: 120px !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+  display: block !important;
 }
 
 .commentMenuItem {
-  display: block;
-  width: 100%;
-  padding: 8px 12px;
-  background: none;
-  border: none;
-  text-align: left;
-  font-size: 14px;
-  color: #1c1e21;
-  cursor: pointer;
+  display: block !important;
+  width: 100% !important;
+  padding: 8px 12px !important;
+  background: none !important;
+  border: none !important;
+  text-align: left !important;
+  font-size: 14px !important;
+  color: #1c1e21 !important;
+  cursor: pointer !important;
   transition: background-color 0.2s;
-  position: relative;
-  z-index: 100000;
-  pointer-events: auto;
+  position: relative !important;
+  z-index: 9999999 !important;
+  pointer-events: auto !important;
 }
 
 .commentMenuItem:hover {

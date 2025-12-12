@@ -54,6 +54,16 @@
   color: #2d3748;
   margin-bottom: 8px;
   font-family: 'Poppins', sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.titleLogo {
+  height: 40px;
+  width: auto;
+  vertical-align: middle;
 }
 
 .subtitle {

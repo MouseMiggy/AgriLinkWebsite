@@ -481,7 +481,7 @@ app.post("/send-sms-code", async (req, res) => {
   }
 });
 
-// 2️⃣ Verify SMS code
+// 2️⃣ Verify SMS code and CREATE USER IN FIREBASE
 app.post("/verify-sms-code", async (req, res) => {
   try {
     const { phoneNumber, code } = req.body;
@@ -519,21 +519,51 @@ app.post("/verify-sms-code", async (req, res) => {
       return res.json({ success: false, error: "Invalid verification code" });
     }
 
-    // Return user data for registration completion (without password hash for security)
-    res.json({ 
-      success: true, 
-      message: "Phone number verified successfully",
-      userData: {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        phoneNumber: data.phoneNumber,
-        password: data.password, // Original password for Firebase Auth
-        passwordHash: data.passwordHash // Hash for our Firestore storage
-      }
+    console.log(`✅ SMS code verified! Creating Firebase user...`);
+
+    // ✅ CREATE FIREBASE AUTH USER
+    const tempEmail = `${cleanedPhone}@temp.agrilink.com`;
+    const userRecord = await admin.auth().createUser({
+      email: tempEmail,
+      password: Math.random().toString(36).slice(-12), // Random password for Firebase Auth
+      displayName: `${data.firstName} ${data.lastName}`,
+      phoneNumber: `+${cleanedPhone}` // Store with + prefix in Firebase Auth
     });
 
-    // Remove verification code after successful verification
+    console.log(`✅ Firebase Auth user created with UID: ${userRecord.uid}`);
+
+    // ✅ SAVE TO FIRESTORE USERS COLLECTION
+    await db.collection("Users").doc(userRecord.uid).set({
+      uid: userRecord.uid,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      phoneNumber: `+${cleanedPhone}`, // Store with + prefix for consistency
+      displayName: `${data.firstName} ${data.lastName}`,
+      passwordHash: data.passwordHash, // Store hashed password for login validation
+      firebaseEmail: tempEmail, // Store temp email for Firebase Auth
+      verified: true,
+      phoneVerified: true,
+      registrationMethod: 'phone',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      photoURL: null
+    });
+
+    console.log(`✅ User document created in Firestore Users collection`);
+
+    // Remove verification code after successful registration
     await docRef.delete();
+
+    res.json({ 
+      success: true, 
+      message: "Phone number verified and user created successfully",
+      user: {
+        uid: userRecord.uid,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phoneNumber: `+${cleanedPhone}`
+      }
+    });
 
   } catch (err) {
     console.error("❌ Error verifying SMS code:", err);
@@ -1161,6 +1191,7 @@ app.post("/validate-password", async (req, res) => {
         uid: userDoc.id,
         email: userData.email,
         phoneNumber: userData.phoneNumber,
+        firebaseEmail: userData.firebaseEmail, // Include firebaseEmail for phone users
         firstName: userData.firstName,
         lastName: userData.lastName,
         displayName: userData.displayName,

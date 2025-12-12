@@ -210,9 +210,10 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
         }
         
         console.log('🔗 Full listing report validation URL:', backendUrl)
-      } else if (contentType === 'message' || contentType === 'chat') {
-        // Use message-specific validation endpoint for chat/message reports
-        // For messages, only mark as VALID if content contains offensive/bad words
+      } else if (contentType === 'message' || contentType === 'chat' || contentType === 'comment') {
+        // Use message-specific validation endpoint for chat/message/comment reports
+        // For messages and comments, only mark as VALID if content contains offensive/bad words
+        // Non-agricultural content is allowed - only flag truly offensive content
         backendUrl = 'https://ai-backend-6-565d.onrender.com/validate-message-report'
         
         const messageText = content?.caption || content?.text || content?.content || ''
@@ -220,19 +221,20 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
         requestBody = {
           reporterId,
           reportedUserId: targetUser?.id || targetUser,
-          contentType: 'message',
+          contentType: contentType === 'comment' ? 'comment' : 'message',
           contentId: content?.id || '',
           messageText: messageText,
           mediaType: hasValidMedia ? 'image' : 'text',
           mediaUrl: cleanMediaUrl || cleanImageUrl,
           imageUrls: cleanImageUrls,
-          reportType: 'offensive', // Messages are reported for offensive content only
-          additionalNote: 'Check for offensive language, harassment, or inappropriate content. Agricultural content is allowed.',
+          reportType: 'offensive', // Only offensive content should be flagged
+          additionalNote: 'IMPORTANT: Only mark as VALID if content contains offensive language, bad words, harassment, cruelty, or threats. Non-agricultural content is ALLOWED and should be marked as INVALID (not a valid report).',
           timestamp
         }
         
-        console.log('🔗 Full message report validation URL:', backendUrl)
-        console.log('📝 Message validation note: Only offensive/bad words should be marked as VALID')
+        console.log('🔗 Full message/comment report validation URL:', backendUrl)
+        console.log('📝 Validation note: Only offensive/bad words/harassment should be marked as VALID')
+        console.log('📝 Non-agricultural content is ALLOWED')
       } else {
         // Use general report validation endpoint for other content (posts, comments)
         backendUrl = 'https://ai-backend-6-565d.onrender.com/validate-report'
@@ -382,17 +384,25 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
               if (contentOwnerId) {
                 const contentName = content.name || content.title || content.text || content.caption || 'content'
                 const contentTypeLabel = contentType === 'listing' ? 'listing' : contentType === 'post' ? 'post' : 'comment'
-                const navigateTo = contentType === 'listing' ? '/listings' : '/dashboard'
+                const navigateTo = contentType === 'listing' ? '/listings' : contentType === 'post' ? '/profile' : '/dashboard'
+                
+                // Get AI reason from the validation result
+                const aiReason = result?.result?.reason || updateData.aiValidationResult?.reason || 'Your content violated community standards.'
+                const aiCategory = result?.result?.category || updateData.aiValidationResult?.category || 'violation'
                 
                 const notificationData = {
                   userId: contentOwnerId,
-                  title: `${contentTypeLabel.charAt(0).toUpperCase() + contentTypeLabel.slice(1)} Hidden`,
-                  message: `Your ${contentTypeLabel} "${contentName}" has been hidden due to a valid report.`,
-                  type: `${contentType}_hidden`,
+                  title: `${contentTypeLabel.charAt(0).toUpperCase() + contentTypeLabel.slice(1)} Reported`,
+                  message: `Your ${contentTypeLabel} has been reported and hidden due to a violation. Tap to see details and review community standards.`,
+                  type: `${contentType}_reported`,
                   data: {
                     contentId: content.id,
                     reportId: reportRef.id,
-                    navigateTo: navigateTo
+                    contentType: contentType,
+                    aiReason: aiReason,
+                    aiCategory: aiCategory,
+                    navigateTo: navigateTo,
+                    showCommunityStandards: true
                   },
                   isRead: false,
                   createdAt: new Date(),
@@ -400,7 +410,7 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
                 }
                 
                 await addDoc(collection(db, 'notifications'), notificationData)
-                console.log(`📬 Notification sent to ${contentTypeLabel} owner`)
+                console.log(`📬 Notification sent to ${contentTypeLabel} owner with AI reason`)
               }
             } catch (hideError) {
               console.error('❌ Error hiding listing:', hideError)

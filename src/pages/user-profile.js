@@ -32,6 +32,7 @@ export default function UserProfile() {
   const [editProfileLoadingMessage, setEditProfileLoadingMessage] = useState('')
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [confirmModalType, setConfirmModalType] = useState('') // 'save' or 'discard'
+  const [showHiddenPosts, setShowHiddenPosts] = useState(false) // For collapsible hidden posts container
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
@@ -641,8 +642,90 @@ export default function UserProfile() {
               <p>When you create posts, they will appear here</p>
             </div>
           ) : (
-            <div className={styles.postsListView}>
-              {posts.map((post) => (
+            <>
+              {/* Hidden Posts Container - Collapsible */}
+              {posts.filter(post => post.reportVerdict === 'VALID').length > 0 && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <div 
+                    onClick={() => setShowHiddenPosts(!showHiddenPosts)}
+                    style={{
+                      padding: '1rem',
+                      backgroundColor: '#fff3cd',
+                      border: '1px solid #ffc107',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: showHiddenPosts ? '0.5rem' : '0'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+                      <span style={{ fontWeight: '600', color: '#856404' }}>
+                        Hidden Posts ({posts.filter(post => post.reportVerdict === 'VALID').length})
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '1.2rem', color: '#856404' }}>
+                      {showHiddenPosts ? '▼' : '▶'}
+                    </span>
+                  </div>
+                  
+                  {showHiddenPosts && (
+                    <div style={{ 
+                      padding: '1rem', 
+                      backgroundColor: '#fff9e6',
+                      border: '1px solid #ffc107',
+                      borderTop: 'none',
+                      borderRadius: '0 0 8px 8px'
+                    }}>
+                      <p style={{ 
+                        fontSize: '0.9rem', 
+                        color: '#856404', 
+                        marginBottom: '1rem',
+                        fontStyle: 'italic'
+                      }}>
+                        These posts were hidden due to reports. They are only visible to you.
+                      </p>
+                      {posts.filter(post => post.reportVerdict === 'VALID').map((post) => (
+                        <div key={post.id} style={{ opacity: 0.5, marginBottom: '1rem' }}>
+                          <div className={styles.post}>
+                            <div className={styles.postHeader}>
+                              <div className={styles.postAvatar}>
+                                {userProfile?.firstName?.[0]?.toUpperCase() || 'U'}
+                              </div>
+                              <div className={styles.postInfo}>
+                                <h4 className={styles.postAuthor}>
+                                  {userProfile?.firstName && userProfile?.lastName
+                                    ? `${userProfile.firstName} ${userProfile.lastName}`
+                                    : user?.displayName || 'User'}
+                                </h4>
+                                <span className={styles.postTime}>
+                                  {formatTimeAgo(post.createdAt)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className={styles.postContent}>
+                              {post.text && <p className={styles.postText}>{post.text}</p>}
+                              {(post.imageUrls?.length > 0 || post.images?.length > 0 || post.imageUrl) && (
+                                <div className={styles.postImages}>
+                                  {(post.imageUrls || post.images || (post.imageUrl ? [post.imageUrl] : [])).map((image, index) => (
+                                    <img key={index} src={image} alt={`Post image ${index + 1}`} className={styles.postImage} />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Regular Posts */}
+              <div className={styles.postsListView}>
+              {posts.filter(post => post.reportVerdict !== 'VALID').map((post) => (
                   <div key={post.id} className={styles.post}>
                     <div className={styles.postHeader}>
                       <div className={styles.postAvatar}>
@@ -731,7 +814,8 @@ export default function UserProfile() {
                   </div>
                 ))}
               </div>
-            )}
+            </>
+          )}
         </main>
       </div>
 

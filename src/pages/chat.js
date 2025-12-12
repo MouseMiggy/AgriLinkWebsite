@@ -729,15 +729,37 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
           setIsSuggestionsLocked(false)
         }, 2000)
       }
-      // Always trigger suggestions when OTHER user replies and there's an approved request
-      else if (isOtherUserReply && requestStatus === 'approved' && userRole && listingName) {
-        console.log('🤖 Other user replied, generating fresh suggestions')
-        generateContextualSuggestions()
+      // Always trigger suggestions when OTHER user replies
+      // Check for approved request in BOTH messages and chat document
+      else if (isOtherUserReply && userRole) {
+        const hasApprovedRequestInMessages = chatMessages.some(msg => 
+          msg.isListingRequest && msg.requestStatus === 'approved'
+        )
+        const hasApprovedRequestInChat = selectedChat?.requestStatus === 'approved'
+        const hasApprovedRequest = hasApprovedRequestInMessages || hasApprovedRequestInChat
+        
+        // Get listing name from messages or chat document
+        const listingRequestMessage = chatMessages.find(msg => msg.isListingRequest)
+        const effectiveListingName = listingRequestMessage?.listingName || selectedChat?.listingName || listingName || 'product'
+        
+        console.log('🤖 Other user replied - checking approval status:', {
+          hasApprovedRequestInMessages,
+          hasApprovedRequestInChat,
+          hasApprovedRequest,
+          effectiveListingName,
+          willGenerateSuggestions: hasApprovedRequest
+        })
+        
+        if (hasApprovedRequest) {
+          console.log('🤖 Other user replied with approved request, generating fresh suggestions')
+          generateContextualSuggestions()
+        } else {
+          console.log('⚠️ Other user replied but request not approved yet - skipping suggestions')
+        }
       }
     }
-  }, [chatMessages.length, requestStatus, userRole, listingName, user?.uid])
+  }, [chatMessages.length, requestStatus, userRole, listingName, user?.uid, selectedChat?.requestStatus, selectedChat?.listingName])
 
-  // Check if there's already an unanswered transaction completion message
   const hasUnansweredTransactionCompletion = (messages) => {
     return false // Always return false since we're not sending transaction messages anymore
   }
@@ -1498,7 +1520,8 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
           listingName,
           chatId: chatData.chatId || chatId,
           transactionStatus: chatData.transactionStatus,
-          transactionStatusTime: chatData.transactionStatusTime
+          transactionStatusTime: chatData.transactionStatusTime,
+          requestStatus: chatData.requestStatus // Add requestStatus from chat document
         }
         
         console.log('🔍 DEBUG: Conversation data from Firestore:', {
@@ -2714,9 +2737,19 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
               
               {(() => {
                 // Check if there's an approved request between these users
-                const hasApprovedRequest = chatMessages.some(msg => 
+                // Check BOTH the messages AND the chat document's requestStatus field
+                const hasApprovedRequestInMessages = chatMessages.some(msg => 
                   msg.isListingRequest && msg.requestStatus === 'approved'
                 )
+                const hasApprovedRequestInChat = selectedChat?.requestStatus === 'approved'
+                const hasApprovedRequest = hasApprovedRequestInMessages || hasApprovedRequestInChat
+                
+                console.log('🔍 Chat approval check:', {
+                  hasApprovedRequestInMessages,
+                  hasApprovedRequestInChat,
+                  selectedChatRequestStatus: selectedChat?.requestStatus,
+                  finalCanChat: hasApprovedRequest
+                })
                 
                 // Check if current user is the listing owner (can always chat)
                 const isListingOwner = userRole === 'livestock_owner'

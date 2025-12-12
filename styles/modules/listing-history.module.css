@@ -192,11 +192,11 @@
 
 .columnHeader:nth-child(1) { width: 18%; } /* Listing Name */
 .columnHeader:nth-child(2) { width: 20%; } /* Listing Details - reduced from 25% */
-.columnHeader:nth-child(3) { width: 10%; } /* Price */
-.columnHeader:nth-child(4) { width: 15%; } /* Buyer Name */
-.columnHeader:nth-child(5) { width: 12%; } /* Date Added */
-.columnHeader:nth-child(6) { width: 12%; } /* Date Sold - increased from 10% */
-.columnHeader:nth-child(7) { width: 13%; } /* Date Deleted - increased from 10% */
+.columnHeader:nth-child(3) { width: 10%; text-align: center; } /* Price */
+.columnHeader:nth-child(4) { width: 15%; text-align: center; } /* Quantity */
+.columnHeader:nth-child(5) { width: 12%; text-align: center; } /* Date Added */
+.columnHeader:nth-child(6) { width: 12%; text-align: center; } /* Date Sold - increased from 10% */
+.columnHeader:nth-child(7) { width: 13%; text-align: center; } /* Date Deleted - increased from 10% */
 
 .tableRow {
   border-bottom: 1px solid #f0f0f0;
@@ -212,6 +212,15 @@
   padding: 16px;
   vertical-align: middle;
   border-bottom: 1px solid #f0f0f0;
+}
+
+/* Center-align specific columns */
+.tableRow .tableCell:nth-child(3),  /* Price */
+.tableRow .tableCell:nth-child(4),  /* Quantity */
+.tableRow .tableCell:nth-child(5),  /* Date Added */
+.tableRow .tableCell:nth-child(6),  /* Date Sold */
+.tableRow .tableCell:nth-child(7) { /* Date Deleted */
+  text-align: center;
 }
 
 .listingName {
@@ -234,11 +243,15 @@
 .price {
   font-weight: 600 !important;
   color: #fa9100 !important;
-  text-align: left !important;
+  text-align: center !important;
 }
 
 .price.free {
   color: #28a745 !important;
+}
+
+.quantity {
+  text-align: center;
 }
 
 .buyerName {
@@ -248,6 +261,7 @@
 .date {
   color: #65676b;
   font-size: 13px;
+  text-align: center;
 }
 
 /* Empty Table State */

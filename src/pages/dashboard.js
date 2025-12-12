@@ -2858,28 +2858,25 @@ export default function Dashboard() {
                searchSubmitted && searchResults.length === 0 ? [] : 
                posts)
               .filter(post => {
-                // Hide posts with valid report verdict from public
+                // Hide posts with valid report verdict from everyone including owner in feed
                 console.log('🔍 Filtering post:', {
                   postId: post.id,
                   reportVerdict: post.reportVerdict,
                   postUserId: post.userId,
                   currentUserId: user?.uid,
-                  shouldHide: post.reportVerdict === 'VALID' && post.userId !== user?.uid
+                  shouldHide: post.reportVerdict === 'VALID'
                 })
-                if (post.reportVerdict === 'VALID' && post.userId !== user?.uid) {
-                  console.log('🚫 Hiding post with valid report:', post.id)
+                if (post.reportVerdict === 'VALID') {
+                  console.log('🚫 Hiding post with valid report from feed:', post.id)
                   return false
                 }
                 return true
               })
               .map((post) => {
-                // Check if post is hidden due to valid report
-                const isHiddenPost = post.reportVerdict === 'VALID' && post.userId === user?.uid
                 return (
               <div 
                 key={post.id} 
                 className={styles.post}
-                style={isHiddenPost ? { opacity: 0.5 } : {}}
               >
                 <div className={styles.postHeader}>
                   <div className={styles.postAvatar}>

@@ -200,7 +200,7 @@ export default function ListingHistory() {
                     </td>
                     <td className={styles.tableCell}>
                       <div className={styles.quantity}>
-                        {listing.quantity || listing.amount || listing.stock || '-'}
+                        {listing.measurements ? `${listing.measurements} ${listing.measurementUnit || 'units'}` : (listing.quantity || listing.amount || listing.stock || '-')}
                       </div>
                     </td>
                     <td className={styles.tableCell}>

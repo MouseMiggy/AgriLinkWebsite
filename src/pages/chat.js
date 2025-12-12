@@ -333,9 +333,9 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
   const aiSuggestionsCache = useRef(new Map())
   const lastProcessedMessageId = useRef(null)
   
-  // Clear cache on component mount to ensure fresh payment filtering
+  // Clear cache on component mount
   useEffect(() => {
-    console.log('🗑️ Clearing AI suggestions cache for fresh payment filtering')
+    console.log('🗑️ Clearing AI suggestions cache')
     aiSuggestionsCache.current.clear()
   }, [])
   
@@ -429,57 +429,10 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       if (result && result.suggestions) {
         console.log('🤖 AI Suggestions received:', result);
         
-        // Filter suggestions to only show appropriate conversation stages
-        const stageBasedSuggestions = result.suggestions.filter(suggestion => {
-          const suggestionText = suggestion.toLowerCase();
-          
-          // Block payment-related suggestions
-          const paymentPhrases = [
-            'cash on', 'cash upon', 'cash for', 'cash payment',
-            'card payment', 'credit card', 'debit card',
-            'bank transfer', 'bank deposit',
-            'gcash payment', 'paypal payment',
-            'pay with cash', 'pay by cash',
-            'payment method', 'payment option',
-            'cod', 'cash on delivery', 'cash on meetup', 'cash on pickup'
-          ];
-          
-          const containsPayment = paymentPhrases.some(phrase => suggestionText.includes(phrase));
-          if (containsPayment) {
-            console.log('🚫 BLOCKED payment suggestion:', suggestion);
-            return false;
-          }
-          
-          // Allow stage-appropriate suggestions
-          const allowedPhrases = [
-            // Stage 1: Listing details
-            'quality', 'condition', 'price', 'cost', 'how much', 'details',
-            'description', 'specifications', 'features', 'information',
-            'about the', 'tell me more', 'what is', 'how is',
-            
-            // Stage 2: Location and time
-            'location', 'where', 'meet', 'pickup', 'delivery', 'time',
-            'when', 'schedule', 'available', 'address', 'place',
-            
-            // Stage 3: Finalization
-            'confirm', 'ready', 'finalize', 'complete', 'done', 'agree',
-            'sure', 'okay', 'deal', 'arrange', 'proceed'
-          ];
-          
-          const isStageAppropriate = allowedPhrases.some(phrase => suggestionText.includes(phrase));
-          
-          if (isStageAppropriate) {
-            console.log('✅ ALLOWED stage-appropriate suggestion:', suggestion);
-            return true;
-          } else {
-            console.log('⚠️ SKIPPED non-stage suggestion:', suggestion);
-            return false;
-          }
-        });
+        // Take top 3 suggestions without filtering
+        const filteredSuggestions = result.suggestions.slice(0, 3);
         
-        const filteredSuggestions = stageBasedSuggestions.slice(0, 3);
-        
-        console.log('🔍 FINAL in triggerAISuggestions: Filtered', result.suggestions.length, 'suggestions to', filteredSuggestions.length, '(stage-appropriate only)');
+        console.log('🔍 Using top 3 AI suggestions:', filteredSuggestions);
         
         // Store suggestions in cache immediately
         aiSuggestionsCache.current.set(cacheKey, filteredSuggestions);
@@ -500,21 +453,11 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         setSuggestionsLockedUntil(lockUntil)
         
         console.log('🔒 Locking suggestions for 10 seconds until:', new Date(lockUntil).toLocaleTimeString())
-        console.log('🤖 AI is thinking... suggestions will appear in 5 seconds')
+        console.log('✅ Showing AI suggestions immediately')
         
-        // Wait 5 seconds before showing suggestions (AI thinking time)
-        setTimeout(() => {
-          console.log('✅ AI finished thinking - showing suggestions now')
-          setAiSuggestions(filteredSuggestions);
-          setShowSuggestions(true);
-          
-          // Store suggestions persistently for this chat
-          setPersistentSuggestions(prev => {
-            const updated = { ...prev };
-            updated[selectedChat.id] = filteredSuggestions;
-            return updated;
-          });
-        }, 5000);
+        // Show suggestions immediately without delay
+        setAiSuggestions(filteredSuggestions);
+        setShowSuggestions(true);
         
         // Unlock suggestions after 10 seconds total
         setTimeout(() => {
@@ -614,57 +557,10 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
       if (result && result.suggestions && result.suggestions.length > 0) {
         console.log('✅ Raw AI suggestions received:', result.suggestions)
         
-        // Filter suggestions to only show appropriate conversation stages
-        const stageBasedSuggestions = result.suggestions.filter(suggestion => {
-          const suggestionText = suggestion.toLowerCase();
-          
-          // Block payment-related suggestions
-          const paymentPhrases = [
-            'cash on', 'cash upon', 'cash for', 'cash payment',
-            'card payment', 'credit card', 'debit card',
-            'bank transfer', 'bank deposit',
-            'gcash payment', 'paypal payment',
-            'pay with cash', 'pay by cash',
-            'payment method', 'payment option',
-            'cod', 'cash on delivery', 'cash on meetup', 'cash on pickup'
-          ];
-          
-          const containsPayment = paymentPhrases.some(phrase => suggestionText.includes(phrase));
-          if (containsPayment) {
-            console.log('🚫 BLOCKED payment suggestion:', suggestion);
-            return false;
-          }
-          
-          // Allow stage-appropriate suggestions
-          const allowedPhrases = [
-            // Stage 1: Listing details
-            'quality', 'condition', 'price', 'cost', 'how much', 'details',
-            'description', 'specifications', 'features', 'information',
-            'about the', 'tell me more', 'what is', 'how is',
-            
-            // Stage 2: Location and time
-            'location', 'where', 'meet', 'pickup', 'delivery', 'time',
-            'when', 'schedule', 'available', 'address', 'place',
-            
-            // Stage 3: Finalization
-            'confirm', 'ready', 'finalize', 'complete', 'done', 'agree',
-            'sure', 'okay', 'deal', 'arrange', 'proceed'
-          ];
-          
-          const isStageAppropriate = allowedPhrases.some(phrase => suggestionText.includes(phrase));
-          
-          if (isStageAppropriate) {
-            console.log('✅ ALLOWED stage-appropriate suggestion:', suggestion);
-            return true;
-          } else {
-            console.log('⚠️ SKIPPED non-stage suggestion:', suggestion);
-            return false;
-          }
-        });
+        // Take top 3 suggestions without filtering
+        const filteredSuggestions = result.suggestions.slice(0, 3);
         
-        const filteredSuggestions = stageBasedSuggestions.slice(0, 3);
-        
-        console.log('🔍 FINAL: Filtered', result.suggestions.length, 'suggestions to', filteredSuggestions.length, '(stage-appropriate only)')
+        console.log('🔍 Using top 3 AI suggestions:', filteredSuggestions)
         
         // Lock suggestions for 10 seconds to prevent any changes
         const lockUntil = now + 10000
@@ -672,20 +568,17 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
         setSuggestionsLockedUntil(lockUntil)
         
         console.log('🔒 Locking suggestions for 10 seconds until:', new Date(lockUntil).toLocaleTimeString())
-        console.log('🤖 AI is thinking... suggestions will appear in 5 seconds')
+        console.log('✅ Showing AI suggestions immediately')
         
-        // Wait 5 seconds before showing suggestions (AI thinking time)
-        setTimeout(() => {
-          console.log('✅ AI finished thinking - showing suggestions now')
-          setAiSuggestions(filteredSuggestions)
-          setShowSuggestions(true)
-          
-          // Store suggestions persistently for this chat
-          setPersistentSuggestions(prev => ({
-            ...prev,
-            [chatId]: filteredSuggestions
-          }));
-        }, 5000);
+        // Show suggestions immediately without delay
+        setAiSuggestions(filteredSuggestions)
+        setShowSuggestions(true)
+        
+        // Store suggestions persistently for this chat
+        setPersistentSuggestions(prev => ({
+          ...prev,
+          [chatId]: filteredSuggestions
+        }));
         
         // Unlock suggestions after 10 seconds total
         setTimeout(() => {
@@ -2512,13 +2405,6 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                   // Transaction is complete ONLY when both users said YES (2 YES messages) and NO user said NO (0 NO messages)
                   const isTransactionCompleted = yesTransactionMessages.length >= 2 && noTransactionMessages.length === 0
                   
-                  console.log('🔍 Done Transaction Button Check:', {
-                    yesCount: yesTransactionMessages.length,
-                    noCount: noTransactionMessages.length,
-                    isCompleted: isTransactionCompleted,
-                    hasApprovedRequest
-                  })
-                  
                   if (!hasApprovedRequest) {
                     return null // Don't show buttons until request is approved
                   }
@@ -2687,12 +2573,6 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                 // Only show divider when exactly 2 YES messages exist and NO messages exist
                 const isTransactionCompleted = yesTransactionMessages.length >= 2 && noTransactionMessages.length === 0
                 
-                console.log('🔍 Transaction Complete Divider Check:', {
-                  yesCount: yesTransactionMessages.length,
-                  noCount: noTransactionMessages.length,
-                  isCompleted: isTransactionCompleted
-                })
-                
                 return isTransactionCompleted ? (
                   <div className={styles.transactionCompleteDivider}>
                     <span className={styles.dividerText}>Transaction complete</span>
@@ -2700,8 +2580,13 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                 ) : null
               })()}
 
-              {/* AI Suggestions Section - disabled when transaction is completed */}
+              {/* AI Suggestions Section - only show after request is approved */}
               {(() => {
+                // Check if there's an approved request
+                const hasApprovedRequest = chatMessages.some(msg => 
+                  msg.isListingRequest && msg.requestStatus === 'approved'
+                )
+                
                 // Check if transaction is completed
                 const yesTransactionMessages = chatMessages.filter(msg => 
                   msg.text === 'Yes, the transaction is done.' && msg.isTransactionResponse
@@ -2711,9 +2596,14 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
                 )
                 const isTransactionCompleted = yesTransactionMessages.length >= 2 && noTransactionMessages.length === 0
                 
-                // Show container if suggestions exist OR if AI is thinking (locked)
-                // Keep suggestions visible unless request is declined or transaction is done
-                return (aiSuggestions.length > 0 || isSuggestionsLocked) && showSuggestions && requestStatus !== 'declined' && !isTransactionCompleted
+                // Show container only if:
+                // 1. Request is approved AND
+                // 2. (Suggestions exist OR AI is thinking OR showSuggestions is true) AND
+                // 3. Request is not declined AND
+                // 4. Transaction is not completed
+                const shouldShowContainer = hasApprovedRequest && (aiSuggestions.length > 0 || isSuggestionsLocked || showSuggestions) && requestStatus !== 'declined' && !isTransactionCompleted
+                
+                return shouldShowContainer
               })() && (
                 <div className={`${styles.aiSuggestionsContainer} ${!isSuggestionsOpen ? styles.collapsed : ''}`}>
                   {/* Collapsible Header */}
@@ -2781,17 +2671,9 @@ const Chat = ({ user, userRole, setActiveMenuItem, onUnreadChatsUpdate }) => {
               
               {/* Auto-scroll ref element */}
               <div ref={messagesEndRef} />
-              
+
               {/* White Container Rating Prompt - appears when transaction is completed and individual user hasn't rated yet */}
               {(() => {
-                console.log('🎯 Rating Button Debug:', {
-                  hasTransactionCompleted,
-                  userHasRated,
-                  shouldShow: hasTransactionCompleted && !userHasRated,
-                  selectedChatId: selectedChat?.id,
-                  otherUserId: selectedChat?.otherUserId
-                })
-                
                 // Don't render anything if user has already rated
                 if (userHasRated) {
                   return null

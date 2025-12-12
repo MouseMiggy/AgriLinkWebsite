@@ -85,6 +85,8 @@ export default function Dashboard() {
   const [reportType, setReportType] = useState('')
   const [reportDescription, setReportDescription] = useState('')
   const [reportedPost, setReportedPost] = useState(null)
+  const [showCommentReportModal, setShowCommentReportModal] = useState(false)
+  const [reportedComment, setReportedComment] = useState(null)
   const [reportEvidence, setReportEvidence] = useState(null)
   const [reportLoading, setReportLoading] = useState(false)
   const [reportImageIndex, setReportImageIndex] = useState(0)
@@ -1547,7 +1549,7 @@ export default function Dashboard() {
     }, 100) // Small delay to ensure the edit interface has rendered
   }
 
-  const handleReportComment = async (commentId) => {
+  const handleReportComment = (commentId) => {
     console.log('Report comment called for:', commentId)
     
     // Find the comment and post
@@ -1570,59 +1572,16 @@ export default function Dashboard() {
       return
     }
 
-    const reason = prompt('Please select a reason for reporting this comment:\n\n1. Spam\n2. Inappropriate Content\n3. Harassment\n4. False Information\n\nEnter the number (1-4):')
-    
-    if (!reason || !['1', '2', '3', '4'].includes(reason)) {
-      setShowCommentMenu(null)
-      return
-    }
-
-    const reasonMap = {
-      '1': { key: 'spam', desc: 'This comment appears to be spam' },
-      '2': { key: 'inappropriate', desc: 'This comment contains inappropriate content' },
-      '3': { key: 'harassment', desc: 'This comment contains harassment or bullying' },
-      '4': { key: 'misinformation', desc: 'This comment contains false or misleading information' }
-    }
-
-    const selectedReason = reasonMap[reason]
-
-    try {
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        alert('You must be logged in to report comments')
-        return
-      }
-
-      const reportData = {
-        commentId: commentId,
-        postId: targetPost.id,
-        reporterId: currentUser.uid,
-        reporterName: currentUser.displayName || 'Anonymous',
-        reporterEmail: currentUser.email || '',
-        reason: selectedReason.key,
-        description: selectedReason.desc,
-        commentContent: targetComment.text || '',
-        commentAuthor: targetComment.userName || targetComment.userEmail || 'Unknown'
-      }
-
-      const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/report-comment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reportData)
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        alert('Report submitted successfully. Our AI system will review it shortly and take appropriate action if needed.')
-      } else {
-        alert('Error: ' + (data.error || 'Failed to submit report. Please try again.'))
-      }
-    } catch (error) {
-      console.error('Error submitting comment report:', error)
-      alert('Network error. Please check your connection and try again.')
-    }
-    
+    // Set up comment data for ReportModal
+    setReportedComment({
+      id: targetComment.id,
+      text: targetComment.text,
+      content: targetComment.text,
+      userId: targetComment.userId,
+      userName: targetComment.userName || targetComment.userEmail || 'Unknown',
+      postId: targetPost.id
+    })
+    setShowCommentReportModal(true)
     setShowCommentMenu(null)
   }
 
@@ -1853,6 +1812,11 @@ export default function Dashboard() {
   const closeReportModal = () => {
     setShowReportModal(false)
     setReportedPost(null)
+  }
+
+  const closeCommentReportModal = () => {
+    setShowCommentReportModal(false)
+    setReportedComment(null)
   }
 
   // Handle ESC key and click outside to close search panel
@@ -3899,7 +3863,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Report Modal */}
+      {/* Report Modal for Posts */}
       <ReportModal
         visible={showReportModal}
         onClose={closeReportModal}
@@ -3917,6 +3881,26 @@ export default function Dashboard() {
           imageUrls: reportedPost?.imageUrls || reportedPost?.images || []
         }}
         contentType="post"
+        reporterId={user?.uid}
+      />
+
+      {/* Report Modal for Comments */}
+      <ReportModal
+        visible={showCommentReportModal}
+        onClose={closeCommentReportModal}
+        targetUser={{
+          id: reportedComment?.userId,
+          displayName: reportedComment?.userName,
+          firstName: reportedComment?.userName?.split(' ')[0],
+          lastName: reportedComment?.userName?.split(' ')[1]
+        }}
+        content={{
+          id: reportedComment?.id,
+          caption: reportedComment?.text || reportedComment?.content,
+          text: reportedComment?.text || reportedComment?.content,
+          content: reportedComment?.text || reportedComment?.content
+        }}
+        contentType="comment"
         reporterId={user?.uid}
       />
 

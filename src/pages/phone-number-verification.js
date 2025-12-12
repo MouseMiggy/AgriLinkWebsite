@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
-import styles from '../../styles/modules/phone-number-verification.module.css'
+import Toast from '../components/Toast'
+import styles from '../../styles/modules/verify-reset-code.module.css'
 
 export default function PhoneNumberVerification() {
   const [phoneNumber, setPhoneNumber] = useState('')
@@ -12,8 +13,7 @@ export default function PhoneNumberVerification() {
   const [verifying, setVerifying] = useState(false)
   const [resending, setResending] = useState(false)
   const [autoSent, setAutoSent] = useState(false)
-  const [error, setError] = useState('')
-  const [showToast, setShowToast] = useState(false)
+  const [toast, setToast] = useState(null)
   const inputRefs = useRef([])
   const router = useRouter()
 
@@ -38,13 +38,8 @@ export default function PhoneNumberVerification() {
     return () => clearTimeout(timer)
   }, [cooldown])
 
-  const showErrorToast = (message) => {
-    setError(message)
-    setShowToast(true)
-    setTimeout(() => {
-      setShowToast(false)
-      setError('')
-    }, 5000)
+  const showToast = (message, toastType = 'info') => {
+    setToast({ message, type: toastType })
   }
 
   const handleBack = () => {
@@ -86,13 +81,18 @@ export default function PhoneNumberVerification() {
   const verifyCode = async () => {
     const fullCode = code.join('')
     if (fullCode.length !== 6) {
-      showErrorToast('Please enter the complete 6-digit code')
+      showToast('Please enter the complete 6-digit code', 'error')
       return
     }
 
     setVerifying(true)
     try {
-      console.log('🔍 Verifying phone number registration code for:', phoneNumber)
+      // Format phone number to +63 format (matching mobile app)
+      const formattedPhone = phoneNumber.startsWith('+') 
+        ? phoneNumber 
+        : `+63${phoneNumber.replace(/^0/, '')}`
+      
+      console.log('🔍 Verifying phone number registration code for:', formattedPhone)
       
       const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/verify-sms-code', {
         method: 'POST',
@@ -100,11 +100,8 @@ export default function PhoneNumberVerification() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          phoneNumber: phoneNumber,
-          code: fullCode,
-          firstName: firstName,
-          lastName: lastName,
-          password: password
+          phoneNumber: formattedPhone,
+          code: fullCode
         }),
       })
 
@@ -122,18 +119,18 @@ export default function PhoneNumberVerification() {
         console.log('✅ Phone verification successful, user created:', responseData.user?.uid)
         
         // Show success message
-        showErrorToast('Phone number verified successfully! Account created.')
+        showToast('Phone number verified successfully! Account created.', 'success')
         
         // Wait a moment then redirect to signin
         setTimeout(() => {
           router.push('/signin')
-        }, 2000)
+        }, 1500)
       } else {
         throw new Error(responseData.error || 'Invalid verification code')
       }
     } catch (error) {
       console.error('Error verifying code:', error)
-      showErrorToast(error.message || 'Failed to verify code. Please try again.')
+      showToast(error.message || 'Failed to verify code. Please try again.', 'error')
     } finally {
       setVerifying(false)
     }
@@ -144,7 +141,12 @@ export default function PhoneNumberVerification() {
     setResending(true)
     
     try {
-      console.log('🔄 Resending SMS verification code for:', phoneNumber)
+      // Format phone number to +63 format (matching mobile app)
+      const formattedPhone = phoneNumber.startsWith('+') 
+        ? phoneNumber 
+        : `+63${phoneNumber.replace(/^0/, '')}`
+      
+      console.log('🔄 Resending SMS verification code for:', formattedPhone)
       
       const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/send-sms-code', {
         method: 'POST',
@@ -154,7 +156,7 @@ export default function PhoneNumberVerification() {
         body: JSON.stringify({
           firstName: firstName,
           lastName: lastName,
-          phoneNumber: phoneNumber,
+          phoneNumber: formattedPhone,
           password: password
         }),
       })
@@ -163,13 +165,13 @@ export default function PhoneNumberVerification() {
       
       if (result.success) {
         setCooldown(59)
-        showErrorToast('Verification code resent successfully!')
+        showToast('Verification code resent successfully!', 'success')
       } else {
         throw new Error(result.error || 'Failed to resend verification code')
       }
     } catch (error) {
       console.error('Error resending code:', error)
-      showErrorToast(error.message || 'Failed to resend code. Please try again.')
+      showToast(error.message || 'Failed to resend code. Please try again.', 'error')
     } finally {
       setResending(false)
     }
@@ -187,24 +189,26 @@ export default function PhoneNumberVerification() {
 
   return (
     <div className={styles.container}>
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+          duration={3000}
+        />
+      )}
+
       <div className={styles.header}>
         <button onClick={handleBack} className={styles.backButton}>
           ← Back
         </button>
-        <h1 className={styles.title}>Phone Verification</h1>
+        <h1 className={styles.title}>Verify Phone Number</h1>
       </div>
 
       <div className={styles.content}>
         <div className={styles.step}>
-          <h2>Verify Your Phone Number</h2>
-          <p>
-            We sent a 6-digit verification code to <strong>{formatPhoneDisplay(phoneNumber)}</strong>
-          </p>
-          {autoSent && (
-            <p className={styles.autoSentNotice}>
-              ✅ Code has been automatically sent to your phone
-            </p>
-          )}
+          <h2>Enter Verification Code</h2>
+          <p>We sent a 6-digit code to {formatPhoneDisplay(phoneNumber)}</p>
 
           <div className={styles.codeInputContainer}>
             {code.map((digit, index) => (
@@ -227,7 +231,7 @@ export default function PhoneNumberVerification() {
             disabled={verifying || code.join('').length !== 6}
             className={styles.verifyButton}
           >
-            {verifying ? 'Verifying...' : 'Verify Phone & Create Account'}
+            {verifying ? 'Verifying...' : 'Verify Code'}
           </button>
 
           <div className={styles.resendContainer}>
@@ -246,28 +250,8 @@ export default function PhoneNumberVerification() {
             )}
           </div>
 
-          <div className={styles.helpText}>
-            <p>Didn't receive the code?</p>
-            <ul>
-              <li>Check your phone number is correct</li>
-              <li>Wait a few moments for delivery</li>
-              <li>Make sure your phone can receive SMS</li>
-              <li>Try resending the code above</li>
-            </ul>
-          </div>
         </div>
       </div>
-
-      {/* Toast Notification */}
-      {error && (
-        <div className={`${styles.toast} ${showToast ? styles.show : ''}`}>
-          <i className={`fas fa-${error.includes('success') ? 'check-circle' : 'exclamation-circle'} ${styles.toastIcon}`}></i>
-          <span className={styles.toastMessage}>{error}</span>
-          <button className={styles.toastClose} onClick={() => setShowToast(false)}>
-            <i className="fas fa-times"></i>
-          </button>
-        </div>
-      )}
     </div>
   )
 }

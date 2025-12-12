@@ -250,6 +250,13 @@ export default function SignUp() {
         // Phone registration - auto-send SMS and navigate to verification
         console.log('📱 PHONE FLOW: Starting phone registration with auto-SMS for:', formData.emailOrPhone)
         
+        // Format phone number to +63 format (matching mobile app)
+        const formattedPhone = formData.emailOrPhone.startsWith('+') 
+          ? formData.emailOrPhone 
+          : `+63${formData.emailOrPhone.replace(/^0/, '')}`
+        
+        console.log('📱 PHONE FLOW: Formatted phone:', formattedPhone)
+        
         // Auto-send SMS verification code
         try {
           console.log('📱 PHONE FLOW: Sending SMS request...')
@@ -261,7 +268,7 @@ export default function SignUp() {
             body: JSON.stringify({
               firstName: formData.firstName,
               lastName: formData.lastName,
-              phoneNumber: formData.emailOrPhone,
+              phoneNumber: formattedPhone,
               password: formData.password
             }),
           })
@@ -275,13 +282,13 @@ export default function SignUp() {
             
             // Force navigation using window.location to bypass Fast Refresh interference
             console.log('📱 PHONE FLOW: Navigating to phone-number-verification page with data:', {
-              phoneNumber: formData.emailOrPhone,
+              phoneNumber: formattedPhone,
               firstName: formData.firstName,
               lastName: formData.lastName
             })
             
             const queryParams = new URLSearchParams({
-              phoneNumber: formData.emailOrPhone,
+              phoneNumber: formattedPhone,
               firstName: formData.firstName,
               lastName: formData.lastName,
               password: formData.password,

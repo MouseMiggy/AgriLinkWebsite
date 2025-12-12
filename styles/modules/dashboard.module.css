@@ -9,11 +9,11 @@
   scrollbar-width: none;  /* Firefox */
 }
 
-/* Toast Notification - Sliding from top-right */
+/* Toast Notification - Positioned beside notification button */
 .toast {
   position: fixed;
-  top: 6rem;
-  right: 1rem;
+  top: 16px;
+  right: 90px;
   background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
   color: white;
   padding: 1rem 1.5rem;

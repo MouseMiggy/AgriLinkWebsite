@@ -80,9 +80,9 @@ export default function ForgotPassword() {
       let formattedIdentifier = identifier
 
       if (type === 'phone') {
-        // Format phone number for Philippines
+        // Format phone number for Philippines (+63 format to match registration)
         const cleanedPhone = identifier.replace(/\s/g, '').replace(/^0/, '')
-        formattedIdentifier = `63${cleanedPhone}` // Remove + for API
+        formattedIdentifier = `+63${cleanedPhone}`
       }
 
       const response = await fetch('https://api-tykddqtfpa-uc.a.run.app/send-reset-code', {

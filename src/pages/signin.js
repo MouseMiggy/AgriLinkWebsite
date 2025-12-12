@@ -126,6 +126,13 @@ export default function SignIn() {
     try {
       console.log('🚀 Starting secure login process for:', formData.emailOrPhone)
       
+      // Format phone number to +63 format if it's a phone number (matching mobile app)
+      let formattedIdentifier = formData.emailOrPhone
+      if (validation.type === 'phone') {
+        formattedIdentifier = formatPhoneForLookup(formData.emailOrPhone)
+        console.log('📱 Formatted phone for login:', formattedIdentifier)
+      }
+      
       // Step 1: Validate password against stored hash (same as mobile app)
       let response;
       try {
@@ -135,7 +142,7 @@ export default function SignIn() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            emailOrPhone: formData.emailOrPhone,
+            emailOrPhone: formattedIdentifier,
             password: formData.password
           }),
         });

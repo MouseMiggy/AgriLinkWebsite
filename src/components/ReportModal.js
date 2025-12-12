@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { db } from '../lib/firebase'
-import { collection, addDoc, updateDoc, doc } from 'firebase/firestore'
+import { collection, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore'
 import styles from '../../styles/modules/ReportModal.module.css'
 
 const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'post', reporterId }) => {
@@ -370,30 +370,44 @@ const ReportModal = ({ visible, onClose, targetUser, content, contentType = 'pos
                 })
                 console.log('✅ Post updated with reportVerdict: VALID')
               } else if (contentType === 'comment') {
+                // DELETE comment completely when report is valid
                 const commentRef = doc(db, 'comments', content.id)
-                await updateDoc(commentRef, {
-                  reportVerdict: 'VALID',
-                  hiddenAt: new Date(),
-                  hiddenBy: 'report_validation',
-                  reportId: reportRef.id
-                })
+                await deleteDoc(commentRef)
+                console.log('✅ Comment deleted due to valid report')
+              } else if (contentType === 'message' || contentType === 'chat') {
+                // For chat/messages, do NOT delete - just notify the user
+                console.log('📬 Chat/message reported - will notify user without deleting')
               }
               
               // Send notification to content owner
               const contentOwnerId = content.ownerId || content.userId
               if (contentOwnerId) {
                 const contentName = content.name || content.title || content.text || content.caption || 'content'
-                const contentTypeLabel = contentType === 'listing' ? 'listing' : contentType === 'post' ? 'post' : 'comment'
-                const navigateTo = contentType === 'listing' ? '/listings' : contentType === 'post' ? '/profile' : '/dashboard'
+                const contentTypeLabel = contentType === 'listing' ? 'listing' : contentType === 'post' ? 'post' : contentType === 'comment' ? 'comment' : contentType === 'message' || contentType === 'chat' ? 'message' : 'content'
+                const navigateTo = contentType === 'listing' ? '/listings' : contentType === 'post' ? '/profile' : contentType === 'comment' ? '/dashboard' : contentType === 'message' || contentType === 'chat' ? '/chat' : '/dashboard'
                 
                 // Get AI reason from the validation result
                 const aiReason = result?.result?.reason || updateData.aiValidationResult?.reason || 'Your content violated community standards.'
                 const aiCategory = result?.result?.category || updateData.aiValidationResult?.category || 'violation'
                 
+                // Customize notification based on content type
+                const isComment = contentType === 'comment'
+                const isChat = contentType === 'message' || contentType === 'chat'
+                const notificationTitle = isComment 
+                  ? 'Comment Deleted' 
+                  : isChat 
+                    ? 'Message Reported'
+                    : `${contentTypeLabel.charAt(0).toUpperCase() + contentTypeLabel.slice(1)} Removed from Public View`
+                const notificationMessage = isComment
+                  ? 'Your comment has been deleted because it violates our community standards. Please review our community guidelines.'
+                  : isChat
+                    ? 'Your message has been reported for violating community standards. Please review our community guidelines and ensure your messages are respectful.'
+                    : `Your ${contentTypeLabel} has been removed from public view because it violates our community standards. Tap to see details and review community standards.`
+                
                 const notificationData = {
                   userId: contentOwnerId,
-                  title: `${contentTypeLabel.charAt(0).toUpperCase() + contentTypeLabel.slice(1)} Reported`,
-                  message: `Your ${contentTypeLabel} has been reported and hidden due to a violation. Tap to see details and review community standards.`,
+                  title: notificationTitle,
+                  message: notificationMessage,
                   type: `${contentType}_reported`,
                   data: {
                     contentId: content.id,

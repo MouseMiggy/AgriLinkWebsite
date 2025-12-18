@@ -460,8 +460,10 @@ export default function CropOnboarding() {
   const getAllSpecificCrops = () => {
     let allSpecific = []
     selectedCrops.forEach(cropType => {
-      if (specificCrops[cropType]) {
-        allSpecific = [...allSpecific, ...specificCrops[cropType]]
+      // Handle the spices/herbs_spices mapping
+      const actualCropType = cropType === 'spices' ? 'herbs_spices' : cropType
+      if (specificCrops[actualCropType]) {
+        allSpecific = [...allSpecific, ...specificCrops[actualCropType]]
       }
     })
     return allSpecific
@@ -589,7 +591,9 @@ export default function CropOnboarding() {
                     {/* Render crops by categories */}
                     {selectedCrops.map(cropType => {
                       const crop = cropTypes.find(c => c.id === cropType)
-                      const filteredCrops = specificCrops[cropType]?.filter((specificCrop) =>
+                      // Handle the spices/herbs_spices mapping
+                      const actualCropType = cropType === 'spices' ? 'herbs_spices' : cropType
+                      const filteredCrops = specificCrops[actualCropType]?.filter((specificCrop) =>
                         specificCrop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         specificCrop.tagalog.toLowerCase().includes(searchQuery.toLowerCase())
                       ) || []

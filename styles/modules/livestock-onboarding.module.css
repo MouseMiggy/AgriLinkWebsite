@@ -254,7 +254,7 @@
 .specificOptionsGrid {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px;
   margin-bottom: 15px;
   align-items: flex-start;
   justify-content: flex-start;
@@ -262,6 +262,33 @@
 
 .categorySection {
   margin-bottom: 20px;
+}
+
+.categorySec {
+  margin-bottom: 15px;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.categorySec .optionIcon {
+  margin-bottom: 12px;
+}
+
+.livestockIcon, .animalIcon {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  filter: brightness(0) saturate(100%) invert(24%) sepia(18%) saturate(1847%) hue-rotate(74deg) brightness(95%) contrast(92%);
+}
+
+.optionCard.selected .optionIcon {
+  animation: bounce 0.6s ease;
+}
+
+@keyframes bounce {
+  0%, 20%, 60%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-8px); }
+  80% { transform: translateY(-4px); }
 }
 
 .categoryTitle {
@@ -274,7 +301,7 @@
 }
 
 .specificCard {
-  padding: 6px 10px;
+  padding: 2px 6px;
   display: inline-flex;
   flex-direction: column;
   justify-content: center;
@@ -285,7 +312,7 @@
   white-space: normal;
   background: #f5f5f5;
   border: 1px solid #e0e0e0;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.3s ease;
   width: fit-content !important;
@@ -294,6 +321,7 @@
   height: auto !important;
   min-height: unset !important;
   flex-shrink: 0;
+  font-size: 0.7rem;
 }
 
 .specificCard:hover {
@@ -316,7 +344,7 @@
 }
 
 .optionTitle {
-  font-size: 0.85rem;
+  font-size: 0.65rem;
   font-weight: 600;
   color: #2d5a27;
   margin-bottom: 1px;
@@ -328,7 +356,7 @@
 }
 
 .optionTagalog {
-  font-size: 0.75rem;
+  font-size: 0.55rem;
   color: #666;
   margin: 0;
   line-height: 1.1;
@@ -336,6 +364,27 @@
   overflow-wrap: break-word;
   hyphens: auto;
   white-space: normal;
+}
+
+.optionIcon {
+  margin-bottom: 12px;
+}
+
+.livestockIcon {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  filter: brightness(0) saturate(100%) invert(24%) sepia(18%) saturate(1847%) hue-rotate(74deg) brightness(95%) contrast(92%);
+}
+
+.optionCard.selected .optionIcon {
+  animation: bounce 0.6s ease;
+}
+
+@keyframes bounce {
+  0%, 20%, 60%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-8px); }
+  80% { transform: translateY(-4px); }
 }
 
 /* Search Styles */

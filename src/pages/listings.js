@@ -332,6 +332,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   const [userLivestockAnimals, setUserLivestockAnimals] = useState([])
   const [userSpecificAnimals, setUserSpecificAnimals] = useState([])
   const [userSpecificCrops, setUserSpecificCrops] = useState([])
+  const [compatibilityMap, setCompatibilityMap] = useState(new Map())
   const [selectedCropType, setSelectedCropType] = useState('')
   const [selectedSpecificCrop, setSelectedSpecificCrop] = useState('')
   const [specificCropsForType, setSpecificCropsForType] = useState([])
@@ -2047,7 +2048,7 @@ useEffect(() => {
 
       console.log('✅ Total listings loaded (livestock_owner):', listingsData.length)
       setListings(listingsData)
-      setFilteredListings(listingsData)
+      setFilteredListings(mergeCompatibilityData(listingsData))
       setLoading(false)
     }, (error) => {
       console.error('❌ Error loading listings for livestock owner:', error)
@@ -2120,7 +2121,7 @@ useEffect(() => {
           listing.status !== 'sold' && listing.status !== 'deleted'
         );
         setListings(activeListings);
-        setFilteredListings(activeListings);
+        setFilteredListings(mergeCompatibilityData(activeListings, true));
       } catch (err) {
         console.error('❌ Error loading recommended listings for crop farmer:', err)
         setError('Failed to load listings')
@@ -2131,6 +2132,88 @@ useEffect(() => {
 
     loadRecommendedListings()
   }, [db, user, userRole, authLoading])
+
+  // Add crop compatibility to all listings for crop farmers
+  useEffect(() => {
+    if (!user || userRole !== 'crop_farmer' || userSpecificCrops.length === 0 || listings.length === 0) return
+    
+    const enrichListingsWithCompatibility = async () => {
+      try {
+        // Call AI compatibility endpoint with all user crops
+        const response = await fetch('https://context-based-2.onrender.com/crop-compatibility-analysis', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            cropIds: userSpecificCrops,
+            cropCategory: null
+          }),
+        })
+        
+        if (!response.ok) {
+          throw new Error('Failed to analyze compatibility')
+        }
+        
+        const data = await response.json()
+        
+        // Create a map of listingId to compatibility data
+        const newCompatibilityMap = new Map()
+        data.compatibleListings.forEach(item => {
+          const topCrops = item.cropScores.map(crop => ({
+            id: crop.cropId,
+            name: crop.cropName,
+            reason: crop.reason,
+            score: crop.score,
+            npk: crop.npk,
+            usage: crop.usage
+          }))
+          
+          newCompatibilityMap.set(item.listingId, {
+            topCrops: topCrops,
+            analysis: `AI-powered analysis based on agricultural science`
+          })
+        })
+        
+        // Store the compatibility map
+        setCompatibilityMap(newCompatibilityMap)
+        console.log('✅ Stored compatibility data for', newCompatibilityMap.size, 'listings')
+        
+      } catch (error) {
+        console.error('❌ Error enriching listings with compatibility:', error)
+      }
+    }
+    
+    enrichListingsWithCompatibility()
+  }, [user, userRole, userSpecificCrops, listings])
+
+  // Function to merge compatibility data with listings
+  const mergeCompatibilityData = (listingsToMerge, filterByCompatibility = false) => {
+    if (userRole !== 'crop_farmer' || compatibilityMap.size === 0) {
+      return listingsToMerge
+    }
+    
+    const mergedListings = listingsToMerge.map(listing => {
+      const compatibility = compatibilityMap.get(listing.id)
+      return {
+        ...listing,
+        cropCompatibility: compatibility || {
+          topCrops: [],
+          analysis: 'No specific compatibility found'
+        },
+        compatibilityScore: compatibility?.topCrops[0]?.score || 0
+      }
+    })
+    
+    // If filterByCompatibility is true, only return listings with real compatibility data
+    if (filterByCompatibility) {
+      return mergedListings.filter(listing => 
+        listing.cropCompatibility.topCrops && listing.cropCompatibility.topCrops.length > 0
+      )
+    }
+    
+    return mergedListings
+  }
 
   // Calculate best listings for user's crops when search results change
   useEffect(() => {
@@ -2250,8 +2333,10 @@ useEffect(() => {
     
     // Check if crop category is compatible
     const isCompatible = bestCrops.some(crop => 
-      crop.name.toLowerCase().includes(cropCategory.toLowerCase()) ||
-      cropCategory.toLowerCase().includes(crop.name.toLowerCase())
+      crop?.name && cropCategory && (
+        crop.name.toLowerCase().includes(cropCategory.toLowerCase()) ||
+        cropCategory.toLowerCase().includes(crop.name.toLowerCase())
+      )
     )
     
     return {
@@ -2266,10 +2351,10 @@ useEffect(() => {
     console.log('🌾 Applying crop-waste filter for category:', cropCategory)
     
     if (!cropCategory) {
-      // Reset to show all listings
-      setFilteredListings(listings.filter(listing => 
+      // Reset to show all listings with compatibility data
+      setFilteredListings(mergeCompatibilityData(listings.filter(listing => 
         listing.status !== 'sold' && listing.status !== 'deleted'
-      ))
+      ), true))
       return
     }
     
@@ -2362,10 +2447,10 @@ useEffect(() => {
     console.log('🌱 Applying specific crop filter for:', specificCrop)
     
     if (!specificCrop) {
-      // Reset to show all listings
-      setFilteredListings(listings.filter(listing => 
+      // Reset to show all listings with compatibility data
+      setFilteredListings(mergeCompatibilityData(listings.filter(listing => 
         listing.status !== 'sold' && listing.status !== 'deleted'
-      ))
+      ), true))
       return
     }
     
@@ -3308,8 +3393,8 @@ useEffect(() => {
     )
     
     if (userRole === 'crop_farmer') {
-      // For crop farmers, listings already come from the recommendation algorithm
-      setFilteredListings(activeListings)
+      // For crop farmers, show only listings with compatibility data
+      setFilteredListings(mergeCompatibilityData(activeListings, true))
       return
     }
 
@@ -3325,8 +3410,8 @@ useEffect(() => {
     )
     
     if (userRole === 'crop_farmer') {
-      // For crop farmers, listings already come from the recommendation algorithm
-      setFilteredListings(activeListings)
+      // For crop farmers, show only listings with compatibility data
+      setFilteredListings(mergeCompatibilityData(activeListings, true))
       return
     }
 
@@ -3669,8 +3754,8 @@ useEffect(() => {
           )}
         </div>
         
-        {/* Top Compatible Crop - Only show when dropdown is selected */}
-        {userRole === 'crop_farmer' && (selectedCropType || selectedSpecificCrop) && listing.cropCompatibility && listing.cropCompatibility.topCrops && listing.cropCompatibility.topCrops.length > 0 && (
+        {/* Top Compatible Crop - Show for crop farmers when compatibility data is available */}
+        {userRole === 'crop_farmer' && listing.cropCompatibility && listing.cropCompatibility.topCrops && listing.cropCompatibility.topCrops.length > 0 && (
           <div style={{
             marginTop: '10px',
             padding: '8px 12px',
@@ -3817,10 +3902,10 @@ useEffect(() => {
                         setLoading(false)
                       } else {
                         setSpecificCropsForType([])
-                        // Reset to show all listings
-                        setFilteredListings(listings.filter(listing => 
+                        // Reset to show all listings with compatibility data
+                        setFilteredListings(mergeCompatibilityData(listings.filter(listing => 
                           listing.status !== 'sold' && listing.status !== 'deleted'
-                        ))
+                        ), true))
                       }
                     }}
                   >

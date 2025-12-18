@@ -3112,9 +3112,10 @@
   max-width: fit-content;
   position: fixed;
   top: 50%;
-  left: calc(50% + 120px);
+  left: 50%;
   transform: translate(-50%, -50%);
   z-index: 1000;
+  pointer-events: none;
 }
 
 .listingsLoadingSpinner {

@@ -8,32 +8,71 @@ import StepIndicator from '../components/StepIndicator'
 import styles from '../../styles/modules/livestock-onboarding.module.css'
 
 export default function LivestockOnboarding() {
-  const [currentStep, setCurrentStep] = useState(1) // Step 1: Livestock selection
+  const [currentStep, setCurrentStep] = useState(1) // Step 1: Livestock selection, Step 2: Specific animals
   const [loading, setLoading] = useState(false)
   const [user, setUser] = useState(null)
   const [error, setError] = useState('')
   const [showToast, setShowToast] = useState(false)
   const [selectedAnimals, setSelectedAnimals] = useState([])
-  const [selectedWasteRange, setSelectedWasteRange] = useState('')
+  const [selectedSpecificAnimals, setSelectedSpecificAnimals] = useState([])
+  const [searchQuery, setSearchQuery] = useState('')
   const router = useRouter()
 
   const animalTypes = [
-    { id: 'cattle', name: 'Cattle', icon: '/assets/images/cattle.png', description: 'Dairy cows, Beef cattle, Buffalo' },
-    { id: 'poultry', name: 'Poultry', icon: '/assets/images/chicken.png', description: 'Chickens, Ducks, Turkeys, Quails' },
-    { id: 'swine', name: 'Swine', icon: '/assets/images/swine.png', description: 'Pigs, Hogs' },
-    { id: 'goats', name: 'Goats', icon: '/assets/images/goat.png', description: 'Dairy goats, Meat goats' },
-    { id: 'sheep', name: 'Sheep', icon: '/assets/images/sheep.png', description: 'Meat sheep, Wool sheep' },
-    { id: 'rabbits', name: 'Rabbits', icon: '/assets/images/rabbit.png', description: 'Meat rabbits, Backyard rabbits' },
-    { id: 'others', name: 'Others', icon: '/assets/images/livestock.png', description: 'Horses, Carabaos, Aquaculture' }
+    { id: 'cattle', name: 'Cattle', icon: '/assets/images/cattle.png', description: 'Cattle and dairy cows' },
+    { id: 'poultry', name: 'Poultry', icon: '/assets/images/chicken.png', description: 'Chickens, ducks, and other birds' },
+    { id: 'swine', name: 'Swine', icon: '/assets/images/swine.png', description: 'Pigs and hogs' },
+    { id: 'goat', name: 'Goat', icon: '/assets/images/goat.png', description: 'Goats for milk and meat' },
+    { id: 'sheep', name: 'Sheep', icon: '/assets/images/sheep.png', description: 'Sheep for wool and meat' },
+    { id: 'rabbit', name: 'Rabbit', icon: '/assets/images/rabbit.png', description: 'Rabbits for meat' },
+    { id: 'others', name: 'Others', icon: '/assets/images/livestock.png', description: 'Other livestock animals' }
   ]
 
-  const wasteRanges = [
-    { id: '1-3', label: '1-3 sacks per day', description: 'Small scale operation' },
-    { id: '4-10', label: '4-10 sacks per day', description: 'Medium scale operation' },
-    { id: '11-25', label: '11-25 sacks per day', description: 'Large scale operation' },
-    { id: '26-50', label: '26-50 sacks per day', description: 'Very large scale operation' },
-    { id: '50+', label: '50+ sacks per day', description: 'Industrial scale operation' }
-  ]
+  const specificAnimals = {
+    cattle: [
+      { id: 'cow', name: 'Cow', tagalog: 'Baka' },
+      { id: 'dairy-cow', name: 'Dairy cow', tagalog: 'Baka pang-gatas' },
+      { id: 'beef-cow', name: 'Beef cow', tagalog: 'Baka pang-karne' }
+    ],
+    poultry: [
+      { id: 'chicken', name: 'Chicken', tagalog: 'Manok' },
+      { id: 'layer-chicken', name: 'Layer chicken', tagalog: 'Manok pang-itlog' },
+      { id: 'broiler-chicken', name: 'Broiler chicken', tagalog: 'Manok pang-karne' },
+      { id: 'duck', name: 'Duck', tagalog: 'Pato' },
+      { id: 'muscovy-duck', name: 'Muscovy duck', tagalog: 'Pato Muscovy' },
+      { id: 'turkey', name: 'Turkey', tagalog: 'Pabo' },
+      { id: 'quail', name: 'Quail', tagalog: 'Pugo' },
+      { id: 'goose', name: 'Goose', tagalog: 'Gansa' }
+    ],
+    swine: [
+      { id: 'pig', name: 'Pig', tagalog: 'Baboy' },
+      { id: 'native-pig', name: 'Native pig', tagalog: 'Baboy katutubo' },
+      { id: 'crossbred-pig', name: 'Crossbred pig', tagalog: 'Baboy halong lahi' }
+    ],
+    goat: [
+      { id: 'goat', name: 'Goat', tagalog: 'Kambing' },
+      { id: 'native-goat', name: 'Native goat', tagalog: 'Kambing katutubo' },
+      { id: 'boer-goat', name: 'Boer goat', tagalog: 'Kambing Boer' }
+    ],
+    sheep: [
+      { id: 'sheep', name: 'Sheep', tagalog: 'Tupa' },
+      { id: 'native-sheep', name: 'Native sheep', tagalog: 'Tupa katutubo' }
+    ],
+    rabbit: [
+      { id: 'rabbit', name: 'Rabbit', tagalog: 'Kuneho' },
+      { id: 'native-rabbit', name: 'Native rabbit', tagalog: 'Kuneho katutubo' }
+    ],
+    others: [
+      { id: 'carabao', name: 'Carabao', tagalog: 'Kalabaw' },
+      { id: 'horse', name: 'Horse', tagalog: 'Kabayo' },
+      { id: 'donkey', name: 'Donkey', tagalog: 'Asno' },
+      { id: 'bee', name: 'Bee', tagalog: 'Bubuyog / Maya' },
+      { id: 'silkworm', name: 'Silkworm', tagalog: 'Uod ng Seda' },
+      { id: 'ostrich', name: 'Ostrich', tagalog: 'Ostris' },
+      { id: 'camel', name: 'Camel', tagalog: 'Kamelyo' }
+    ]
+  }
+
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -93,11 +132,20 @@ export default function LivestockOnboarding() {
         return [...prev, animalId]
       }
     })
+    // Clear specific animals when changing animal types
+    setSelectedSpecificAnimals([])
   }
 
-  const handleWasteRangeSelect = (rangeId) => {
-    setSelectedWasteRange(rangeId)
+  const handleSpecificAnimalSelect = (animalId) => {
+    setSelectedSpecificAnimals(prev => {
+      if (prev.includes(animalId)) {
+        return prev.filter(id => id !== animalId)
+      } else {
+        return [...prev, animalId]
+      }
+    })
   }
+
 
   const handleNext = () => {
     if (currentStep === 1) {
@@ -107,8 +155,8 @@ export default function LivestockOnboarding() {
       }
       setCurrentStep(2)
     } else if (currentStep === 2) {
-      if (!selectedWasteRange) {
-        showErrorToast('Please select your daily waste production range')
+      if (selectedSpecificAnimals.length === 0) {
+        showErrorToast('Please select at least one specific animal')
         return
       }
       handleComplete()
@@ -116,10 +164,10 @@ export default function LivestockOnboarding() {
   }
 
   const handleBack = () => {
-    if (currentStep === 2) {
-      setCurrentStep(1)
-    } else {
+    if (currentStep === 1) {
       router.push('/location-permission')
+    } else {
+      setCurrentStep(currentStep - 1)
     }
   }
 
@@ -132,12 +180,11 @@ export default function LivestockOnboarding() {
       await updateDoc(userDocRef, {
         role: 'livestock_owner',
         livestock: {
-          animals: selectedAnimals
+          animals: selectedAnimals,
+          specificAnimals: selectedSpecificAnimals
         },
-        wasteProductionRange: selectedWasteRange,
         'onboarding.livestockTypes': selectedAnimals,
         'onboarding.livestockTypesCompleted': true,
-        'onboarding.wasteProductionCompleted': true,
         'onboarding.livestockOnboardingCompleted': true,
         onboardingCompleted: true,
         onboardingCompletedAt: new Date(),
@@ -153,6 +200,29 @@ export default function LivestockOnboarding() {
       setLoading(false)
     }
   }
+
+  // Filter animals based on search query
+  const filteredAnimals = animalTypes.filter(animal =>
+    animal.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    animal.description.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  // Get all specific animals for selected animal types
+  const getAllSpecificAnimals = () => {
+    let allSpecific = []
+    selectedAnimals.forEach(animalType => {
+      if (specificAnimals[animalType]) {
+        allSpecific = [...allSpecific, ...specificAnimals[animalType]]
+      }
+    })
+    return allSpecific
+  }
+
+  // Filter specific animals based on search query
+  const filteredSpecificAnimals = getAllSpecificAnimals().filter(animal =>
+    animal.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    animal.tagalog.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   if (!user) {
     return (
@@ -174,7 +244,7 @@ export default function LivestockOnboarding() {
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
       </Head>
 
-      <div className={styles.container}>
+      <div className={`${styles.container} ${currentStep === 2 ? styles.step2Container : ''}`}>
         <div className={styles.backgroundPattern}></div>
         
         <div className={styles.content}>
@@ -183,7 +253,7 @@ export default function LivestockOnboarding() {
               <i className="fas fa-arrow-left"></i>
               Back
             </button>
-            <StepIndicator currentStep={currentStep + 1} totalSteps={4} variant="dots" />
+            <StepIndicator currentStep={currentStep + 1} totalSteps={2} variant="dots" />
             <img 
               src="/assets/images/AgrilinkLogo.png" 
               alt="AgriLink Logo" 
@@ -192,31 +262,20 @@ export default function LivestockOnboarding() {
           </div>
           
           <div className={styles.mainContent}>
-            <div className={styles.leftSection}>
-              <h1 className={styles.title}>
-                {currentStep === 1 ? (
-                  <>What <span style={{ color: '#2d5a27' }}>Livestock</span><br />animals do you<br />raise?</>
-                ) : (
-                  <>How much <span style={{ color: '#2d5a27' }}>waste</span> does your <br />Livestock animals<br />produce daily?</>
-                )}
-              </h1>
-              
-              {currentStep === 1 && (
-                <p className={styles.subtitle}>
-                  Select the livestock animals you raise so we can connect you with relevant farmers and tailored opportunities.
-                </p>
-              )}
-              
-              {currentStep === 2 && (
-                <p className={styles.subtitle}>
-                  Tell us about your daily waste production to find the best recycling and exchange opportunities.
-                </p>
-              )}
-            </div>
-            
-            <div className={styles.rightSection}>
-              {currentStep === 1 && (
-                <>
+            {/* Step 1: Livestock Type Selection */}
+            {currentStep === 1 && (
+              <>
+                <div className={styles.leftSection}>
+                  <h1 className={styles.title}>
+                    What <span style={{ color: '#2d5a27' }}>Livestock</span><br />animals do you<br />raise?
+                  </h1>
+                  
+                  <p className={styles.subtitle}>
+                    Select the livestock animals you raise so we can connect you with relevant farmers and tailored opportunities.
+                  </p>
+                </div>
+                
+                <div className={styles.rightSection}>
                   <div className={styles.optionsGrid}>
                     {animalTypes.map((animal) => (
                       <div
@@ -233,9 +292,6 @@ export default function LivestockOnboarding() {
                         </div>
                         <h3 className={styles.optionTitle}>{animal.name}</h3>
                         <p className={styles.optionDescription}>{animal.description}</p>
-                        <div className={styles.selectIndicator}>
-                          <i className="fas fa-check-circle"></i>
-                        </div>
                       </div>
                     ))}
                   </div>
@@ -243,33 +299,73 @@ export default function LivestockOnboarding() {
                   <button className={styles.nextButton} onClick={handleNext}>
                     Next
                   </button>
-                </>
-              )}
+                </div>
+              </>
+            )}
 
-              {currentStep === 2 && (
-                <>
-                  <div className={styles.optionsGrid}>
-                    {wasteRanges.map((range) => (
-                      <div
-                        key={range.id}
-                        className={`${styles.optionCard} ${styles.noIcon} ${selectedWasteRange === range.id ? styles.selected : ''}`}
-                        onClick={() => handleWasteRangeSelect(range.id)}
-                      >
-                        <h3 className={styles.optionTitle}>{range.label}</h3>
-                        <p className={styles.optionDescription}>{range.description}</p>
-                        <div className={styles.selectIndicator}>
-                          <i className="fas fa-check-circle"></i>
-                        </div>
+            {/* Step 2: Specific Animal Selection */}
+            {currentStep === 2 && (
+              <div className={styles.step2Content}>
+                <div className={styles.topSection}>
+                  <div className={styles.titleRow}>
+                    <h1 className={styles.title}>
+                      Select <span style={{ color: '#2d5a27' }}>Specific Animals</span>
+                    </h1>
+                    <div className={styles.searchContainer}>
+                      <div className={styles.searchBox}>
+                        <i className="fas fa-search"></i>
+                        <input
+                          type="text"
+                          placeholder="Search..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
                       </div>
-                    ))}
+                    </div>
+                  </div>
+                  <p className={styles.subtitle}>
+                    Choose the specific types of animals you raise from your selected categories.
+                  </p>
+                </div>
+                
+                <div className={styles.bottomSection}>
+                  <div className={styles.scrollableContainer}>
+                    {/* Render animals by categories */}
+                    {selectedAnimals.map(animalType => {
+                      const animal = animalTypes.find(a => a.id === animalType)
+                      const filteredAnimals = specificAnimals[animalType]?.filter((specificAnimal) =>
+                        specificAnimal.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        specificAnimal.tagalog.toLowerCase().includes(searchQuery.toLowerCase())
+                      ) || []
+                      
+                      if (filteredAnimals.length === 0 && searchQuery) return null
+                      
+                      return (
+                        <div key={animalType} className={styles.categorySection}>
+                          <h4 className={styles.categoryTitle}>{animal.name}</h4>
+                          <div className={styles.specificOptionsGrid}>
+                            {filteredAnimals.map((specificAnimal) => (
+                              <div
+                                key={specificAnimal.id}
+                                className={`${styles.optionCard} ${styles.specificCard} ${selectedSpecificAnimals.includes(specificAnimal.id) ? styles.selected : ''}`}
+                                onClick={() => handleSpecificAnimalSelect(specificAnimal.id)}
+                              >
+                                <h4 className={styles.optionTitle}>{specificAnimal.name}</h4>
+                                <p className={styles.optionTagalog}>{specificAnimal.tagalog}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                   
                   <button className={styles.nextButton} onClick={handleNext}>
                     Done
                   </button>
-                </>
-              )}
-            </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

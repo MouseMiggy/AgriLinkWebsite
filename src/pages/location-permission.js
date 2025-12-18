@@ -160,8 +160,15 @@ export default function LocationPermission() {
   }
 
   const navigateToRoleOnboarding = async () => {
-    // Go directly to livestock onboarding (step 2) after location permission
-    router.push('/livestock-onboarding')
+    // Check user role and navigate to appropriate onboarding
+    if (userRole === 'crop_farmer') {
+      router.push('/crop-onboarding')
+    } else if (userRole === 'livestock_owner') {
+      router.push('/livestock-onboarding')
+    } else {
+      // If no role, go back to role selection
+      router.push('/role-selection')
+    }
   }
 
   if (!user) {

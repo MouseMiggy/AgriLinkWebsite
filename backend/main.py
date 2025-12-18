@@ -10,7 +10,6 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 from dotenv import load_dotenv
 import asyncio
-from crop_waste_knowledge import get_best_crops_for_waste, get_waste_analysis_for_crop, CROP_WASTE_KNOWLEDGE
 
 load_dotenv()
 
@@ -95,22 +94,6 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     matches: List[SearchResult]
 
-class CropWasteRequest(BaseModel):
-    crop_type: str
-    top_k: int = 5
-
-class CropWasteAnalysis(BaseModel):
-    waste_type: str
-    waste_name: str
-    npk_ratio: str
-    organic_matter: str
-    crops: List[dict]
-    score: float
-
-class CropWasteResponse(BaseModel):
-    crop_type: str
-    best_wastes: List[CropWasteAnalysis]
-
 @app.get("/")
 async def root():
     return {"message": "AgriLink Semantic Search API is running"}
@@ -194,141 +177,6 @@ async def semantic_search(request: SearchRequest):
         top_matches = matches[:request.top_k]
         
         return SearchResponse(matches=top_matches)
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/crop-waste-analysis", response_model=CropWasteResponse)
-async def crop_waste_analysis(request: CropWasteRequest):
-    """Analyze which waste types are best suited for a specific crop type using MPNet"""
-    try:
-        # Get waste analysis for the requested crop type
-        waste_analyses = get_waste_analysis_for_crop(request.crop_type)
-        
-        # If no direct matches found, use semantic similarity
-        if not waste_analyses:
-            # Create crop type description for semantic search
-            crop_descriptions = {
-                "vegetables": "leafy green crops lettuce spinach cabbage broccoli",
-                "fruits": "fruit trees mango banana apple citrus sweet produce",
-                "rootCrops": "tuber crops carrot potato cassava sweet potato underground",
-                "legumes": "bean crops mung bean soybean peanut nitrogen fixing",
-                "herbs": "culinary medicinal herbs basil oregano aromatic plants",
-                "spices": "flavor crops chili pepper turmeric garlic onion",
-                "rice": "rice paddy flooded grain staple food",
-                "corn": "corn maize grain fodder silage",
-                "industrial": "industrial crops coffee cacao rubber sugarcane",
-                "mushrooms": "fungi mushroom decomposer organic matter"
-            }
-            
-            crop_query = crop_descriptions.get(request.crop_type, request.crop_type)
-            
-            # Get semantic matches with waste descriptions
-            query_embedding = model.encode(crop_query, convert_to_numpy=True)
-            
-            # Create waste descriptions for semantic matching
-            waste_descriptions = []
-            for waste_key, waste_data in CROP_WASTE_KNOWLEDGE.items():
-                waste_desc = f"{waste_data['name']} NPK {waste_data['npk_ratio']} "
-                waste_desc += " ".join([crop['crop_name'] for crop in waste_data['best_crops'][:3]])
-                waste_descriptions.append({
-                    "type": waste_key,
-                    "name": waste_data['name'],
-                    "description": waste_desc,
-                    "npk": waste_data['npk_ratio'],
-                    "organic_matter": waste_data['organic_matter'],
-                    "crops": waste_data['best_crops']
-                })
-            
-            # Calculate semantic similarity
-            for waste in waste_descriptions:
-                waste_embedding = model.encode(waste['description'], convert_to_numpy=True)
-                similarity = np.dot(query_embedding, waste_embedding) / (
-                    np.linalg.norm(query_embedding) * np.linalg.norm(waste_embedding)
-                )
-                waste['score'] = float(similarity)
-            
-            # Sort by semantic similarity
-            waste_descriptions.sort(key=lambda x: x['score'], reverse=True)
-            
-            # Format response
-            best_wastes = []
-            for waste in waste_descriptions[:request.top_k]:
-                best_wastes.append(CropWasteAnalysis(
-                    waste_type=waste['type'],
-                    waste_name=waste['name'],
-                    npk_ratio=waste['npk'],
-                    organic_matter=waste['organic_matter'],
-                    crops=waste['crops'][:5],
-                    score=waste['score']
-                ))
-            
-            return CropWasteResponse(crop_type=request.crop_type, best_wastes=best_wastes)
-        
-        # Format direct matches
-        best_wastes = []
-        for analysis in waste_analyses[:request.top_k]:
-            # Calculate a simple score based on number of matching crops
-            score = len(analysis['crops']) / 5.0  # Normalize to 0-1
-            
-            best_wastes.append(CropWasteAnalysis(
-                waste_type=analysis['waste_type'],
-                waste_name=analysis['waste_name'],
-                npk_ratio=analysis['npk_ratio'],
-                organic_matter=analysis['organic_matter'],
-                crops=analysis['crops'],
-                score=score
-            ))
-        
-        return CropWasteResponse(crop_type=request.crop_type, best_wastes=best_wastes)
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/listing-crop-analysis")
-async def listing_crop_analysis(listing_id: str, crop_type: str):
-    """Get top 5 best crops for a specific listing's waste type"""
-    try:
-        # Get listing from Firestore
-        doc_ref = db.collection('livestock_listings').document(listing_id)
-        doc = doc_ref.get()
-        
-        if not doc.exists:
-            raise HTTPException(status_code=404, detail="Listing not found")
-        
-        listing_data = doc.to_dict()
-        
-        # Determine waste type from listing
-        waste_type = None
-        if 'wasteType' in listing_data:
-            waste_type = listing_data['wasteType']
-        elif 'category' in listing_data:
-            # Map category to waste type
-            category_map = {
-                'cattle': 'cattle_manure',
-                'poultry': 'poultry_waste',
-                'swine': 'swine_waste',
-                'goats': 'goat_manure',
-                'sheep': 'sheep_manure',
-                'rabbits': 'rabbit_manure'
-            }
-            waste_type = category_map.get(listing_data['category'].lower())
-        
-        if not waste_type:
-            # Default to cattle manure if not found
-            waste_type = 'cattle_manure'
-        
-        # Get best crops for this waste type
-        best_crops = get_best_crops_for_waste(waste_type, crop_type if crop_type != "all" else None)
-        
-        return {
-            "listing_id": listing_id,
-            "waste_type": waste_type,
-            "waste_name": CROP_WASTE_KNOWLEDGE.get(waste_type, {}).get('name', 'Unknown'),
-            "best_crops": best_crops[:5],
-            "npk_ratio": CROP_WASTE_KNOWLEDGE.get(waste_type, {}).get('npk_ratio', 'N/A'),
-            "organic_matter": CROP_WASTE_KNOWLEDGE.get(waste_type, {}).get('organic_matter', 'N/A')
-        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

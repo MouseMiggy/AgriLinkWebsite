@@ -2,12 +2,365 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import styles from '../../styles/user-profile.module.css'
 import dashboardStyles from '../../styles/modules/dashboard.module.css'
+import cropOnboardingStyles from '../../styles/modules/crop-onboarding.module.css'
+
+// Define specific animals data
+const specificAnimals = {
+  cattle: [
+    { id: 'cow', name: 'Cow', tagalog: 'Baka' },
+    { id: 'dairy-cow', name: 'Dairy cow', tagalog: 'Baka pang-gatas' },
+    { id: 'beef-cow', name: 'Beef cow', tagalog: 'Baka pang-karne' }
+  ],
+  poultry: [
+    { id: 'chicken', name: 'Chicken', tagalog: 'Manok' },
+    { id: 'layer-chicken', name: 'Layer chicken', tagalog: 'Manok pang-itlog' },
+    { id: 'broiler-chicken', name: 'Broiler chicken', tagalog: 'Manok pang-karne' },
+    { id: 'duck', name: 'Duck', tagalog: 'Pato' },
+    { id: 'muscovy-duck', name: 'Muscovy duck', tagalog: 'Pato Muscovy' },
+    { id: 'turkey', name: 'Turkey', tagalog: 'Pabo' },
+    { id: 'quail', name: 'Quail', tagalog: 'Pugo' },
+    { id: 'goose', name: 'Goose', tagalog: 'Gansa' }
+  ],
+  swine: [
+    { id: 'pig', name: 'Pig', tagalog: 'Baboy' },
+    { id: 'native-pig', name: 'Native pig', tagalog: 'Baboy katutubo' },
+    { id: 'crossbred-pig', name: 'Crossbred pig', tagalog: 'Baboy halong lahi' }
+  ],
+  goats: [
+    { id: 'goat', name: 'Goat', tagalog: 'Kambing' },
+    { id: 'native-goat', name: 'Native goat', tagalog: 'Kambing katutubo' },
+    { id: 'boer-goat', name: 'Boer goat', tagalog: 'Kambing Boer' }
+  ],
+  sheep: [
+    { id: 'sheep', name: 'Sheep', tagalog: 'Tupa' },
+    { id: 'native-sheep', name: 'Native sheep', tagalog: 'Tupa katutubo' }
+  ],
+  rabbits: [
+    { id: 'rabbit', name: 'Rabbit', tagalog: 'Kuneho' },
+    { id: 'native-rabbit', name: 'Native rabbit', tagalog: 'Kuneho katutubo' }
+  ],
+  others: [
+    { id: 'carabao', name: 'Carabao', tagalog: 'Kalabaw' },
+    { id: 'horse', name: 'Horse', tagalog: 'Kabayo' },
+    { id: 'donkey', name: 'Donkey', tagalog: 'Asno' },
+    { id: 'bee', name: 'Bee', tagalog: 'Bubuyog / Maya' },
+    { id: 'silkworm', name: 'Silkworm', tagalog: 'Uod ng Seda' },
+    { id: 'ostrich', name: 'Ostrich', tagalog: 'Ostris' },
+    { id: 'camel', name: 'Camel', tagalog: 'Kamelyo' }
+  ]
+}
+
 import { auth, db } from '../lib/firebase'
 import { doc, getDoc, collection, query, where, getDocs, updateDoc, setDoc, deleteDoc, arrayUnion, arrayRemove, onSnapshot, serverTimestamp } from 'firebase/firestore'
 import { uploadImageToFirebaseStorage } from '../lib/firebaseStorage'
+import { usePopup } from '../contexts/PopupContext'
+
+// Import crop data from crop-onboarding
+const cropTypes = [
+  { id: 'rice', name: 'Rice', icon: '/assets/images/wheat.png', description: 'Various rice varieties' },
+  { id: 'corn', name: 'Corn', icon: '/assets/images/corn.png', description: 'Corn and maize varieties' },
+  { id: 'vegetables', name: 'Vegetables', icon: '/assets/images/lettuce.png', description: 'Leafy and fruit vegetables' },
+  { id: 'fruits', name: 'Fruits', icon: '/assets/images/fruits.png', description: 'Tropical and seasonal fruits' },
+  { id: 'rootCrops', name: 'Root Crops', icon: '/assets/images/rootcrop.png', description: 'Underground crops' },
+  { id: 'legumes', name: 'Legumes', icon: '/assets/images/other.png', description: 'Beans and peas' },
+  { id: 'spices', name: 'Herbs & Spices', icon: '/assets/images/other.png', description: 'Spices, seasonings, and culinary herbs' },
+  { id: 'industrial', name: 'Industrial Crops', icon: '/assets/images/sugarcane.png', description: 'Commercial and industrial crops' },
+  { id: 'mushrooms', name: 'Mushrooms', icon: '/assets/images/other.png', description: 'Edible fungi varieties' }
+]
+
+const specificCrops = {
+  rice: [
+    { id: 'white-rice', name: 'White rice', tagalog: 'Puting bigas' },
+    { id: 'brown-rice', name: 'Brown rice', tagalog: 'Kayumangging bigas' },
+    { id: 'red-rice', name: 'Red rice', tagalog: 'Pulang bigas' },
+    { id: 'black-rice', name: 'Black rice', tagalog: 'Itim na bigas' },
+    { id: 'purple-rice', name: 'Purple rice', tagalog: 'Ube na bigas' },
+    { id: 'glutinous-rice', name: 'Glutinous rice', tagalog: 'Malagkit' },
+    { id: 'aromatic-rice', name: 'Aromatic rice', tagalog: 'Mabango na bigas' },
+    { id: 'lowland-rice', name: 'Lowland rice', tagalog: 'Palay-patag' },
+    { id: 'upland-rice', name: 'Upland rice', tagalog: 'Palay-bundok' },
+    { id: 'heirloom-rice', name: 'Heirloom rice', tagalog: 'Minanang palay' },
+    { id: 'organic-rice', name: 'Organic rice', tagalog: 'Organic na bigas' }
+  ],
+  corn: [
+    { id: 'yellow-corn', name: 'Yellow corn', tagalog: 'Dilaw na mais' },
+    { id: 'white-corn', name: 'White corn', tagalog: 'Puting mais' },
+    { id: 'sweet-corn', name: 'Sweet corn', tagalog: 'Matamis na mais' },
+    { id: 'glutinous-corn', name: 'Glutinous corn', tagalog: 'Malagkit na mais' },
+    { id: 'popcorn', name: 'Popcorn', tagalog: 'Mais pang-popcorn' },
+    { id: 'feed-corn', name: 'Feed corn', tagalog: 'Mais pang-alisan' },
+    { id: 'hybrid-corn', name: 'Hybrid corn', tagalog: 'Hybrid na mais' },
+    { id: 'native-corn', name: 'Native corn', tagalog: 'Mais katutubo' },
+    { id: 'baby-corn', name: 'Baby corn', tagalog: 'Mais na bata' }
+  ],
+  vegetables: [
+    { id: 'bok-choy', name: 'Bok choy / Pechay', tagalog: 'Pechay' },
+    { id: 'mustard-greens', name: 'Mustard greens', tagalog: 'Mustasa' },
+    { id: 'lettuce', name: 'Lettuce', tagalog: 'Letsugas' },
+    { id: 'spinach', name: 'Spinach', tagalog: 'Espinaka' },
+    { id: 'water-spinach', name: 'Water spinach', tagalog: 'Kangkong' },
+    { id: 'moringa', name: 'Moringa leaves', tagalog: 'Malunggay' },
+    { id: 'malabar-spinach', name: 'Malabar spinach', tagalog: 'Alugbati' },
+    { id: 'jute-leaves', name: 'Jute leaves', tagalog: 'Saluyot' },
+    { id: 'cabbage', name: 'Cabbage', tagalog: 'Repolyo' },
+    { id: 'chinese-cabbage', name: 'Chinese cabbage', tagalog: 'Pechay Baguio' },
+    { id: 'napa-cabbage', name: 'Napa cabbage', tagalog: 'Napa' },
+    { id: 'kale', name: 'Kale', tagalog: 'Kale' },
+    { id: 'swiss-chard', name: 'Swiss chard', tagalog: 'Swiss chard' },
+    { id: 'arugula', name: 'Arugula', tagalog: 'Arugula' },
+    { id: 'sorrel', name: 'Sorrel', tagalog: 'Sorrel' },
+    { id: 'endive', name: 'Endive', tagalog: 'Endibia' },
+    { id: 'tomato', name: 'Tomato', tagalog: 'Kamatis' },
+    { id: 'eggplant', name: 'Eggplant', tagalog: 'Talong' },
+    { id: 'okra', name: 'Okra', tagalog: 'Okra' },
+    { id: 'bitter-gourd', name: 'Bitter gourd', tagalog: 'Ampalaya' },
+    { id: 'squash', name: 'Squash', tagalog: 'Kalabasa' },
+    { id: 'cucumber', name: 'Cucumber', tagalog: 'Pipino' },
+    { id: 'bell-pepper', name: 'Bell pepper', tagalog: 'Siling pang-salad' },
+    { id: 'chili-pepper', name: 'Chili pepper', tagalog: 'Siling labuyo' },
+    { id: 'chayote', name: 'Chayote', tagalog: 'Sayote' },
+    { id: 'bottle-gourd', name: 'Bottle gourd', tagalog: 'Upo' },
+    { id: 'sponge-gourd', name: 'Sponge gourd', tagalog: 'Patola' },
+    { id: 'ridge-gourd', name: 'Ridge gourd', tagalog: 'Patolang ahas' },
+    { id: 'winged-bean', name: 'Winged bean', tagalog: 'Sigarilyas' },
+    { id: 'hyacinth-bean', name: 'Hyacinth bean', tagalog: 'Bataw' },
+    { id: 'yardlong-bean', name: 'Yardlong bean', tagalog: 'Sitaw' },
+    { id: 'snow-peas', name: 'Snow peas', tagalog: 'Sitsaro' },
+    { id: 'green-peas', name: 'Green peas', tagalog: 'Gisantes' },
+    { id: 'zucchini', name: 'Zucchini', tagalog: 'Zucchini' },
+    { id: 'carrot', name: 'Carrot', tagalog: 'Karot' },
+    { id: 'radish', name: 'Radish', tagalog: 'Labanos' },
+    { id: 'beetroot', name: 'Beetroot', tagalog: 'Beets' },
+    { id: 'turnip', name: 'Turnip', tagalog: 'Singkamas-puti' },
+    { id: 'parsnip', name: 'Parsnip', tagalog: 'Parsnip' },
+    { id: 'potato', name: 'Potato', tagalog: 'Patatas' },
+    { id: 'sweet-potato', name: 'Sweet potato', tagalog: 'Kamote' },
+    { id: 'cassava', name: 'Cassava', tagalog: 'Kamoteng kahoy' },
+    { id: 'taro', name: 'Taro', tagalog: 'Gabi' },
+    { id: 'purple-yam', name: 'Purple yam', tagalog: 'Ube' },
+    { id: 'arrowroot', name: 'Arrowroot', tagalog: 'Uraro' },
+    { id: 'yam-bean', name: 'Yam bean', tagalog: 'Singkamas' },
+    { id: 'onion', name: 'Onion', tagalog: 'Sibuyas' },
+    { id: 'garlic', name: 'Garlic', tagalog: 'Bawang' },
+    { id: 'leek', name: 'Leek', tagalog: 'Porro' },
+    { id: 'shallot', name: 'Shallot', tagalog: 'Shallot' },
+    { id: 'asparagus', name: 'Asparagus', tagalog: 'Asparagus' },
+    { id: 'bamboo-shoots', name: 'Bamboo shoots', tagalog: 'Labong' },
+    { id: 'celery', name: 'Celery', tagalog: 'Kintsay' },
+    { id: 'kohlrabi', name: 'Kohlrabi', tagalog: 'Kohlrabi' },
+    { id: 'cauliflower', name: 'Cauliflower', tagalog: 'Koliplor' },
+    { id: 'broccoli', name: 'Broccoli', tagalog: 'Broccoli' },
+    { id: 'banana-blossom', name: 'Banana blossom', tagalog: 'Puso ng saging' },
+    { id: 'squash-flower', name: 'Squash flower', tagalog: 'Bulaklak ng kalabasa' },
+    { id: 'artichoke', name: 'Artichoke', tagalog: 'Artichoke' },
+    { id: 'seaweed', name: 'Seaweed / Lato', tagalog: 'Lato' },
+    { id: 'sea-grapes', name: 'Sea grapes', tagalog: 'Ar-arosep' },
+    { id: 'agar-seaweed', name: 'Agar seaweed', tagalog: 'Gulaman' },
+    { id: 'eucheuma', name: 'Eucheuma', tagalog: 'Eucheuma' },
+    { id: 'pako', name: 'Pako', tagalog: 'Fiddlehead fern' },
+    { id: 'katuray-flower', name: 'Katuray flower', tagalog: 'Katuray' },
+    { id: 'talinum', name: 'Talinum', tagalog: 'Talinum' }
+  ],
+  fruits: [
+    { id: 'banana', name: 'Banana', tagalog: 'Saging' },
+    { id: 'mango', name: 'Mango', tagalog: 'Mangga' },
+    { id: 'pineapple', name: 'Pineapple', tagalog: 'Pinya' },
+    { id: 'papaya', name: 'Papaya', tagalog: 'Papaya' },
+    { id: 'coconut', name: 'Coconut', tagalog: 'Niyog' },
+    { id: 'jackfruit', name: 'Jackfruit', tagalog: 'Langka' },
+    { id: 'durian', name: 'Durian', tagalog: 'Durian' },
+    { id: 'rambutan', name: 'Rambutan', tagalog: 'Rambutan' },
+    { id: 'lanzones', name: 'Lanzones', tagalog: 'Lansones' },
+    { id: 'mangosteen', name: 'Mangosteen', tagalog: 'Mangostan' },
+    { id: 'guava', name: 'Guava', tagalog: 'Bayabas' },
+    { id: 'avocado', name: 'Avocado', tagalog: 'Abukado' },
+    { id: 'calamansi', name: 'Calamansi', tagalog: 'Kalamansi' },
+    { id: 'pomelo', name: 'Pomelo', tagalog: 'Suha' },
+    { id: 'orange', name: 'Orange', tagalog: 'Kahel' },
+    { id: 'lemon', name: 'Lemon', tagalog: 'Limon' },
+    { id: 'lime', name: 'Lime', tagalog: 'Dayap' },
+    { id: 'watermelon', name: 'Watermelon', tagalog: 'Pakwan' },
+    { id: 'melon', name: 'Melon', tagalog: 'Melon' },
+    { id: 'dragon-fruit', name: 'Dragon fruit', tagalog: 'Pitaya' },
+    { id: 'star-apple', name: 'Star apple', tagalog: 'Caimito' },
+    { id: 'sugar-apple', name: 'Sugar apple', tagalog: 'Atis' },
+    { id: 'soursop', name: 'Soursop', tagalog: 'Guyabano' },
+    { id: 'santol', name: 'Santol', tagalog: 'Santol' },
+    { id: 'tamarind', name: 'Tamarind', tagalog: 'Sampalok' },
+    { id: 'passion-fruit', name: 'Passion fruit', tagalog: 'Maracuya' },
+    { id: 'chico', name: 'Chico / Sapodilla', tagalog: 'Chico' },
+    { id: 'duhat', name: 'Duhat / Java plum', tagalog: 'Duhat' },
+    { id: 'balimbing', name: 'Balimbing / Star fruit', tagalog: 'Balimbing' },
+    { id: 'bignay', name: 'Bignay', tagalog: 'Bignay' },
+    { id: 'macopa', name: 'Macopa / Wax apple', tagalog: 'Macopa' },
+    { id: 'longan', name: 'Longan', tagalog: 'Longan' },
+    { id: 'lychee', name: 'Lychee', tagalog: 'Lychee' },
+    { id: 'kiat-kiat', name: 'Kiat-kiat / Mandarin', tagalog: 'Kiat-kiat' },
+    { id: 'breadfruit', name: 'Breadfruit', tagalog: 'Rimas' },
+    { id: 'marang', name: 'Marang', tagalog: 'Marang' },
+    { id: 'pili-nut-fruit', name: 'Pili nut fruit', tagalog: 'Pili' },
+    { id: 'bael-fruit', name: 'Bael fruit', tagalog: 'Bael' },
+    { id: 'kamias', name: 'Kamias / Bilimbi', tagalog: 'Kamias' },
+    { id: 'tamarillo', name: 'Tamarillo', tagalog: 'Tamarillo' },
+    { id: 'mulberry', name: 'Mulberry', tagalog: 'Mulberry' },
+    { id: 'strawberry', name: 'Strawberry', tagalog: 'Strawberry' },
+    { id: 'persimmon', name: 'Persimmon', tagalog: 'Persimmon' },
+    { id: 'fig', name: 'Fig', tagalog: 'Fig' },
+    { id: 'pear', name: 'Pear', tagalog: 'Peras' },
+    { id: 'apple', name: 'Apple', tagalog: 'Mansanas' },
+    { id: 'plum', name: 'Plum', tagalog: 'Plum' },
+    { id: 'peach', name: 'Peach', tagalog: 'Peach' },
+    { id: 'cherry', name: 'Cherry', tagalog: 'Cherry' },
+    { id: 'blueberry', name: 'Blueberry', tagalog: 'Blueberry' },
+    { id: 'grapes', name: 'Grapes', tagalog: 'Ubas' }
+  ],
+  rootCrops: [
+    { id: 'sweet-potato-root', name: 'Sweet potato', tagalog: 'Kamote' },
+    { id: 'cassava-root', name: 'Cassava', tagalog: 'Kamoteng kahoy' },
+    { id: 'taro-root', name: 'Taro', tagalog: 'Gabi' },
+    { id: 'purple-yam-root', name: 'Purple yam', tagalog: 'Ube' },
+    { id: 'potato-root', name: 'Potato', tagalog: 'Patatas' },
+    { id: 'arrowroot-root', name: 'Arrowroot', tagalog: 'Uraro' },
+    { id: 'yam-bean-root', name: 'Yam bean', tagalog: 'Singkamas' },
+    { id: 'radish-root', name: 'Radish', tagalog: 'Labanos' },
+    { id: 'carrot-root', name: 'Carrot', tagalog: 'Karot' },
+    { id: 'beetroot-root', name: 'Beetroot', tagalog: 'Beets' },
+    { id: 'turnip-root', name: 'Turnip', tagalog: 'Singkamas-puti' },
+    { id: 'parsnip-root', name: 'Parsnip', tagalog: 'Parsnip' },
+    { id: 'ginger-root', name: 'Ginger', tagalog: 'Luya' },
+    { id: 'turmeric-root', name: 'Turmeric', tagalog: 'Luyang dilaw' },
+    { id: 'galangal-root', name: 'Galangal', tagalog: 'Langkawas' },
+    { id: 'lotus-root', name: 'Lotus root', tagalog: 'Ugat ng lotus' },
+    { id: 'greater-yam', name: 'Greater yam', tagalog: 'Ube-ubi' },
+    { id: 'lesser-yam', name: 'Lesser yam', tagalog: 'Tugi' },
+    { id: 'elephant-foot-yam', name: 'Elephant foot yam', tagalog: 'Gabi-gabi' },
+    { id: 'purple-sweet-potato', name: 'Purple sweet potato', tagalog: 'Ube-kamote' },
+    { id: 'tapioca-root', name: 'Tapioca root', tagalog: 'Cassava' },
+    { id: 'jerusalem-artichoke', name: 'Jerusalem artichoke', tagalog: 'Jerusalem artichoke' },
+    { id: 'kudzu-root', name: 'Kudzu root', tagalog: 'Ugat ng kudzu' }
+  ],
+  legumes: [
+    { id: 'mung-bean-legume', name: 'Mung bean', tagalog: 'Monggo' },
+    { id: 'soybean-legume', name: 'Soybean', tagalog: 'Soya' },
+    { id: 'peanut-legume', name: 'Peanut', tagalog: 'Mani' },
+    { id: 'cowpea-legume', name: 'Cowpea', tagalog: 'Paayap' },
+    { id: 'string-beans-legume', name: 'String beans / Yardlong bean', tagalog: 'Sitaw' },
+    { id: 'winged-bean-legume', name: 'Winged bean', tagalog: 'Sigarilyas' },
+    { id: 'hyacinth-bean-legume', name: 'Hyacinth bean', tagalog: 'Bataw' },
+    { id: 'lima-bean-legume', name: 'Lima bean', tagalog: 'Patani' },
+    { id: 'chickpea-legume', name: 'Chickpea', tagalog: 'Garbanzo' },
+    { id: 'pigeon-pea-legume', name: 'Pigeon pea', tagalog: 'Kadyos' },
+    { id: 'lentil-legume', name: 'Lentil', tagalog: 'Lentehas' },
+    { id: 'black-bean', name: 'Black bean', tagalog: 'Itim na beans' },
+    { id: 'red-kidney-bean', name: 'Red kidney bean', tagalog: 'Red kidney bean' },
+    { id: 'white-bean', name: 'White bean', tagalog: 'Puting beans' },
+    { id: 'green-peas-legume', name: 'Green peas', tagalog: 'Gisantes' },
+    { id: 'snow-peas-legume', name: 'Snow peas', tagalog: 'Sitsaro' },
+    { id: 'split-peas', name: 'Split peas', tagalog: 'Split peas' },
+    { id: 'fava-bean', name: 'Fava bean / Broad bean', tagalog: 'Haba' },
+    { id: 'adzuki-bean', name: 'Adzuki bean', tagalog: 'Adzuki' },
+    { id: 'navy-bean', name: 'Navy bean', tagalog: 'Navy bean' },
+    { id: 'pinto-bean', name: 'Pinto bean', tagalog: 'Pinto bean' },
+    { id: 'jack-bean', name: 'Jack bean', tagalog: 'Jack bean' },
+    { id: 'sword-bean', name: 'Sword bean', tagalog: 'Sword bean' },
+    { id: 'velvet-bean', name: 'Velvet bean', tagalog: 'Velvet bean' },
+    { id: 'rice-bean', name: 'Rice bean', tagalog: 'Rice bean' },
+    { id: 'bambara-groundnut', name: 'Bambara groundnut', tagalog: 'Bambara' },
+    { id: 'horse-gram', name: 'Horse gram', tagalog: 'Horse gram' }
+  ],
+  herbs_spices: [
+    { id: 'garlic-spice', name: 'Garlic', tagalog: 'Bawang' },
+    { id: 'onion-spice', name: 'Onion', tagalog: 'Sibuyas' },
+    { id: 'shallot-spice', name: 'Shallot', tagalog: 'Lasuna' },
+    { id: 'ginger-spice', name: 'Ginger', tagalog: 'Luya' },
+    { id: 'turmeric-spice', name: 'Turmeric', tagalog: 'Luyang dilaw' },
+    { id: 'galangal-spice', name: 'Galangal', tagalog: 'Langkawas' },
+    { id: 'black-pepper', name: 'Black pepper', tagalog: 'Paminta' },
+    { id: 'white-pepper', name: 'White pepper', tagalog: 'Puting paminta' },
+    { id: 'chili-spice', name: 'Chili / Hot pepper', tagalog: 'Sili' },
+    { id: 'birds-eye-chili', name: "Bird's eye chili", tagalog: 'Siling labuyo' },
+    { id: 'paprika', name: 'Paprika', tagalog: 'Paprika' },
+    { id: 'cinnamon', name: 'Cinnamon', tagalog: 'Kanela' },
+    { id: 'cloves', name: 'Cloves', tagalog: 'Clavo' },
+    { id: 'star-anise', name: 'Star anise', tagalog: 'Sangke' },
+    { id: 'nutmeg', name: 'Nutmeg', tagalog: 'Nuez moscada' },
+    { id: 'mace', name: 'Mace', tagalog: 'Mace' },
+    { id: 'coriander-seed', name: 'Coriander seed', tagalog: 'Buto ng kulantro' },
+    { id: 'cumin', name: 'Cumin', tagalog: 'Comino' },
+    { id: 'fennel', name: 'Fennel', tagalog: 'Haras' },
+    { id: 'fenugreek', name: 'Fenugreek', tagalog: 'Fenugreek' },
+    { id: 'mustard-seed', name: 'Mustard seed', tagalog: 'Buto ng mustasa' },
+    { id: 'allspice', name: 'Allspice', tagalog: 'Allspice' },
+    { id: 'bay-leaf', name: 'Bay leaf', tagalog: 'Laurel' },
+    { id: 'vanilla', name: 'Vanilla', tagalog: 'Banilya' },
+    { id: 'tamarind-spice', name: 'Tamarind', tagalog: 'Sampalok' },
+    { id: 'annatto', name: 'Annatto / Atsuete', tagalog: 'Atsuete' },
+    { id: 'lemongrass-spice', name: 'Lemongrass', tagalog: 'Tanglad' },
+    { id: 'pandan-spice', name: 'Pandan', tagalog: 'Pandan' },
+    { id: 'kaffir-lime-leaf', name: 'Kaffir lime leaf', tagalog: 'Dahon ng dayap' },
+    { id: 'curry-leaf', name: 'Curry leaf', tagalog: 'Dahon ng kari' },
+    { id: 'sesame-seed', name: 'Sesame seed', tagalog: 'Linga' },
+    { id: 'poppy-seed', name: 'Poppy seed', tagalog: 'Poppy seed' },
+    { id: 'cardamom', name: 'Cardamom', tagalog: 'Cardamom' },
+    { id: 'anise-seed', name: 'Anise seed', tagalog: 'Anis' },
+    { id: 'saffron', name: 'Saffron', tagalog: 'Saffron' },
+    { id: 'horseradish', name: 'Horseradish', tagalog: 'Horseradish' },
+    { id: 'basil-herb', name: 'Basil', tagalog: 'Balanoy' },
+    { id: 'oregano-herb', name: 'Oregano', tagalog: 'Oregano' },
+    { id: 'thyme-herb', name: 'Thyme', tagalog: 'Taym' },
+    { id: 'rosemary-herb', name: 'Rosemary', tagalog: 'Romero' },
+    { id: 'mint-herb', name: 'Mint', tagalog: 'Yerba buena' },
+    { id: 'lemongrass-herb', name: 'Lemongrass', tagalog: 'Tanglad' },
+    { id: 'sambong', name: 'Sambong', tagalog: 'Sambong' },
+    { id: 'lagundi', name: 'Lagundi', tagalog: 'Lagundi' },
+    { id: 'tsaang-gubat', name: 'Tsaang gubat', tagalog: 'Tsaang gubat' },
+    { id: 'akapulko', name: 'Akapulko', tagalog: 'Akapulko' },
+    { id: 'pandan-herb', name: 'Pandan', tagalog: 'Pandan' },
+    { id: 'ginger-herb', name: 'Ginger', tagalog: 'Luya' },
+    { id: 'turmeric-herb', name: 'Turmeric', tagalog: 'Luyang dilaw' },
+    { id: 'garlic-herb', name: 'Garlic', tagalog: 'Bawang' },
+    { id: 'onion-herb', name: 'Onion', tagalog: 'Sibuyas' },
+    { id: 'holy-basil', name: 'Holy basil', tagalog: 'Sangig' },
+    { id: 'peppermint', name: 'Peppermint', tagalog: 'Peppermint' },
+    { id: 'stevia', name: 'Stevia', tagalog: 'Stevia' },
+    { id: 'catnip', name: 'Catnip', tagalog: 'Catnip' },
+    { id: 'feverfew', name: 'Feverfew', tagalog: 'Feverfew' },
+    { id: 'gotu-kola', name: 'Gotu kola', tagalog: 'Gotu kola / Pegaga' },
+    { id: 'alagaw', name: 'Alagaw', tagalog: 'Alagaw' },
+    { id: 'banaba', name: 'Banaba', tagalog: 'Banaba' },
+    { id: 'bitter-melon-leaves', name: 'Bitter melon leaves', tagalog: 'Ampalaya leaves' }
+  ],
+  industrial: [
+    { id: 'tobacco', name: 'Tobacco', tagalog: 'Tabako' },
+    { id: 'rubber', name: 'Rubber', tagalog: 'Goma' },
+    { id: 'abaca', name: 'Abaca', tagalog: 'Abaka' },
+    { id: 'cotton', name: 'Cotton', tagalog: 'Bulak' },
+    { id: 'coffee', name: 'Coffee', tagalog: 'Kape' },
+    { id: 'cacao', name: 'Cacao', tagalog: 'Kakaw' },
+    { id: 'tea', name: 'Tea', tagalog: 'Tsaa' },
+    { id: 'hemp', name: 'Hemp', tagalog: 'Abaka' },
+    { id: 'oil-palm', name: 'Oil palm', tagalog: 'Palmang-langis' },
+    { id: 'sugarcane', name: 'Sugarcane', tagalog: 'Tubo' }
+  ],
+  mushrooms: [
+    { id: 'oyster-mushroom', name: 'Oyster mushroom', tagalog: 'Kabuteng talaba' },
+    { id: 'button-mushroom', name: 'Button mushroom', tagalog: 'Kabuteng buton' },
+    { id: 'shiitake', name: 'Shiitake', tagalog: 'Shiitake' },
+    { id: 'straw-mushroom', name: 'Straw mushroom', tagalog: 'Kabuteng dayami' },
+    { id: 'enoki', name: 'Enoki', tagalog: 'Enoki' },
+    { id: 'wood-ear', name: 'Wood ear mushroom', tagalog: 'Tenga ng daga' },
+    { id: 'king-oyster', name: "King oyster mushroom", tagalog: 'Kabuteng talaba hari' },
+    { id: 'lions-mane', name: "Lion's mane mushroom", tagalog: "Kabuteng lion's mane" },
+    { id: 'reishi', name: 'Reishi mushroom', tagalog: 'Kabuteng reishi' },
+    { id: 'maitake', name: 'Maitake', tagalog: 'Kabuteng maitake' },
+    { id: 'porcini', name: 'Porcini', tagalog: 'Kabuteng porcini' }
+  ],
+  others: []
+}
 
 export default function UserProfile() {
   const router = useRouter()
+  const { showInfoPopup, showSuccessPopup, showErrorPopup, showConfirmPopup } = usePopup()
   const [user, setUser] = useState(null)
   const [userProfile, setUserProfile] = useState(null)
   const [listings, setListings] = useState([])
@@ -30,9 +383,27 @@ export default function UserProfile() {
   const [editProfilePicturePreview, setEditProfilePicturePreview] = useState(null)
   const [editProfileLoading, setEditProfileLoading] = useState(false)
   const [editProfileLoadingMessage, setEditProfileLoadingMessage] = useState('')
+  // State for editing crops/livestock
+  const [editCrops, setEditCrops] = useState([])
+  const [editLivestock, setEditLivestock] = useState([])
+  const [editSpecificCrops, setEditSpecificCrops] = useState([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [confirmModalType, setConfirmModalType] = useState('') // 'save' or 'discard'
   const [showHiddenPosts, setShowHiddenPosts] = useState(false) // For collapsible hidden posts container
+  
+  // State for crops editing modal
+  const [showEditCropsModal, setShowEditCropsModal] = useState(false)
+  const [editCropsModalLoading, setEditCropsModalLoading] = useState(false)
+  const [editCropsModalLoadingMessage, setEditCropsModalLoadingMessage] = useState('')
+  
+  // Custom popup state for crops editing
+  const [showCropsPopup, setShowCropsPopup] = useState(false)
+  
+  // Custom popup state for livestock editing
+  const [showLivestockPopup, setShowLivestockPopup] = useState(false)
+  const [editSpecificLivestock, setEditSpecificLivestock] = useState([])
+  const [editSpecificLivestockByType, setEditSpecificLivestockByType] = useState({})
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
@@ -69,19 +440,65 @@ export default function UserProfile() {
 
   const loadUserProfile = async (userId) => {
     try {
-      console.log('Loading user profile for userId:', userId)
+      console.log('🔄 Loading user profile for userId:', userId)
       // Use 'Users' collection (capital U) - matching dashboard.js
       const userDoc = await getDoc(doc(db, 'Users', userId))
       if (userDoc.exists()) {
         const userData = userDoc.data()
-        console.log('User profile loaded:', userData)
+        console.log('📊 User profile loaded from Firestore:', userData)
+        console.log('🌱 userData.onboarding?.specificCrops:', userData.onboarding?.specificCrops)
+        console.log('🌾 userData.cropFarmer?.specificCrops:', userData.cropFarmer?.specificCrops)
+        console.log('📦 userData.cropFarmer?.cropType:', userData.cropFarmer?.cropType)
+        console.log('📦 userData.onboarding?.cropTypes:', userData.onboarding?.cropTypes)
         setUserProfile(userData)
       } else {
-        console.log('User document not found')
+        console.log('❌ User document not found')
       }
     } catch (error) {
       console.error('Error loading user profile:', error)
     }
+  }
+
+  // Helper function to get crop display information
+  const getCropDisplayInfo = (cropId) => {
+    const cropMap = {
+      'rice': { icon: '/assets/images/wheat.png', name: 'Rice' },
+      'corn': { icon: '/assets/images/corn.png', name: 'Corn' },
+      'vegetables': { icon: '/assets/images/lettuce.png', name: 'Vegetables' },
+      'fruits': { icon: '/assets/images/fruits.png', name: 'Fruits' },
+      'root-tuber': { icon: '/assets/images/rootcrop.png', name: 'Root Crops' },
+      'plantation': { icon: '/assets/images/sugarcane.png', name: 'Plantation Crops' },
+      'other': { icon: '/assets/images/other.png', name: 'Other Crops' }
+    }
+    return cropMap[cropId] || { icon: '/assets/images/other.png', name: cropId }
+  }
+
+  // Helper function to get animal display information
+  const getAnimalDisplayInfo = (animalId) => {
+    const animalMap = {
+      'cattle': { icon: '/assets/images/cattle.png', name: 'Cattle' },
+      'poultry': { icon: '/assets/images/chicken.png', name: 'Poultry' },
+      'swine': { icon: '/assets/images/swine.png', name: 'Swine' },
+      'goats': { icon: '/assets/images/goat.png', name: 'Goats' },
+      'sheep': { icon: '/assets/images/sheep.png', name: 'Sheep' },
+      'rabbits': { icon: '/assets/images/rabbit.png', name: 'Rabbits' },
+      'others': { icon: '/assets/images/livestock.png', name: 'Others' }
+    }
+    return animalMap[animalId] || { icon: '/assets/images/livestock.png', name: animalId }
+  }
+
+  // Helper function to get specific animal display information
+  const getSpecificAnimalDisplayInfo = (animalId) => {
+    const animalMap = {
+      'carabao': { icon: '/assets/images/carabao.png', name: 'Carabao' },
+      'horse': { icon: '/assets/images/horse.png', name: 'Horse' },
+      'donkey': { icon: '/assets/images/donkey.png', name: 'Donkey' },
+      'bee': { icon: '/assets/images/bee.png', name: 'Bee' },
+      'silkworm': { icon: '/assets/images/silkworm.png', name: 'Silkworm' },
+      'ostrich': { icon: '/assets/images/ostrich.png', name: 'Ostrich' },
+      'camel': { icon: '/assets/images/camel.png', name: 'Camel' }
+    }
+    return animalMap[animalId] || { icon: '/assets/images/livestock.png', name: animalId }
   }
 
   const loadUserListings = async (userId) => {
@@ -341,11 +758,95 @@ export default function UserProfile() {
   const openEditProfileModal = () => {
     setEditFirstName(userProfile?.firstName || '')
     setEditLastName(userProfile?.lastName || '')
-    setEditProfilePicturePreview(userProfile?.profilePicture || user?.photoURL || null)
     setEditProfilePicture(null)
+    setEditProfilePicturePreview(null)
+    // Initialize crops/livestock from user profile
+    setEditCrops(userProfile?.cropFarmer?.cropType || [])
+    setEditLivestock(userProfile?.livestock?.animals || [])
+    setEditSpecificCrops(userProfile?.onboarding?.specificCrops || [])
+    setSearchQuery('')
     setShowEditProfileModal(true)
     // Prevent background scrolling
     document.body.style.overflow = 'hidden'
+  }
+
+  // Handle specific crop selection
+  const handleSpecificCropSelect = (cropId) => {
+    setEditSpecificCrops(prev => 
+      prev.includes(cropId) 
+        ? prev.filter(id => id !== cropId)
+        : [...prev, cropId]
+    )
+  }
+
+  // Open crops editing modal
+  const openEditCropsModal = () => {
+    // Initialize crops/livestock from user profile
+    setEditCrops(userProfile?.cropFarmer?.cropType || [])
+    setEditSpecificCrops(userProfile?.onboarding?.specificCrops || [])
+    setSearchQuery('')
+    setShowCropsPopup(true)
+    // Prevent background scrolling
+    document.body.style.overflow = 'hidden'
+  }
+
+  // Close crops editing modal
+  const closeEditCropsModal = () => {
+    setShowCropsPopup(false)
+    setEditCrops([])
+    setEditSpecificCrops([])
+    setSearchQuery('')
+    // Restore background scrolling
+    document.body.style.overflow = 'auto'
+  }
+
+  // Open livestock editing modal
+  const openEditLivestockModal = () => {
+    // Initialize livestock from user profile
+    setEditLivestock(userProfile?.livestock?.animals || [])
+    
+    // Initialize specific animals by type
+    const specificByType = {}
+    const allSpecificAnimals = userProfile?.livestock?.specificAnimals || []
+    
+    // Group specific animals by their type
+    Object.keys(specificAnimals).forEach(type => {
+      if (type !== 'others') {
+        specificByType[type] = allSpecificAnimals.filter(id => 
+          specificAnimals[type].some(animal => animal.id === id)
+        )
+      }
+    })
+    
+    // Handle "others" separately
+    const othersAnimals = allSpecificAnimals.filter(id => 
+      specificAnimals.others.some(animal => animal.id === id)
+    )
+    setEditSpecificLivestock(othersAnimals)
+    setEditSpecificLivestockByType(specificByType)
+    
+    setShowLivestockPopup(true)
+    // Prevent background scrolling
+    document.body.style.overflow = 'hidden'
+  }
+
+  // Close livestock editing modal
+  const closeEditLivestockModal = () => {
+    setShowLivestockPopup(false)
+    setEditLivestock([])
+    setEditSpecificLivestock([])
+    setEditSpecificLivestockByType({})
+    // Restore background scrolling
+    document.body.style.overflow = 'auto'
+  }
+
+  // Filter specific crops based on search
+  const getFilteredSpecificCrops = (cropType) => {
+    if (!searchQuery) return specificCrops[cropType] || []
+    return (specificCrops[cropType] || []).filter(crop => 
+      crop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      crop.tagalog.toLowerCase().includes(searchQuery.toLowerCase())
+    )
   }
 
   // Check if there are unsaved changes
@@ -353,11 +854,17 @@ export default function UserProfile() {
     const originalFirstName = userProfile?.firstName || ''
     const originalLastName = userProfile?.lastName || ''
     const originalPicture = userProfile?.profilePicture || user?.photoURL || null
+    const originalCrops = userProfile?.cropFarmer?.cropType || []
+    const originalLivestock = userProfile?.livestock?.animals || []
+    const originalSpecificCrops = userProfile?.onboarding?.specificCrops || []
     
     return (
       editFirstName !== originalFirstName ||
       editLastName !== originalLastName ||
-      editProfilePicture !== null
+      editProfilePicture !== null ||
+      JSON.stringify(editCrops.sort()) !== JSON.stringify(originalCrops.sort()) ||
+      JSON.stringify(editLivestock.sort()) !== JSON.stringify(originalLivestock.sort()) ||
+      JSON.stringify(editSpecificCrops.sort()) !== JSON.stringify(originalSpecificCrops.sort())
     )
   }
 
@@ -368,6 +875,8 @@ export default function UserProfile() {
     setEditLastName('')
     setEditProfilePicture(null)
     setEditProfilePicturePreview(null)
+    setEditSpecificCrops([])
+    setSearchQuery('')
     setEditProfileLoadingMessage('')
     // Restore background scrolling
     document.body.style.overflow = 'auto'
@@ -403,14 +912,190 @@ export default function UserProfile() {
     }
   }
 
-  // Request save confirmation
+  // Request to save changes with validation
   const requestSaveChanges = () => {
-    if (!editFirstName.trim() || !editLastName.trim()) {
-      alert('Please enter both first name and last name')
+    // Validate first name and last name
+    if (!editFirstName.trim()) {
+      alert('Please enter your first name')
       return
     }
+    
+    if (!editLastName.trim()) {
+      alert('Please enter your last name')
+      return
+    }
+    
+    // Validate crop types and specific crops for crop farmers
+    if (userProfile?.role === 'crop_farmer') {
+      if (editCrops.length === 0) {
+        alert('Please select at least one crop type')
+        return
+      }
+      
+      if (editSpecificCrops.length === 0) {
+        alert('Please select at least one specific crop')
+        return
+      }
+    }
+    
+    // Validate livestock for livestock owners
+    if (userProfile?.role === 'livestock_owner' && editLivestock.length === 0) {
+      alert('Please select at least one livestock animal')
+      return
+    }
+    
     setConfirmModalType('save')
     setShowConfirmModal(true)
+  }
+
+  // Save Crops Changes
+  const saveCropsChanges = async () => {
+    setEditCropsModalLoading(true)
+    setEditCropsModalLoadingMessage('Saving crops...')
+
+    try {
+      console.log('🔄 Starting to save crops changes...')
+      console.log('Edit crops:', editCrops)
+      console.log('Edit specific crops:', editSpecificCrops)
+      
+      const userRef = doc(db, 'Users', user.uid)
+      
+      // Use updateDoc for better control over nested fields
+      const updateData = {
+        updatedAt: new Date(),
+        'cropFarmer.cropType': editCrops,
+        'cropFarmer.specificCrops': editSpecificCrops,
+        'onboarding.cropTypes': editCrops,
+        'onboarding.specificCrops': editSpecificCrops
+      }
+
+      console.log('📝 Update data:', updateData)
+      
+      await updateDoc(userRef, updateData)
+      console.log('✅ Crops saved to Firestore successfully')
+
+      // Verify save by reading back the data
+      const verifyDoc = await getDoc(userRef)
+      if (verifyDoc.exists()) {
+        const savedData = verifyDoc.data()
+        console.log('🔍 Verification - saved cropFarmer:', savedData.cropFarmer)
+        console.log('🔍 Verification - saved onboarding:', savedData.onboarding)
+      }
+
+      // Update local state
+      setUserProfile(prev => {
+        const updatedProfile = {
+          ...prev,
+          cropFarmer: { 
+            ...prev.cropFarmer,
+            cropType: editCrops, 
+            specificCrops: editSpecificCrops 
+          },
+          onboarding: {
+            ...prev.onboarding,
+            cropTypes: editCrops,
+            specificCrops: editSpecificCrops
+          }
+        }
+        console.log('📊 Updated local profile state:', updatedProfile)
+        return updatedProfile
+      })
+
+      setEditCropsModalLoading(false)
+      closeEditCropsModal()
+      showSuccessPopup('Crops updated successfully!')
+      
+      // Notify other components that crops have been updated
+      window.dispatchEvent(new Event('cropsUpdated'))
+    } catch (error) {
+      console.error('❌ Error updating crops:', error)
+      alert('Failed to update crops. Please try again.')
+      setEditCropsModalLoading(false)
+      setEditCropsModalLoadingMessage('')
+    }
+  }
+
+  // Save Livestock Changes
+  const saveLivestockChanges = async () => {
+    if (editLivestock.length === 0) {
+      alert('Please select at least one livestock animal')
+      return
+    }
+
+    // Validate that each selected livestock type has at least one specific animal selected
+    for (const animalType of editLivestock) {
+      if (animalType === 'others') {
+        if (editSpecificLivestock.length === 0) {
+          alert('Please select at least one specific animal for "Others"')
+          return
+        }
+      } else {
+        const specificAnimalsForType = editSpecificLivestockByType[animalType] || []
+        if (specificAnimalsForType.length === 0) {
+          alert(`Please select at least one specific ${animalType} type`)
+          return
+        }
+      }
+    }
+
+    setEditLivestockModalLoading(true)
+    setEditLivestockModalLoadingMessage('Saving livestock...')
+
+    try {
+      console.log('🔄 Starting to save livestock changes...')
+      console.log('Edit livestock:', editLivestock)
+      console.log('Edit specific livestock by type:', editSpecificLivestockByType)
+      console.log('Edit specific others:', editSpecificLivestock)
+      
+      // Combine all specific animals
+      const allSpecificAnimals = [...editSpecificLivestock]
+      Object.values(editSpecificLivestockByType).forEach(animals => {
+        allSpecificAnimals.push(...animals)
+      })
+      
+      const userRef = doc(db, 'Users', user.uid)
+      
+      // Use updateDoc for better control over nested fields
+      const updateData = {
+        updatedAt: new Date(),
+        'livestock.animals': editLivestock,
+        'livestock.specificAnimals': allSpecificAnimals
+      }
+
+      console.log('📝 Update data:', updateData)
+      
+      await updateDoc(userRef, updateData)
+      console.log('✅ Livestock changes saved successfully!')
+
+      // Update local state
+      setUserProfile(prev => {
+        const updatedProfile = {
+          ...prev,
+          livestock: { 
+            ...prev.livestock,
+            animals: editLivestock,
+            specificAnimals: allSpecificAnimals
+          }
+        }
+        console.log('📊 Updated local profile state:', updatedProfile)
+        return updatedProfile
+      })
+
+      // Show success message
+      setEditLivestockModalLoading(false)
+      setEditLivestockModalLoadingMessage('Livestock updated successfully!')
+      
+      // Close modal after a short delay
+      setTimeout(() => {
+        closeEditLivestockModal()
+        setEditLivestockModalLoadingMessage('')
+      }, 1500)
+    } catch (error) {
+      console.error('❌ Error saving livestock changes:', error)
+      alert('Failed to save livestock changes. Please try again.')
+      setEditLivestockModalLoading(false)
+      setEditLivestockModalLoadingMessage('')
+    }
   }
 
   // Save Profile Changes
@@ -440,6 +1125,19 @@ export default function UserProfile() {
         updateData.profilePicture = profilePictureUrl
       }
 
+      // Add crops/livestock data based on user role
+      if (userProfile?.role === 'crop_farmer') {
+        updateData['cropFarmer.cropType'] = editCrops
+        updateData['cropFarmer.specificCrops'] = editSpecificCrops
+        updateData['onboarding.cropTypes'] = editCrops
+        updateData['onboarding.specificCrops'] = editSpecificCrops
+      } else if (userProfile?.role === 'livestock_owner') {
+        updateData.livestock = {
+          animals: editLivestock
+        }
+        updateData['onboarding.livestockTypes'] = editLivestock
+      }
+
       await setDoc(userRef, updateData, { merge: true })
       console.log('Profile updated successfully')
 
@@ -448,7 +1146,22 @@ export default function UserProfile() {
         ...prev,
         firstName: editFirstName.trim(),
         lastName: editLastName.trim(),
-        profilePicture: profilePictureUrl
+        profilePicture: profilePictureUrl,
+        ...(userProfile?.role === 'crop_farmer' && { 
+          cropFarmer: { cropType: editCrops, specificCrops: editSpecificCrops },
+          onboarding: {
+            ...prev.onboarding,
+            cropTypes: editCrops,
+            specificCrops: editSpecificCrops
+          }
+        }),
+        ...(userProfile?.role === 'livestock_owner' && { 
+          livestock: { animals: editLivestock },
+          onboarding: {
+            ...prev.onboarding,
+            livestockTypes: editLivestock
+          }
+        })
       }))
 
       // Show done message briefly
@@ -554,6 +1267,116 @@ export default function UserProfile() {
       <div className={styles.mainContent}>
         {/* Left Sidebar */}
         <aside className={styles.leftSidebar}>
+          {/* Farming Info Card */}
+          {userProfile && (
+            <div className={styles.farmingInfoCard}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h2 className={styles.cardTitle}>
+                  {userProfile.role === 'crop_farmer' ? 'Crops Grown' : 'Livestock Animals'}
+                </h2>
+                {userProfile.role === 'crop_farmer' && (
+                  <button 
+                    className={styles.editCropsBtn}
+                    onClick={openEditCropsModal}
+                    style={{
+                      background: 'none',
+                      border: '1px solid #ddd',
+                      padding: '5px 15px',
+                      borderRadius: '5px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    Edit
+                  </button>
+                )}
+                {userProfile.role === 'livestock_owner' && (
+                  <button 
+                    className={styles.editCropsBtn}
+                    onClick={openEditLivestockModal}
+                    style={{
+                      background: 'none',
+                      border: '1px solid #ddd',
+                      padding: '5px 15px',
+                      borderRadius: '5px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+              <div className={styles.farmingContent}>
+                {userProfile.role === 'crop_farmer' ? (
+                  (() => {
+                    const userSpecificCrops = userProfile.onboarding?.specificCrops || userProfile.cropFarmer?.specificCrops || []
+                    return userSpecificCrops.length > 0 ? (
+                      <div className={styles.specificCropsContainer}>
+                        {userSpecificCrops.map((cropId, index) => {
+                        // Find the specific crop details
+                        let cropDetails = null
+                        let categoryName = ''
+                        
+                        // Search through all categories to find the specific crop
+                        for (const [category, crops] of Object.entries(specificCrops)) {
+                          const found = crops.find(c => c.id === cropId)
+                          if (found) {
+                            cropDetails = found
+                            categoryName = cropTypes.find(ct => ct.id === category)?.name || category
+                            break
+                          }
+                        }
+                        
+                        if (!cropDetails) return null
+                        
+                        return (
+                          <div key={index} className={`${cropOnboardingStyles.specificCard} ${styles.profileCropButton}`}>
+                            <h4 className={cropOnboardingStyles.optionTitle}>{cropDetails.name}</h4>
+                            <p className={cropOnboardingStyles.optionTagalog}>{cropDetails.tagalog}</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className={styles.noItems}>No crops added yet</p>
+                  )
+                  })()
+                ) : (
+                  userProfile.livestock?.animals && userProfile.livestock.animals.length > 0 ? (
+                    <div className={styles.itemsGrid}>
+                      {userProfile.livestock.animals.map((animalId, index) => {
+                        // If it's "others", show the specific animals instead
+                        if (animalId === 'others') {
+                          const specificAnimals = userProfile.livestock?.specificAnimals || []
+                          return specificAnimals.map((specificId, idx) => {
+                            const specificAnimalInfo = getSpecificAnimalDisplayInfo(specificId);
+                            return (
+                              <div key={`others-${idx}`} className={styles.itemChip}>
+                                <img src={specificAnimalInfo.icon} alt={specificAnimalInfo.name} className={styles.itemIconImage} />
+                                <span className={styles.itemName}>{specificAnimalInfo.name}</span>
+                              </div>
+                            );
+                          });
+                        } else {
+                          const animalInfo = getAnimalDisplayInfo(animalId);
+                          return (
+                            <div key={index} className={styles.itemChip}>
+                              <img src={animalInfo.icon} alt={animalInfo.name} className={styles.itemIconImage} />
+                              <span className={styles.itemName}>{animalInfo.name}</span>
+                            </div>
+                          );
+                        }
+                      })}
+                    </div>
+                  ) : (
+                    <p className={styles.noItems}>No livestock added yet</p>
+                  )
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Intro Card */}
           <div className={styles.introCard}>
             <h2 className={styles.cardTitle}>Intro</h2>
@@ -930,50 +1753,50 @@ export default function UserProfile() {
             </div>
             
             <div className={styles.editProfileContent}>
-              {/* Profile Picture Section */}
-              <div className={styles.editProfilePictureSection}>
-                <div className={styles.editProfilePicturePreview}>
-                  {editProfilePicturePreview ? (
-                    <img src={editProfilePicturePreview} alt="Profile Preview" />
-                  ) : (
-                    <div className={styles.editProfileInitial}>
-                      {editFirstName?.[0]?.toUpperCase() || 'U'}
-                    </div>
-                  )}
+              {/* Profile Picture and Name Section */}
+              <div className={styles.editProfilePictureNameSection}>
+                <div className={styles.editProfilePictureContainer}>
+                  <div className={styles.editProfilePicturePreview}>
+                    {editProfilePicturePreview ? (
+                      <img src={editProfilePicturePreview} alt="Profile Preview" />
+                    ) : (
+                      <div className={styles.editProfileInitial}>
+                        {editFirstName?.[0]?.toUpperCase() || 'U'}
+                      </div>
+                    )}
+                  </div>
+                  <label className={styles.changePhotoBtn}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M3 4V1h2v3h3v2H5v3H3V6H0V4h3zm3 6V7h3V4h7l1.83 2H21c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V10h3zm7 9c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-3.2-5c0 1.77 1.43 3.2 3.2 3.2s3.2-1.43 3.2-3.2-1.43-3.2-3.2-3.2-3.2 1.43-3.2 3.2z"/>
+                    </svg>
+                    Change Photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfilePictureChange}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
                 </div>
-                <label className={styles.changePhotoBtn}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M3 4V1h2v3h3v2H5v3H3V6H0V4h3zm3 6V7h3V4h7l1.83 2H21c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V10h3zm7 9c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-3.2-5c0 1.77 1.43 3.2 3.2 3.2s3.2-1.43 3.2-3.2-1.43-3.2-3.2-3.2-3.2 1.43-3.2 3.2z"/>
-                  </svg>
-                  Change Photo
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleProfilePictureChange}
-                    style={{ display: 'none' }}
-                  />
-                </label>
-              </div>
-
-              {/* Name Fields */}
-              <div className={styles.editProfileFields}>
-                <div className={styles.editProfileField}>
-                  <label>First Name</label>
-                  <input
-                    type="text"
-                    value={editFirstName}
-                    onChange={(e) => setEditFirstName(e.target.value)}
-                    placeholder="Enter first name"
-                  />
-                </div>
-                <div className={styles.editProfileField}>
-                  <label>Last Name</label>
-                  <input
-                    type="text"
-                    value={editLastName}
-                    onChange={(e) => setEditLastName(e.target.value)}
-                    placeholder="Enter last name"
-                  />
+                <div className={styles.editProfileNameFields}>
+                  <div className={styles.editProfileField}>
+                    <label>First Name</label>
+                    <input
+                      type="text"
+                      value={editFirstName}
+                      onChange={(e) => setEditFirstName(e.target.value)}
+                      placeholder="Enter first name"
+                    />
+                  </div>
+                  <div className={styles.editProfileField}>
+                    <label>Last Name</label>
+                    <input
+                      type="text"
+                      value={editLastName}
+                      onChange={(e) => setEditLastName(e.target.value)}
+                      placeholder="Enter last name"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1036,6 +1859,302 @@ export default function UserProfile() {
                 onClick={confirmModalType === 'save' ? saveProfileChanges : confirmDiscardChanges}
               >
                 {confirmModalType === 'save' ? 'Save' : 'Discard'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Crops Editing Popup */}
+      {showCropsPopup && (
+        <div className={styles.popupOverlay}>
+          <div className={`${styles.popup} ${styles.cropsPopup}`}>
+            <div className={styles.popupHeader}>
+              <h2>Edit Crops Grown</h2>
+              <button 
+                className={styles.closePopupBtn}
+                onClick={closeEditCropsModal}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className={styles.popupContent}>
+              {/* Column 1 - Crop Categories */}
+              <div className={styles.cropCategoriesColumn}>
+                <div className={styles.popupSection}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+                    <label>Crop Categories</label>
+                    {editCrops.length === 0 && (
+                      <p className={styles.validationError} style={{ margin: 0, fontSize: '12px' }}>Please select at least one category</p>
+                    )}
+                  </div>
+                  <div className={styles.selectionGrid}>
+                    {cropTypes.map(crop => (
+                      <button
+                        key={crop.id}
+                        type="button"
+                        className={`${styles.cropCategoryButton} ${editCrops.includes(crop.id) ? styles.selected : ''}`}
+                        onClick={() => {
+                          const isCurrentlySelected = editCrops.includes(crop.id)
+                          setEditCrops(prev => 
+                            prev.includes(crop.id) 
+                              ? prev.filter(id => id !== crop.id)
+                              : [...prev, crop.id]
+                          )
+                          // Clear specific crops when category is removed
+                          if (isCurrentlySelected) {
+                            const actualCropType = crop.id === 'spices' ? 'herbs_spices' : crop.id
+                            const categoryCrops = specificCrops[actualCropType] || []
+                            setEditSpecificCrops(prev => 
+                              prev.filter(id => !categoryCrops.some(c => c.id === id))
+                            )
+                          }
+                        }}
+                      >
+                        {crop.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Column 2 - Specific Crops */}
+              <div className={styles.specificCropsColumn}>
+                {editCrops.length > 0 && (
+                  <div className={styles.popupSection}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+                      <label>Specific Crops</label>
+                      {editSpecificCrops.length === 0 && (
+                        <p className={styles.validationError} style={{ margin: 0, fontSize: '12px' }}>Please select at least one specific crop</p>
+                      )}
+                    </div>
+                    
+                    {/* Search Bar */}
+                    <div className={styles.searchBarContainer}>
+                      <input
+                        type="text"
+                        placeholder="Search specific crops..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className={styles.searchInput}
+                      />
+                      {searchQuery && (
+                        <button 
+                          className={styles.clearSearchBtn}
+                          onClick={() => setSearchQuery('')}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div className={styles.specificCropsContainer}>
+                      {editCrops.map(cropType => {
+                        // Handle the combined herbs_spices category
+                        const actualCropType = cropType === 'spices' ? 'herbs_spices' : cropType
+                        const crop = cropTypes.find(c => c.id === cropType)
+                        const categoryCrops = specificCrops[actualCropType]?.filter(specificCrop => 
+                          specificCrop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          specificCrop.tagalog.toLowerCase().includes(searchQuery.toLowerCase())
+                        ) || []
+                        
+                        // Remove duplicates by name
+                        const uniqueCategoryCrops = categoryCrops.filter((crop, index, self) => 
+                          index === self.findIndex((c) => c.name === crop.name)
+                        )
+                        
+                        return (
+                          <div key={cropType} className={styles.specificCropCategory}>
+                            <div className={styles.categoryHeader}>
+                              <h4 className={styles.specificCropCategoryTitle}>{crop.name}</h4>
+                              <button
+                                type="button"
+                                className={styles.selectAllBtn}
+                                onClick={() => {
+                                  const categoryCropIds = uniqueCategoryCrops.map(c => c.id)
+                                  const allSelected = categoryCropIds.every(id => editSpecificCrops.includes(id))
+                                  
+                                  if (allSelected) {
+                                    // Deselect all in this category
+                                    setEditSpecificCrops(prev => 
+                                      prev.filter(id => !categoryCropIds.includes(id))
+                                    )
+                                  } else {
+                                    // Select all in this category
+                                    setEditSpecificCrops(prev => 
+                                      [...new Set([...prev, ...categoryCropIds])]
+                                    )
+                                  }
+                                }}
+                              >
+                                {uniqueCategoryCrops.every(id => editSpecificCrops.includes(id)) ? 'Deselect All' : 'Select All'}
+                              </button>
+                            </div>
+                            <div className={styles.specificOptionsGrid}>
+                              {uniqueCategoryCrops.map(specificCrop => (
+                                <div 
+                                  key={specificCrop.id} 
+                                  className={`${cropOnboardingStyles.specificCard} ${styles.profileCropButton} ${editSpecificCrops.includes(specificCrop.id) ? cropOnboardingStyles.selected : ''}`}
+                                  onClick={() => handleSpecificCropSelect(specificCrop.id)}
+                                >
+                                  <h4 className={cropOnboardingStyles.optionTitle}>{specificCrop.name}</h4>
+                                  <p className={cropOnboardingStyles.optionTagalog}>{specificCrop.tagalog}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className={styles.popupActions}>
+              <button className={styles.cancelPopupBtn} onClick={closeEditCropsModal}>
+                Cancel
+              </button>
+              <button 
+                className={styles.savePopupBtn} 
+                onClick={saveCropsChanges}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Livestock Editing Popup */}
+      {showLivestockPopup && (
+        <div className={styles.popupOverlay}>
+          <div className={`${styles.popup} ${styles.livestockPopup}`}>
+            <div className={styles.popupHeader}>
+              <h2>Edit Livestock Animals</h2>
+              <button 
+                className={styles.closePopupBtn}
+                onClick={closeEditLivestockModal}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className={styles.popupContent}>
+              <div className={styles.popupSection}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+                  <label>Livestock Animals</label>
+                  {editLivestock.length === 0 && (
+                    <p className={styles.validationError} style={{ margin: 0, fontSize: '12px' }}>Please select at least one animal</p>
+                  )}
+                </div>
+                <div className={styles.selectionGrid}>
+                  {[
+                    { id: 'cattle', name: 'Cattle', icon: '/assets/images/cattle.png' },
+                    { id: 'poultry', name: 'Poultry', icon: '/assets/images/chicken.png' },
+                    { id: 'swine', name: 'Swine', icon: '/assets/images/swine.png' },
+                    { id: 'goats', name: 'Goats', icon: '/assets/images/goat.png' },
+                    { id: 'sheep', name: 'Sheep', icon: '/assets/images/sheep.png' },
+                    { id: 'rabbits', name: 'Rabbits', icon: '/assets/images/rabbit.png' },
+                    { id: 'others', name: 'Others', icon: '/assets/images/livestock.png' }
+                  ].map(animal => (
+                    <button
+                      key={animal.id}
+                      type="button"
+                      className={`${styles.selectionButton} ${editLivestock.includes(animal.id) ? styles.selected : ''}`}
+                      onClick={() => {
+                        setEditLivestock(prev => 
+                          prev.includes(animal.id) 
+                            ? prev.filter(id => id !== animal.id)
+                            : [...prev, animal.id]
+                        )
+                        // Clear specific livestock when type is removed
+                        if (!editLivestock.includes(animal.id)) {
+                          setEditSpecificLivestockByType(prev => {
+                            const newState = { ...prev }
+                            delete newState[animal.id]
+                            return newState
+                          })
+                        }
+                      }}
+                    >
+                      <img src={animal.icon} alt={animal.name} className={styles.selectionIcon} />
+                      <span>{animal.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Show specific animals for each selected type */}
+              {editLivestock.map(animalType => {
+                if (animalType === 'others') {
+                  return (
+                    <div key={animalType} className={styles.popupSection} style={{ marginTop: '20px' }}>
+                      <label>Specify Other Animals</label>
+                      <div className={styles.specificOptionsGrid}>
+                        {specificAnimals.others.map(animal => (
+                          <div 
+                            key={animal.id} 
+                            className={`${styles.specificCard} ${editSpecificLivestock.includes(animal.id) ? styles.selected : ''}`}
+                            onClick={() => {
+                              setEditSpecificLivestock(prev => 
+                                prev.includes(animal.id) 
+                                  ? prev.filter(id => id !== animal.id)
+                                  : [...prev, animal.id]
+                              )
+                            }}
+                          >
+                            <h4 className={styles.optionTitle}>{animal.name}</h4>
+                            <p className={styles.optionTagalog}>{animal.tagalog}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                }
+                
+                const specificOptions = specificAnimals[animalType]
+                if (!specificOptions || specificOptions.length === 0) return null
+                
+                return (
+                  <div key={animalType} className={styles.popupSection} style={{ marginTop: '20px' }}>
+                    <label>Specify {animalType.charAt(0).toUpperCase() + animalType.slice(1)} Types</label>
+                    <div className={styles.specificOptionsGrid}>
+                      {specificOptions.map(animal => (
+                        <div 
+                          key={animal.id} 
+                          className={`${styles.specificCard} ${(editSpecificLivestockByType[animalType] || []).includes(animal.id) ? styles.selected : ''}`}
+                          onClick={() => {
+                            setEditSpecificLivestockByType(prev => ({
+                              ...prev,
+                              [animalType]: prev[animalType]?.includes(animal.id)
+                                ? prev[animalType].filter(id => id !== animal.id)
+                                : [...(prev[animalType] || []), animal.id]
+                            }))
+                          }}
+                        >
+                          <h4 className={styles.optionTitle}>{animal.name}</h4>
+                          <p className={styles.optionTagalog}>{animal.tagalog}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Action Buttons */}
+            <div className={styles.popupActions}>
+              <button className={styles.cancelPopupBtn} onClick={closeEditLivestockModal}>
+                Cancel
+              </button>
+              <button 
+                className={styles.savePopupBtn} 
+                onClick={saveLivestockChanges}
+              >
+                Save Changes
               </button>
             </div>
           </div>

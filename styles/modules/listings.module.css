@@ -9,6 +9,77 @@
   isolation: isolate;
 }
 
+/* Header Dropdowns */
+.headerDropdowns {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-wrap: nowrap;
+  margin-left: 0;
+  flex: 1;
+  justify-content: center;
+}
+
+.headerDropdowns .filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.headerDropdowns .filterLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: #65676b;
+}
+
+.headerDropdowns .filterSelect {
+  padding: 6px 10px;
+  border: 1px solid #dddfe2;
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  color: #1c1e21;
+  cursor: pointer;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.headerDropdowns .filterSelect:hover {
+  border-color: #b0b3b8;
+}
+
+.headerDropdowns .filterSelect:focus {
+  border-color: #2d5a27;
+  box-shadow: 0 0 0 2px rgba(45, 90, 39, 0.2);
+}
+
+.headerDropdowns .filterSelect:disabled {
+  background: #f0f2f5;
+  color: #8a8d91;
+  cursor: not-allowed;
+}
+
+.headerDropdowns .clearFiltersBtn {
+  padding: 6px 12px;
+  background: #fa9100;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  height: 32px;
+  align-self: flex-end;
+}
+
+.headerDropdowns .clearFiltersBtn:hover {
+  background: #e08200;
+}
+
+/* Filter Dropdown Container - DEPRECATED */
+
 /* Toast Notification - Sliding from top-right */
 .toast {
   position: fixed;
@@ -112,8 +183,10 @@
 
 .headerLeft {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 20px;
+  flex-shrink: 0;
 }
 
 .headerRight {
@@ -151,6 +224,7 @@
   color: #1c1e21;
   letter-spacing: -0.5px;
   white-space: nowrap;
+  align-self: flex-start;
 }
 
 .header {
@@ -231,14 +305,15 @@
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  flex: 1;
+  flex: 0 0 auto;
   padding: 8px;
   padding-right: 20px;
+  margin-left: 20px;
 }
 
 .searchInputWrapper {
   position: relative;
-  width: 450px;
+  width: 300px;
 }
 
 .searchIcon {
@@ -1586,7 +1661,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: start;
 }
 
 .detailsRow {

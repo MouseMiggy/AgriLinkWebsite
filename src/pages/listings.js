@@ -9,6 +9,308 @@ import ReportModal from '../components/ReportModal'
 import { uploadImageToFirebaseStorage } from '../lib/firebaseStorage'
 import styles from '../../styles/modules/listings.module.css'
 
+// Import crop data
+const cropTypes = [
+  { id: 'rice', name: 'Rice', icon: '/assets/images/wheat.png', description: 'Various rice varieties' },
+  { id: 'corn', name: 'Corn', icon: '/assets/images/corn.png', description: 'Corn and maize varieties' },
+  { id: 'vegetables', name: 'Vegetables', icon: '/assets/images/vegetables.png', description: 'Fresh vegetables' },
+  { id: 'fruits', name: 'Fruits', icon: '/assets/images/fruits.png', description: 'Tropical fruits' },
+  { id: 'rootCrops', name: 'Root Crops', icon: '/assets/images/root-crops.png', description: 'Root and tuber crops' },
+  { id: 'legumes', name: 'Legumes', icon: '/assets/images/legumes.png', description: 'Beans and legumes' },
+  { id: 'spices', name: 'Herbs & Spices', icon: '/assets/images/spices.png', description: 'Spices, seasonings, and culinary herbs' },
+  { id: 'industrial', name: 'Industrial Crops', icon: '/assets/images/industrial.png', description: 'Industrial and commercial crops' },
+  { id: 'mushrooms', name: 'Mushrooms', icon: '/assets/images/mushrooms.png', description: 'Edible fungi and mushrooms' }
+]
+
+const specificCrops = {
+  rice: [
+    { id: 'white-rice', name: 'White rice', tagalog: 'Puting bigas' },
+    { id: 'brown-rice', name: 'Brown rice', tagalog: 'Kayumangging bigas' },
+    { id: 'red-rice', name: 'Red rice', tagalog: 'Pulang bigas' },
+    { id: 'black-rice', name: 'Black rice', tagalog: 'Itim na bigas' },
+    { id: 'purple-rice', name: 'Purple rice', tagalog: 'Ube na bigas' },
+    { id: 'glutinous-rice', name: 'Glutinous rice', tagalog: 'Malagkit' },
+    { id: 'aromatic-rice', name: 'Aromatic rice', tagalog: 'Mabango na bigas' },
+    { id: 'lowland-rice', name: 'Lowland rice', tagalog: 'Palay-patag' },
+    { id: 'upland-rice', name: 'Upland rice', tagalog: 'Palay-bundok' },
+    { id: 'heirloom-rice', name: 'Heirloom rice', tagalog: 'Minanang palay' },
+    { id: 'organic-rice', name: 'Organic rice', tagalog: 'Organic na bigas' }
+  ],
+  corn: [
+    { id: 'yellow-corn', name: 'Yellow corn', tagalog: 'Dilaw na mais' },
+    { id: 'white-corn', name: 'White corn', tagalog: 'Puting mais' },
+    { id: 'sweet-corn', name: 'Sweet corn', tagalog: 'Matamis na mais' },
+    { id: 'glutinous-corn', name: 'Glutinous corn', tagalog: 'Malagkit na mais' },
+    { id: 'popcorn', name: 'Popcorn', tagalog: 'Mais pang-popcorn' },
+    { id: 'feed-corn', name: 'Feed corn', tagalog: 'Mais pang-alisan' },
+    { id: 'hybrid-corn', name: 'Hybrid corn', tagalog: 'Hybrid na mais' },
+    { id: 'native-corn', name: 'Native corn', tagalog: 'Mais katutubo' },
+    { id: 'baby-corn', name: 'Baby corn', tagalog: 'Mais na bata' }
+  ],
+  vegetables: [
+    { id: 'bok-choy', name: 'Bok choy / Pechay', tagalog: 'Pechay' },
+    { id: 'mustard-greens', name: 'Mustard greens', tagalog: 'Mustasa' },
+    { id: 'lettuce', name: 'Lettuce', tagalog: 'Letsugas' },
+    { id: 'spinach', name: 'Spinach', tagalog: 'Espinaka' },
+    { id: 'water-spinach', name: 'Water spinach', tagalog: 'Kangkong' },
+    { id: 'moringa-leaves', name: 'Moringa leaves', tagalog: 'Malunggay' },
+    { id: 'malabar-spinach', name: 'Malabar spinach', tagalog: 'Alugbati' },
+    { id: 'jute-leaves', name: 'Jute leaves', tagalog: 'Saluyot' },
+    { id: 'cabbage', name: 'Cabbage', tagalog: 'Repolyo' },
+    { id: 'chinese-cabbage', name: 'Chinese cabbage', tagalog: 'Pechay Baguio' },
+    { id: 'napa-cabbage', name: 'Napa cabbage', tagalog: 'Napa' },
+    { id: 'kale', name: 'Kale', tagalog: 'Kale' },
+    { id: 'swiss-chard', name: 'Swiss chard', tagalog: 'Swiss chard' },
+    { id: 'arugula', name: 'Arugula', tagalog: 'Arugula' },
+    { id: 'sorrel', name: 'Sorrel', tagalog: 'Sorrel' },
+    { id: 'endive', name: 'Endive', tagalog: 'Endibia' },
+    { id: 'tomato', name: 'Tomato', tagalog: 'Kamatis' },
+    { id: 'eggplant', name: 'Eggplant', tagalog: 'Talong' },
+    { id: 'okra', name: 'Okra', tagalog: 'Okra' },
+    { id: 'bitter-gourd', name: 'Bitter gourd', tagalog: 'Ampalaya' },
+    { id: 'squash', name: 'Squash', tagalog: 'Kalabasa' },
+    { id: 'cucumber', name: 'Cucumber', tagalog: 'Pipino' },
+    { id: 'bell-pepper', name: 'Bell pepper', tagalog: 'Siling pang-salad' },
+    { id: 'chili-pepper', name: 'Chili pepper', tagalog: 'Siling labuyo' },
+    { id: 'chayote', name: 'Chayote', tagalog: 'Sayote' },
+    { id: 'bottle-gourd', name: 'Bottle gourd', tagalog: 'Upo' },
+    { id: 'sponge-gourd', name: 'Sponge gourd', tagalog: 'Patola' },
+    { id: 'ridge-gourd', name: 'Ridge gourd', tagalog: 'Patolang ahas' },
+    { id: 'winged-bean', name: 'Winged bean', tagalog: 'Sigarilyas' },
+    { id: 'hyacinth-bean', name: 'Hyacinth bean', tagalog: 'Bataw' },
+    { id: 'yardlong-bean', name: 'Yardlong bean', tagalog: 'Sitaw' },
+    { id: 'snow-peas', name: 'Snow peas', tagalog: 'Sitsaro' },
+    { id: 'green-peas', name: 'Green peas', tagalog: 'Gisantes' },
+    { id: 'zucchini', name: 'Zucchini', tagalog: 'Zucchini' },
+    { id: 'carrot', name: 'Carrot', tagalog: 'Karot' },
+    { id: 'radish', name: 'Radish', tagalog: 'Labanos' },
+    { id: 'beetroot', name: 'Beetroot', tagalog: 'Beets' },
+    { id: 'turnip', name: 'Turnip', tagalog: 'Singkamas-puti' },
+    { id: 'parsnip', name: 'Parsnip', tagalog: 'Parsnip' },
+    { id: 'potato', name: 'Potato', tagalog: 'Patatas' },
+    { id: 'sweet-potato', name: 'Sweet potato', tagalog: 'Kamote' },
+    { id: 'cassava', name: 'Cassava', tagalog: 'Kamoteng kahoy' },
+    { id: 'taro', name: 'Taro', tagalog: 'Gabi' },
+    { id: 'purple-yam', name: 'Purple yam', tagalog: 'Ube' },
+    { id: 'arrowroot', name: 'Arrowroot', tagalog: 'Uraro' },
+    { id: 'yam-bean', name: 'Yam bean', tagalog: 'Singkamas' },
+    { id: 'onion', name: 'Onion', tagalog: 'Sibuyas' },
+    { id: 'garlic', name: 'Garlic', tagalog: 'Bawang' },
+    { id: 'leek', name: 'Leek', tagalog: 'Porro' },
+    { id: 'shallot', name: 'Shallot', tagalog: 'Shallot' },
+    { id: 'asparagus', name: 'Asparagus', tagalog: 'Asparagus' },
+    { id: 'bamboo-shoots', name: 'Bamboo shoots', tagalog: 'Labong' },
+    { id: 'celery', name: 'Celery', tagalog: 'Kintsay' },
+    { id: 'kohlrabi', name: 'Kohlrabi', tagalog: 'Kohlrabi' },
+    { id: 'cauliflower', name: 'Cauliflower', tagalog: 'Koliplor' },
+    { id: 'broccoli', name: 'Broccoli', tagalog: 'Broccoli' },
+    { id: 'banana-blossom', name: 'Banana blossom', tagalog: 'Puso ng saging' },
+    { id: 'squash-flower', name: 'Squash flower', tagalog: 'Bulaklak ng kalabasa' },
+    { id: 'artichoke', name: 'Artichoke', tagalog: 'Artichoke' },
+    { id: 'seaweed', name: 'Seaweed / Lato', tagalog: 'Lato' },
+    { id: 'sea-grapes', name: 'Sea grapes', tagalog: 'Ar-arosep' },
+    { id: 'agar-seaweed', name: 'Agar seaweed', tagalog: 'Gulaman' },
+    { id: 'eucheuma', name: 'Eucheuma', tagalog: 'Eucheuma' },
+    { id: 'pako', name: 'Pako', tagalog: 'Fiddlehead fern' },
+    { id: 'katuray-flower', name: 'Katuray flower', tagalog: 'Katuray' },
+    { id: 'talinum', name: 'Talinum', tagalog: 'Talinum' }
+  ],
+  fruits: [
+    { id: 'banana', name: 'Banana', tagalog: 'Saging' },
+    { id: 'mango', name: 'Mango', tagalog: 'Mangga' },
+    { id: 'pineapple', name: 'Pineapple', tagalog: 'Pinya' },
+    { id: 'papaya', name: 'Papaya', tagalog: 'Papaya' },
+    { id: 'coconut', name: 'Coconut', tagalog: 'Niyog' },
+    { id: 'jackfruit', name: 'Jackfruit', tagalog: 'Langka' },
+    { id: 'durian', name: 'Durian', tagalog: 'Durian' },
+    { id: 'rambutan', name: 'Rambutan', tagalog: 'Rambutan' },
+    { id: 'lanzones', name: 'Lanzones', tagalog: 'Lansones' },
+    { id: 'mangosteen', name: 'Mangosteen', tagalog: 'Mangostan' },
+    { id: 'guava', name: 'Guava', tagalog: 'Bayabas' },
+    { id: 'avocado', name: 'Avocado', tagalog: 'Abukado' },
+    { id: 'calamansi', name: 'Calamansi', tagalog: 'Kalamansi' },
+    { id: 'pomelo', name: 'Pomelo', tagalog: 'Suha' },
+    { id: 'orange', name: 'Orange', tagalog: 'Kahel' },
+    { id: 'lemon', name: 'Lemon', tagalog: 'Limon' },
+    { id: 'lime', name: 'Lime', tagalog: 'Dayap' },
+    { id: 'watermelon', name: 'Watermelon', tagalog: 'Pakwan' },
+    { id: 'melon', name: 'Melon', tagalog: 'Melon' },
+    { id: 'dragon-fruit', name: 'Dragon fruit', tagalog: 'Pitaya' },
+    { id: 'star-apple', name: 'Star apple', tagalog: 'Caimito' },
+    { id: 'sugar-apple', name: 'Sugar apple', tagalog: 'Atis' },
+    { id: 'soursop', name: 'Soursop', tagalog: 'Guyabano' },
+    { id: 'santol', name: 'Santol', tagalog: 'Santol' },
+    { id: 'tamarind', name: 'Tamarind', tagalog: 'Sampalok' },
+    { id: 'passion-fruit', name: 'Passion fruit', tagalog: 'Maracuya' },
+    { id: 'chico', name: 'Chico / Sapodilla', tagalog: 'Chico' },
+    { id: 'duhat', name: 'Duhat / Java plum', tagalog: 'Duhat' },
+    { id: 'balimbing', name: 'Balimbing / Star fruit', tagalog: 'Balimbing' },
+    { id: 'bignay', name: 'Bignay', tagalog: 'Bignay' },
+    { id: 'macopa', name: 'Macopa / Wax apple', tagalog: 'Macopa' },
+    { id: 'longan', name: 'Longan', tagalog: 'Longan' },
+    { id: 'lychee', name: 'Lychee', tagalog: 'Lychee' },
+    { id: 'kiat-kiat', name: 'Kiat-kiat / Mandarin', tagalog: 'Kiat-kiat' },
+    { id: 'breadfruit', name: 'Breadfruit', tagalog: 'Rimas' },
+    { id: 'marang', name: 'Marang', tagalog: 'Marang' },
+    { id: 'pili-nut-fruit', name: 'Pili nut fruit', tagalog: 'Pili' },
+    { id: 'bael-fruit', name: 'Bael fruit', tagalog: 'Bael' },
+    { id: 'kamias', name: 'Kamias / Bilimbi', tagalog: 'Kamias' },
+    { id: 'tamarillo', name: 'Tamarillo', tagalog: 'Tamarillo' },
+    { id: 'mulberry', name: 'Mulberry', tagalog: 'Mulberry' },
+    { id: 'strawberry', name: 'Strawberry', tagalog: 'Strawberry' },
+    { id: 'persimmon', name: 'Persimmon', tagalog: 'Persimmon' },
+    { id: 'fig', name: 'Fig', tagalog: 'Fig' },
+    { id: 'pear', name: 'Pear', tagalog: 'Peras' },
+    { id: 'apple', name: 'Apple', tagalog: 'Mansanas' },
+    { id: 'plum', name: 'Plum', tagalog: 'Plum' },
+    { id: 'peach', name: 'Peach', tagalog: 'Peach' },
+    { id: 'cherry', name: 'Cherry', tagalog: 'Cherry' },
+    { id: 'blueberry', name: 'Blueberry', tagalog: 'Blueberry' },
+    { id: 'grapes', name: 'Grapes', tagalog: 'Ubas' }
+  ],
+  rootCrops: [
+    { id: 'sweet-potato-root', name: 'Sweet potato', tagalog: 'Kamote' },
+    { id: 'cassava-root', name: 'Cassava', tagalog: 'Kamoteng kahoy' },
+    { id: 'taro-root', name: 'Taro', tagalog: 'Gabi' },
+    { id: 'purple-yam-root', name: 'Purple yam', tagalog: 'Ube' },
+    { id: 'potato-root', name: 'Potato', tagalog: 'Patatas' },
+    { id: 'arrowroot-root', name: 'Arrowroot', tagalog: 'Uraro' },
+    { id: 'yam-bean-root', name: 'Yam bean', tagalog: 'Singkamas' },
+    { id: 'radish-root', name: 'Radish', tagalog: 'Labanos' },
+    { id: 'carrot-root', name: 'Carrot', tagalog: 'Karot' },
+    { id: 'beetroot-root', name: 'Beetroot', tagalog: 'Beets' },
+    { id: 'turnip-root', name: 'Turnip', tagalog: 'Singkamas-puti' },
+    { id: 'parsnip-root', name: 'Parsnip', tagalog: 'Parsnip' },
+    { id: 'ginger-root', name: 'Ginger', tagalog: 'Luya' },
+    { id: 'turmeric-root', name: 'Turmeric', tagalog: 'Luyang dilaw' },
+    { id: 'galangal-root', name: 'Galangal', tagalog: 'Langkawas' },
+    { id: 'lotus-root', name: 'Lotus root', tagalog: 'Ugat ng lotus' },
+    { id: 'greater-yam', name: 'Greater yam', tagalog: 'Ube-ubi' },
+    { id: 'lesser-yam', name: 'Lesser yam', tagalog: 'Tugi' },
+    { id: 'elephant-foot-yam', name: 'Elephant foot yam', tagalog: 'Gabi-gabi' },
+    { id: 'purple-sweet-potato', name: 'Purple sweet potato', tagalog: 'Ube-kamote' },
+    { id: 'tapioca-root', name: 'Tapioca root', tagalog: 'Cassava' },
+    { id: 'jerusalem-artichoke', name: 'Jerusalem artichoke', tagalog: 'Jerusalem artichoke' },
+    { id: 'kudzu-root', name: 'Kudzu root', tagalog: 'Ugat ng kudzu' }
+  ],
+  legumes: [
+    { id: 'mung-bean', name: 'Mung bean', tagalog: 'Monggo' },
+    { id: 'soybean', name: 'Soybean', tagalog: 'Soya' },
+    { id: 'peanut', name: 'Peanut', tagalog: 'Mani' },
+    { id: 'cowpea', name: 'Cowpea', tagalog: 'Paayap' },
+    { id: 'string-bean', name: 'String beans / Yardlong bean', tagalog: 'Sitaw' },
+    { id: 'winged-bean', name: 'Winged bean', tagalog: 'Sigarilyas' },
+    { id: 'hyacinth-bean', name: 'Hyacinth bean', tagalog: 'Bataw' },
+    { id: 'lima-bean', name: 'Lima bean', tagalog: 'Patani' },
+    { id: 'chickpea', name: 'Chickpea', tagalog: 'Garbanzo' },
+    { id: 'pigeon-pea', name: 'Pigeon pea', tagalog: 'Kadyos' },
+    { id: 'lentil', name: 'Lentil', tagalog: 'Lentehas' },
+    { id: 'black-bean', name: 'Black bean', tagalog: 'Itim na beans' },
+    { id: 'red-kidney-bean', name: 'Red kidney bean', tagalog: 'Red kidney bean' },
+    { id: 'white-bean', name: 'White bean', tagalog: 'Puting beans' },
+    { id: 'green-peas', name: 'Green peas', tagalog: 'Gisantes' },
+    { id: 'snow-peas', name: 'Snow peas', tagalog: 'Sitsaro' },
+    { id: 'split-peas', name: 'Split peas', tagalog: 'Split peas' },
+    { id: 'fava-bean', name: 'Fava bean / Broad bean', tagalog: 'Haba' },
+    { id: 'adzuki-bean', name: 'Adzuki bean', tagalog: 'Adzuki' },
+    { id: 'navy-bean', name: 'Navy bean', tagalog: 'Navy bean' },
+    { id: 'pinto-bean', name: 'Pinto bean', tagalog: 'Pinto bean' },
+    { id: 'jack-bean', name: 'Jack bean', tagalog: 'Jack bean' },
+    { id: 'sword-bean', name: 'Sword bean', tagalog: 'Sword bean' },
+    { id: 'velvet-bean', name: 'Velvet bean', tagalog: 'Velvet bean' },
+    { id: 'rice-bean', name: 'Rice bean', tagalog: 'Rice bean' },
+    { id: 'bambara-groundnut', name: 'Bambara groundnut', tagalog: 'Bambara' },
+    { id: 'horse-gram', name: 'Horse gram', tagalog: 'Horse gram' }
+  ],
+  herbs_spices: [
+    { id: 'garlic-spice', name: 'Garlic', tagalog: 'Bawang' },
+    { id: 'onion-spice', name: 'Onion', tagalog: 'Sibuyas' },
+    { id: 'shallot-spice', name: 'Shallot', tagalog: 'Lasuna' },
+    { id: 'ginger-spice', name: 'Ginger', tagalog: 'Luya' },
+    { id: 'turmeric-spice', name: 'Turmeric', tagalog: 'Luyang dilaw' },
+    { id: 'galangal-spice', name: 'Galangal', tagalog: 'Langkawas' },
+    { id: 'black-pepper', name: 'Black pepper', tagalog: 'Paminta' },
+    { id: 'white-pepper', name: 'White pepper', tagalog: 'Puting paminta' },
+    { id: 'chili-spice', name: 'Chili / Hot pepper', tagalog: 'Sili' },
+    { id: 'birds-eye-chili', name: "Bird's eye chili", tagalog: 'Siling labuyo' },
+    { id: 'paprika', name: 'Paprika', tagalog: 'Paprika' },
+    { id: 'cinnamon', name: 'Cinnamon', tagalog: 'Kanela' },
+    { id: 'cloves', name: 'Cloves', tagalog: 'Clavo' },
+    { id: 'star-anise', name: 'Star anise', tagalog: 'Sangke' },
+    { id: 'nutmeg', name: 'Nutmeg', tagalog: 'Nuez moscada' },
+    { id: 'mace', name: 'Mace', tagalog: 'Mace' },
+    { id: 'coriander-seed', name: 'Coriander seed', tagalog: 'Buto ng kulantro' },
+    { id: 'cumin', name: 'Cumin', tagalog: 'Comino' },
+    { id: 'fennel', name: 'Fennel', tagalog: 'Haras' },
+    { id: 'fenugreek', name: 'Fenugreek', tagalog: 'Fenugreek' },
+    { id: 'mustard-seed', name: 'Mustard seed', tagalog: 'Buto ng mustasa' },
+    { id: 'allspice', name: 'Allspice', tagalog: 'Allspice' },
+    { id: 'bay-leaf', name: 'Bay leaf', tagalog: 'Laurel' },
+    { id: 'vanilla', name: 'Vanilla', tagalog: 'Banilya' },
+    { id: 'tamarind-spice', name: 'Tamarind', tagalog: 'Sampalok' },
+    { id: 'annatto', name: 'Annatto / Atsuete', tagalog: 'Atsuete' },
+    { id: 'lemongrass-spice', name: 'Lemongrass', tagalog: 'Tanglad' },
+    { id: 'pandan-spice', name: 'Pandan', tagalog: 'Pandan' },
+    { id: 'kaffir-lime-leaf', name: 'Kaffir lime leaf', tagalog: 'Dahon ng dayap' },
+    { id: 'curry-leaf', name: 'Curry leaf', tagalog: 'Dahon ng kari' },
+    { id: 'sesame-seed', name: 'Sesame seed', tagalog: 'Linga' },
+    { id: 'poppy-seed', name: 'Poppy seed', tagalog: 'Poppy seed' },
+    { id: 'cardamom', name: 'Cardamom', tagalog: 'Cardamom' },
+    { id: 'anise-seed', name: 'Anise seed', tagalog: 'Anis' },
+    { id: 'saffron', name: 'Saffron', tagalog: 'Saffron' },
+    { id: 'horseradish', name: 'Horseradish', tagalog: 'Horseradish' },
+    { id: 'basil-herb', name: 'Basil', tagalog: 'Balanoy' },
+    { id: 'oregano-herb', name: 'Oregano', tagalog: 'Oregano' },
+    { id: 'thyme-herb', name: 'Thyme', tagalog: 'Taym' },
+    { id: 'rosemary-herb', name: 'Rosemary', tagalog: 'Romero' },
+    { id: 'mint-herb', name: 'Mint', tagalog: 'Yerba buena' },
+    { id: 'lemongrass-herb', name: 'Lemongrass', tagalog: 'Tanglad' },
+    { id: 'sambong', name: 'Sambong', tagalog: 'Sambong' },
+    { id: 'lagundi', name: 'Lagundi', tagalog: 'Lagundi' },
+    { id: 'tsaang-gubat', name: 'Tsaang gubat', tagalog: 'Tsaang gubat' },
+    { id: 'akapulko', name: 'Akapulko', tagalog: 'Akapulko' },
+    { id: 'pandan-herb', name: 'Pandan', tagalog: 'Pandan' },
+    { id: 'ginger-herb', name: 'Ginger', tagalog: 'Luya' },
+    { id: 'turmeric-herb', name: 'Turmeric', tagalog: 'Luyang dilaw' },
+    { id: 'garlic-herb', name: 'Garlic', tagalog: 'Bawang' },
+    { id: 'onion-herb', name: 'Onion', tagalog: 'Sibuyas' },
+    { id: 'holy-basil', name: 'Holy basil', tagalog: 'Sangig' },
+    { id: 'peppermint', name: 'Peppermint', tagalog: 'Peppermint' },
+    { id: 'stevia', name: 'Stevia', tagalog: 'Stevia' },
+    { id: 'catnip', name: 'Catnip', tagalog: 'Catnip' },
+    { id: 'feverfew', name: 'Feverfew', tagalog: 'Feverfew' },
+    { id: 'gotu-kola', name: 'Gotu kola', tagalog: 'Gotu kola / Pegaga' },
+    { id: 'alagaw', name: 'Alagaw', tagalog: 'Alagaw' },
+    { id: 'banaba', name: 'Banaba', tagalog: 'Banaba' },
+    { id: 'bitter-melon-leaves', name: 'Bitter melon leaves', tagalog: 'Ampalaya leaves' }
+  ],
+  industrial: [
+    { id: 'tobacco', name: 'Tobacco', tagalog: 'Tabako' },
+    { id: 'rubber', name: 'Rubber', tagalog: 'Goma' },
+    { id: 'abaca', name: 'Abaca', tagalog: 'Abaka' },
+    { id: 'cotton', name: 'Cotton', tagalog: 'Bulak' },
+    { id: 'coffee', name: 'Coffee', tagalog: 'Kape' },
+    { id: 'cacao', name: 'Cacao', tagalog: 'Kakaw' },
+    { id: 'tea', name: 'Tea', tagalog: 'Tsaa' },
+    { id: 'hemp', name: 'Hemp', tagalog: 'Abaka' },
+    { id: 'oil-palm', name: 'Oil palm', tagalog: 'Palmang-langis' },
+    { id: 'sugarcane', name: 'Sugarcane', tagalog: 'Tubo' }
+  ],
+  mushrooms: [
+    { id: 'oyster-mushroom', name: 'Oyster mushroom', tagalog: 'Kabuteng talaba' },
+    { id: 'button-mushroom', name: 'Button mushroom', tagalog: 'Kabuteng buton' },
+    { id: 'shiitake', name: 'Shiitake', tagalog: 'Shiitake' },
+    { id: 'straw-mushroom', name: 'Straw mushroom', tagalog: 'Kabuteng dayami' },
+    { id: 'enoki', name: 'Enoki', tagalog: 'Enoki' },
+    { id: 'wood-ear', name: 'Wood ear mushroom', tagalog: 'Tenga ng daga' },
+    { id: 'king-oyster', name: "King oyster mushroom", tagalog: 'Kabuteng talaba hari' },
+    { id: 'lions-mane', name: "Lion's mane mushroom", tagalog: "Kabuteng lion's mane" },
+    { id: 'reishi', name: 'Reishi mushroom', tagalog: 'Kabuteng reishi' },
+    { id: 'maitake', name: 'Maitake', tagalog: 'Kabuteng maitake' },
+    { id: 'porcini', name: 'Porcini', tagalog: 'Kabuteng porcini' }
+  ]
+}
+
 export default function Listings({ initialSelectedListing = null, onClearSelectedListing = null }) {
   const { showInfoPopup, showSuccessPopup, showErrorPopup, showConfirmPopup } = usePopup()
   const [searchQuery, setSearchQuery] = useState('')
@@ -27,6 +329,12 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   const [user, setUser] = useState(null)
   const [userRole, setUserRole] = useState(null)
   const [userCropTypes, setUserCropTypes] = useState([])
+  const [userLivestockAnimals, setUserLivestockAnimals] = useState([])
+  const [userSpecificAnimals, setUserSpecificAnimals] = useState([])
+  const [userSpecificCrops, setUserSpecificCrops] = useState([])
+  const [selectedCropType, setSelectedCropType] = useState('')
+  const [selectedSpecificCrop, setSelectedSpecificCrop] = useState('')
+  const [specificCropsForType, setSpecificCropsForType] = useState([])
   const [bestForCropsListings, setBestForCropsListings] = useState([])
   const [authLoading, setAuthLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -48,6 +356,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     image: null,
     imagePreview: null
   })
+  const [selectedWasteType, setSelectedWasteType] = useState('')
+  const [otherAnimalType, setOtherAnimalType] = useState('')
   const [isCreatingListing, setIsCreatingListing] = useState(false)
   const [isRequestingListing, setIsRequestingListing] = useState(false)
   const [isDeletingListing, setIsDeletingListing] = useState(false)
@@ -68,8 +378,81 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   const [imageValidationResult, setImageValidationResult] = useState(null)
   const [isImageVerified, setIsImageVerified] = useState(false)
   const [validatedImageUrl, setValidatedImageUrl] = useState(null)
+  
+  // Text validation states
+  const [isTextValidating, setIsTextValidating] = useState(false)
+  const [textValidationResult, setTextValidationResult] = useState(null)
+  const [isTextVerified, setIsTextVerified] = useState(false)
+  const [hasAttemptedTextVerification, setHasAttemptedTextVerification] = useState(false)
 
   const measurementUnits = ['kg', 'ton', 'sack', 'bag', 'liter', 'cubic meter', 'pieces', 'bundle']
+
+  // Helper function to map livestock to waste types
+  const getLivestockWasteOptions = (livestockAnimals, specificAnimals = []) => {
+    const wasteMap = {
+      'cattle': 'Cattle Manure (Dumi ng Baka)',
+      'poultry': 'Poultry Waste (Dumi ng Manok)',
+      'swine': 'Swine Waste (Dumi ng Baboy)',
+      'goats': 'Goat Waste (Dumi ng Kambing)',
+      'sheep': 'Sheep Manure (Dumi ng Tupa)',
+      'rabbits': 'Rabbit Manure (Dumi ng Kuneho)',
+      // Mobile app IDs
+      'pigs': 'Swine Waste (Dumi ng Baboy)',
+      'chickens': 'Poultry Waste (Dumi ng Manok)',
+      'ducks': 'Poultry Waste (Dumi ng Pato)',
+      'buffalo': 'Cattle Manure (Dumi ng Baka)',
+      'carabao': 'Cattle Manure (Dumi ng Kalabaw)'
+    }
+    
+    // Map for specific animals
+    const specificWasteMap = {
+      'carabao': 'Carabao waste (Dumi ng Kalabaw)',
+      'horse': 'Horse waste (Dumi ng Kabayo)',
+      'donkey': 'Donkey waste (Dumi ng Asno)',
+      'bee': 'Bee waste (Dumi ng Bubuyog / Maya)',
+      'silkworm': 'Silkworm waste (Uod ng Seda)',
+      'ostrich': 'Ostrich waste (Dumi ng Ostrich)',
+      'camel': 'Camel waste (Dumi ng Kamelyo)'
+    }
+    
+    // Check if user selected "others" to include specific animal options
+    const hasOthers = livestockAnimals.includes('others')
+    
+    let wasteTypes = []
+    
+    // Add mapped waste types for regular animals
+    livestockAnimals.forEach(animal => {
+      if (animal !== 'others' && wasteMap[animal]) {
+        wasteTypes.push(wasteMap[animal])
+      }
+    })
+    
+    // Add specific animal options if "others" was selected
+    if (hasOthers && specificAnimals.length > 0) {
+      specificAnimals.forEach(animalId => {
+        if (specificWasteMap[animalId]) {
+          wasteTypes.push(specificWasteMap[animalId])
+        }
+      })
+    }
+    
+    // Remove duplicates and return
+    return [...new Set(wasteTypes)]
+  }
+
+  // Helper function to get waste description
+  const getWasteDescription = (wasteType) => {
+    const descriptions = {
+      'Cattle Manure': 'Rich organic fertilizer with balanced NPK ratio, excellent for improving soil structure and water retention. Ideal for row crops and vegetable gardens.',
+      'Poultry Waste': 'High nitrogen content perfect for leafy vegetables and fast-growing crops. Helps accelerate composting and boosts microbial activity in soil.',
+      'Swine Manure': 'Nutrient-dense fertilizer with high phosphorus content, excellent for root development and flowering plants. Great for fruit trees and root crops.',
+      'Goat Manure': 'Mild odor and less likely to burn plants, suitable for direct application. Good all-purpose fertilizer for gardens and farms.',
+      'Sheep Manure': 'High in phosphorus and potassium, promotes flowering and fruit production. Excellent for orchards and berry crops.',
+      'Rabbit Manure': 'Cold manure that can be applied directly to plants without composting. Rich in nitrogen and perfect for vegetable gardens.',
+      'Other Animal Waste': ''
+    }
+    return descriptions[wasteType] || ''
+  }
 
   // Handle initial selected listing from props
   useEffect(() => {
@@ -216,6 +599,67 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     }
   }
 
+  // Text validation function
+  const validateListingText = async (listingName, listingDetails) => {
+    if (!listingName || !listingDetails) return null
+    
+    setIsTextValidating(true)
+    setTextValidationResult(null)
+    
+    try {
+      console.log('🤖 Calling AI text validation service...')
+      const textValidationUrl = 'https://ai-backend-6-565d.onrender.com/validate-listing-text'
+      
+      // Create AbortController for timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+      
+      const response = await fetch(textValidationUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          listingName: listingName,
+          listingDetails: listingDetails
+        }),
+        signal: controller.signal
+      })
+      
+      clearTimeout(timeoutId)
+      
+      if (!response.ok) {
+        throw new Error(`AI text validation failed: ${response.status}`)
+      }
+      
+      const result = await response.json()
+      console.log('✅ AI text validation result:', result)
+      
+      if (result.status === 'success') {
+        setTextValidationResult(result.result)
+        const isVerified = result.result.verdict === 'VERIFIED_ALIGNED'
+        setIsTextVerified(isVerified)
+        
+        return result.result
+      } else {
+        throw new Error(result.error || 'AI text validation service error')
+      }
+    } catch (error) {
+      console.error('❌ AI text validation error:', error)
+      // Set error state to show in UI
+      setTextValidationResult({
+        error: true,
+        message: 'AI text validation endpoint is not available. Please ensure the backend endpoint /validate-listing-text is implemented at https://ai-backend-6-565d.onrender.com',
+        verdict: 'ERROR'
+      })
+      setIsTextVerified(false)
+      return null
+      
+    } finally {
+      setIsTextValidating(false)
+    }
+  }
+
   // Re-validate image function
   const revalidateImage = async () => {
     if (formData.image && formData.name && formData.details) {
@@ -236,6 +680,10 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   // Check if current step is valid for Next button
   const isCurrentStepValid = () => {
     if (modalStep === 1) {
+      // For livestock owners, ensure waste type is selected (not empty) and description is filled
+      if (userRole === 'livestock_owner') {
+        return formData.name.trim() && formData.name !== '' && formData.details.trim()
+      }
       return formData.name.trim() && formData.details.trim()
     } else if (modalStep === 2) {
       return formData.measurements && formData.measurementUnit
@@ -251,6 +699,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       role: userRole, 
       email: user?.email 
     })
+    
+    // Reset form data
     setFormData({
       name: '',
       details: '',
@@ -261,6 +711,25 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
       image: null,
       imagePreview: null
     })
+    
+    // Reset waste type states
+    setSelectedWasteType('')
+    setOtherAnimalType('')
+    
+    // Auto-fill for livestock owners with single animal type
+    if (userRole === 'livestock_owner' && userLivestockAnimals.length > 0) {
+      const wasteOptions = getLivestockWasteOptions(userLivestockAnimals, userSpecificAnimals)
+      if (wasteOptions.length === 1) {
+        // Auto-fill if only one waste type
+        setSelectedWasteType(wasteOptions[0])
+        setFormData(prev => ({
+          ...prev,
+          name: wasteOptions[0]
+        }))
+      }
+      // For multiple options, don't auto-select - let user choose
+    }
+    
     setShowAddModal(true)
   }
 
@@ -272,6 +741,13 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     setImageValidationResult(null)
     setIsImageVerified(false)
     setValidatedImageUrl(null)
+    // Reset text validation states
+    setIsTextValidating(false)
+    setTextValidationResult(null)
+    setIsTextVerified(false)
+    setHasAttemptedTextVerification(false)
+    setSelectedWasteType('')
+    setOtherAnimalType('')
     setFormData({
       name: '',
       details: '',
@@ -284,11 +760,26 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     })
   }
 
-  const nextStep = () => {
+  // Handle verify button click in Step 1
+  const handleVerify = async () => {
+    if (!formData.name.trim() || !formData.details.trim()) {
+      showErrorPopup('Required Fields', 'Please fill in listing title and description')
+      return
+    }
+    
+    // Trigger text validation for livestock owners
+    if (userRole === 'livestock_owner') {
+      await validateListingText(formData.name, formData.details)
+      setHasAttemptedTextVerification(true)
+    }
+  }
+
+  const nextStep = async () => {
     // Validation for each step
     if (modalStep === 1) {
-      if (!formData.name.trim() || !formData.details.trim()) {
-        showErrorPopup('Required Fields', 'Please fill in listing title and description')
+      // For livestock owners, verification must be attempted before proceeding
+      if (userRole === 'livestock_owner' && !hasAttemptedTextVerification) {
+        showErrorPopup('Verification Required', 'Please verify your listing details before proceeding')
         return
       }
     } else if (modalStep === 2) {
@@ -570,6 +1061,12 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         ownerName: user.displayName || user.email || 'Livestock Owner',
         ownerEmail: user.email || '',
         updatedAt: serverTimestamp(),
+        // Save AI verification results for livestock owners
+        ...(userRole === 'livestock_owner' && {
+          textValidationResult: textValidationResult,
+          imageValidationResult: imageValidationResult,
+          validatedImageUrl: validatedImageUrl
+        }),
         // Add AI verification data
         isAiVerified: isImageVerified || false,
         aiValidationResult: imageValidationResult || null
@@ -1322,6 +1819,31 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     return
   }
   
+  // Listen for crop updates from profile page
+  const handleCropsUpdated = async () => {
+    console.log('🔄 Crops updated event received, refreshing user data...')
+    if (user) {
+      try {
+        const userDoc = await getDoc(doc(db, 'Users', user.uid))
+        if (userDoc.exists()) {
+          const userData = userDoc.data()
+          
+          // Update crop types and specific crops
+          if (userData.role === 'crop_farmer' && userData.cropFarmer?.cropType) {
+            setUserCropTypes(userData.cropFarmer.cropType)
+            const userSpecificCropsData = userData.onboarding?.specificCrops || userData.cropFarmer?.specificCrops || []
+            setUserSpecificCrops(userSpecificCropsData)
+            console.log('✅ User crops refreshed:', userSpecificCropsData)
+          }
+        }
+      } catch (error) {
+        console.error('Error refreshing user crops:', error)
+      }
+    }
+  }
+  
+  window.addEventListener('cropsUpdated', handleCropsUpdated)
+  
   const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
     if (currentUser) {
       setUser(currentUser)
@@ -1332,22 +1854,45 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
         const userDoc = await getDoc(doc(db, 'Users', currentUser.uid))
         if (userDoc.exists()) {
           const userData = userDoc.data()
-          console.log('🔍 User profile loaded:', userData)
-          console.log('🔍 User location data:', userData.location)
+          console.log(' User profile loaded:', userData)
+          console.log(' User location data:', userData.location)
           
           setUserRole(userData.role)
           
           // Get crop types for crop farmers
           if (userData.role === 'crop_farmer' && userData.cropFarmer?.cropType) {
             setUserCropTypes(userData.cropFarmer.cropType)
-            console.log('🌾 User crop types loaded:', userData.cropFarmer.cropType)
+            console.log(' User crop types loaded:', userData.cropFarmer.cropType)
+            
+            // Get specific crops from onboarding or cropFarmer
+            const userSpecificCropsData = userData.onboarding?.specificCrops || userData.cropFarmer?.specificCrops || []
+            setUserSpecificCrops(userSpecificCropsData)
+            console.log(' User specific crops loaded:', userSpecificCropsData)
+            console.log(' userData.onboarding?.specificCrops:', userData.onboarding?.specificCrops)
+            console.log(' userData.cropFarmer?.specificCrops:', userData.cropFarmer?.specificCrops)
           } else {
             setUserCropTypes([])
+            setUserSpecificCrops([])
+          }
+          
+          // Get livestock animals for livestock owners
+          if (userData.role === 'livestock_owner' && userData.livestock?.animals) {
+            setUserLivestockAnimals(userData.livestock.animals)
+            console.log(' User livestock animals loaded:', userData.livestock.animals)
+            
+            // Load specific animals if "others" is selected
+            if (userData.livestock.specificAnimals) {
+              setUserSpecificAnimals(userData.livestock.specificAnimals)
+              console.log(' User specific animals loaded:', userData.livestock.specificAnimals)
+            }
+          } else {
+            setUserLivestockAnimals([])
+            setUserSpecificAnimals([])
           }
           
           if (userData.location && typeof userData.location === 'object') {
-            console.log('🔍 DEBUG: Raw user location from Firestore:', userData.location)
-            console.log('🔍 DEBUG: Location field names:', Object.keys(userData.location))
+            console.log(' DEBUG: Raw user location from Firestore:', userData.location)
+            console.log(' DEBUG: Location field names:', Object.keys(userData.location))
             setUserLocation(userData.location)
             console.log('✅ User location set:', userData.location)
           } else {
@@ -1371,7 +1916,10 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     setAuthLoading(false)
   })
 
-  return unsubscribe
+  return () => {
+    unsubscribe()
+    window.removeEventListener('cropsUpdated', handleCropsUpdated)
+  }
 }, [auth])
 
 // Load existing requests for crop farmers
@@ -1595,6 +2143,363 @@ useEffect(() => {
       setBestForCropsListings([]);
     }
   }, [searchResults, userCropTypes, userRole, searchQuery]);
+
+  // Crop-waste compatibility knowledge base (client-side for performance)
+  const cropWasteKnowledge = {
+    "Cattle Manure": {
+      "best_crops": [
+        { id: 'white-rice', name: 'White rice', reason: 'Provides balanced NPK nutrients essential for rice growth, improves soil structure for better water retention in paddies' },
+        { id: 'yellow-corn', name: 'Yellow corn', reason: 'High potassium content supports strong stalk development and kernel production in corn' },
+        { id: 'brown-rice', name: 'Brown rice', reason: 'Excellent source of organic matter that enhances rice root development and grain quality' },
+        { id: 'lettuce', name: 'Lettuce', reason: 'Rich in micronutrients that promote vigorous leaf growth in leafy vegetables like lettuce' },
+        { id: 'sugarcane', name: 'Sugarcane', reason: 'Provides steady release of nutrients throughout the long growing season, boosting sugar content' }
+      ]
+    },
+    "Poultry Waste": {
+      "best_crops": [
+        { id: 'lettuce', name: 'Lettuce', reason: 'Very high nitrogen content promotes rapid leaf growth in lettuce and other leafy greens' },
+        { id: 'yellow-corn', name: 'Yellow corn', reason: 'Quick-release nitrogen fuels early vegetative growth, leading to taller corn plants' },
+        { id: 'broccoli', name: 'Broccoli', reason: 'High nitrogen supports development of large heads and abundant foliage in broccoli' },
+        { id: 'cabbage', name: 'Cabbage', reason: 'Promotes tight head formation and large outer leaves in cabbage plants' },
+        { id: 'cauliflower', name: 'Cauliflower', reason: 'Essential for curd development and overall plant vigor in cauliflower' }
+      ]
+    },
+    "Swine Waste": {
+      "best_crops": [
+        { id: 'carrot', name: 'Carrot', reason: 'High phosphorus content promotes excellent root development in carrots and other root vegetables' },
+        { id: 'banana', name: 'Banana', reason: 'Balanced nutrients support flowering, fruit set, and sweet fruit development in banana trees' },
+        { id: 'tomato', name: 'Tomato', reason: 'Phosphorus-rich composition enhances flowering and fruit production in tomatoes' },
+        { id: 'bell-pepper', name: 'Bell pepper', reason: 'Supports abundant flowering and larger fruit development in pepper plants' },
+        { id: 'eggplant', name: 'Eggplant', reason: 'Essential nutrients for fruit set and plant vigor in eggplants' }
+      ]
+    },
+    "Goat Manure": {
+      "best_crops": [
+        { id: 'tomato', name: 'Tomato', reason: 'Mild composition won\'t burn plants, perfect for direct application in vegetable gardens' },
+        { id: 'basil', name: 'Basil', reason: 'Gentle nutrient release ideal for sensitive herbs like basil and oregano' },
+        { id: 'lettuce', name: 'Lettuce', reason: 'Provides steady nutrients without overwhelming delicate salad greens' },
+        { id: 'green-peas', name: 'Green peas', reason: 'Moderate nitrogen levels support growth without inhibiting nitrogen-fixing bacteria' },
+        { id: 'sitaw', name: 'Yardlong bean', reason: 'Balanced nutrients support pod development and overall plant health' }
+      ]
+    },
+    "Sheep Manure": {
+      "best_crops": [
+        { id: 'strawberry', name: 'Strawberry', reason: 'High phosphorus and potassium promote flowering and sweet fruit development in berries' },
+        { id: 'grapes', name: 'Grapes', reason: 'Potassium-rich composition enhances grape sweetness and vine health' },
+        { id: 'rose', name: 'Rose', reason: 'Promotes abundant blooms and strong stem development in flowering plants' },
+        { id: 'mango', name: 'Mango', reason: 'Balanced nutrients support fruit tree health and fruit production' },
+        { id: 'cabbage', name: 'Cabbage', reason: 'Provides essential nutrients for leafy vegetable growth' }
+      ]
+    },
+    "Chicken Manure": {
+      "best_crops": [
+        { id: 'spinach', name: 'Spinach', reason: 'High nitrogen content promotes rapid leaf growth in spinach and other leafy greens' },
+        { id: 'yellow-corn', name: 'Yellow corn', reason: 'Quick-release nutrients support fast-growing corn plants' },
+        { id: 'squash', name: 'Squash', reason: 'Provides balanced nutrients for vigorous vine growth and fruit development' },
+        { id: 'tomato', name: 'Tomato', reason: 'High nitrogen supports lush foliage and fruit production' },
+        { id: 'cabbage', name: 'Cabbage', reason: 'Promotes rapid head formation in cabbage' }
+      ]
+    },
+    "Horse Manure": {
+      "best_crops": [
+        { id: 'carrot', name: 'Carrot', reason: 'Excellent for root vegetables, provides loose structure and steady nutrients' },
+        { id: 'spinach', name: 'Spinach', reason: 'Mild composition perfect for delicate leafy greens' },
+        { id: 'rose', name: 'Rose', reason: 'Ideal for flowering plants, promotes abundant blooms' },
+        { id: 'tomato', name: 'Tomato', reason: 'Provides consistent nutrients for fruit production' },
+        { id: 'bell-pepper', name: 'Bell pepper', reason: 'Supports healthy fruit development in peppers' }
+      ]
+    },
+    "Pig Manure": {
+      "best_crops": [
+        { id: 'sweet-potato', name: 'Sweet potato', reason: 'High phosphorus promotes excellent tuber development in sweet potatoes' },
+        { id: 'banana', name: 'Banana', reason: 'Rich in potassium, essential for fruit development and sweetness' },
+        { id: 'tomato', name: 'Tomato', reason: 'Balanced NPK ratio ideal for fruit production' },
+        { id: 'eggplant', name: 'Eggplant', reason: 'Supports healthy fruit set and plant vigor' },
+        { id: 'watermelon', name: 'Watermelon', reason: 'Provides steady nutrients for large fruit development' }
+      ]
+    }
+  }
+
+  // Function to check crop-waste compatibility (client-side)
+  const checkCropCompatibility = (wasteType, cropCategory, selectedSpecificCrop = null) => {
+    // Find matching waste type
+    let matchedWaste = null
+    for (const [wasteKey, data] of Object.entries(cropWasteKnowledge)) {
+      if (wasteType.toLowerCase().includes(wasteKey.toLowerCase().split(' ')[0]) ||
+          wasteKey.toLowerCase().includes(wasteType.toLowerCase())) {
+        matchedWaste = data
+        break
+      }
+    }
+    
+    if (!matchedWaste) return null
+    
+    // Get the best crops list
+    let bestCrops = [...matchedWaste.best_crops]
+    
+    // If a specific crop is selected, move it to the first position
+    if (selectedSpecificCrop) {
+      const selectedIndex = bestCrops.findIndex(crop => 
+        crop.id === selectedSpecificCrop
+      )
+      if (selectedIndex > -1) {
+        const selectedCropData = bestCrops.splice(selectedIndex, 1)[0]
+        bestCrops.unshift(selectedCropData)
+      }
+    }
+    
+    // Check if crop category is compatible
+    const isCompatible = bestCrops.some(crop => 
+      crop.name.toLowerCase().includes(cropCategory.toLowerCase()) ||
+      cropCategory.toLowerCase().includes(crop.name.toLowerCase())
+    )
+    
+    return {
+      isCompatible,
+      compatibleCrops: bestCrops,
+      score: isCompatible ? 5 : 0
+    }
+  }
+
+  // Function to apply crop-waste compatibility filter (AI-based)
+  const applyCropWasteFilter = async (cropCategory) => {
+    console.log('🌾 Applying crop-waste filter for category:', cropCategory)
+    
+    if (!cropCategory) {
+      // Reset to show all listings
+      setFilteredListings(listings.filter(listing => 
+        listing.status !== 'sold' && listing.status !== 'deleted'
+      ))
+      return
+    }
+    
+    setLoading(true)
+    
+    try {
+      // Get user's specific crops for this category
+      const actualCropType = cropCategory === 'spices' ? 'herbs_spices' : cropCategory
+      const userSpecificCropsInCategory = userSpecificCrops.filter(cropId => {
+        return specificCrops[actualCropType]?.some(crop => crop.id === cropId)
+      })
+      
+      if (userSpecificCropsInCategory.length === 0) {
+        setFilteredListings([])
+        setLoading(false)
+        return
+      }
+      
+      // Call AI compatibility endpoint
+      const response = await fetch('https://context-based-2.onrender.com/crop-compatibility-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cropIds: userSpecificCropsInCategory,
+          cropCategory: cropCategory
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to analyze compatibility')
+      }
+      
+      const data = await response.json()
+      
+      // Transform the data for display
+      const compatibleListings = data.compatibleListings.map(item => {
+        const topCrops = item.cropScores.map(crop => ({
+          id: crop.cropId,
+          name: crop.cropName,
+          reason: `AI analysis shows ${crop.score.toFixed(1)}% compatibility based on waste composition and crop requirements`,
+          score: crop.score
+        }))
+        
+        return {
+          ...item.listingData,
+          id: item.listingId,
+          cropCompatibility: {
+            topCrops: topCrops,
+            analysis: `AI-powered analysis based on MPNet semantic similarity`
+          },
+          compatibilityScore: topCrops[0]?.score || 0
+        }
+      })
+      
+      setFilteredListings(compatibleListings)
+      console.log('✅ Applied AI crop-waste filter:', compatibleListings.length, 'listings')
+      
+    } catch (error) {
+      console.error('❌ Error applying crop-waste filter:', error)
+      // Fallback to client-side logic if API fails
+      const activeListings = listings.filter(listing => 
+        listing.status !== 'sold' && listing.status !== 'deleted'
+      )
+      
+      const listingsWithCompatibility = activeListings.map(listing => {
+        const wasteType = listing.name || listing.category || 'Animal Waste'
+        const compatibility = checkCropCompatibility(wasteType, cropCategory)
+        
+        return {
+          ...listing,
+          cropCompatibility: {
+            topCrops: compatibility?.compatibleCrops || [],
+            analysis: compatibility ? `This waste is compatible with: ${compatibility.compatibleCrops.map(c => c.name).join(', ')}` : 'No specific compatibility found'
+          },
+          compatibilityScore: compatibility?.score || 0
+        }
+      })
+      
+      listingsWithCompatibility.sort((a, b) => b.compatibilityScore - a.compatibilityScore)
+      setFilteredListings(listingsWithCompatibility)
+    }
+    
+    setLoading(false)
+  }
+
+  // Function to apply specific crop filter (AI-based)
+  const applyCropSpecificFilter = async (specificCrop) => {
+    console.log('🌱 Applying specific crop filter for:', specificCrop)
+    
+    if (!specificCrop) {
+      // Reset to show all listings
+      setFilteredListings(listings.filter(listing => 
+        listing.status !== 'sold' && listing.status !== 'deleted'
+      ))
+      return
+    }
+    
+    setLoading(true)
+    
+    try {
+      // Call AI compatibility endpoint with the specific crop
+      const response = await fetch('https://context-based-2.onrender.com/crop-compatibility-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cropIds: [specificCrop],
+          cropCategory: null
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to analyze compatibility')
+      }
+      
+      const data = await response.json()
+      
+      // Transform the data for display
+      const compatibleListings = data.compatibleListings.map(item => {
+        const topCrops = item.cropScores.map(crop => ({
+          id: crop.cropId,
+          name: crop.cropName,
+          reason: crop.reason,
+          score: crop.score,
+          npk: crop.npk,
+          usage: crop.usage
+        }))
+        
+        return {
+          ...item.listingData,
+          id: item.listingId,
+          cropCompatibility: {
+            topCrops: topCrops,
+            analysis: `AI-powered analysis based on agricultural science`
+          },
+          compatibilityScore: topCrops[0]?.score || 0,
+          isSpecificMatch: topCrops[0]?.id === specificCrop
+        }
+      })
+      
+      // Filter to show ONLY listings where the selected crop is in top 5
+      const filteredListings = compatibleListings.filter(listing => 
+        listing.cropCompatibility.topCrops.some(crop => crop.id === specificCrop)
+      )
+      
+      // Sort: listings where selected crop is #1 first, then by score
+      filteredListings.sort((a, b) => {
+        const aCropIndex = a.cropCompatibility.topCrops.findIndex(c => c.id === specificCrop)
+        const bCropIndex = b.cropCompatibility.topCrops.findIndex(c => c.id === specificCrop)
+        
+        // If both have the crop, sort by position (lower index = better)
+        if (aCropIndex !== -1 && bCropIndex !== -1) {
+          if (aCropIndex !== bCropIndex) {
+            return aCropIndex - bCropIndex
+          }
+          // If same position, sort by score
+          return b.compatibilityScore - a.compatibilityScore
+        }
+        
+        // If only one has the crop, it comes first
+        return aCropIndex !== -1 ? -1 : 1
+      })
+      
+      setFilteredListings(filteredListings)
+      console.log('✅ Applied specific crop filter:', filteredListings.length, 'listings')
+      
+    } catch (error) {
+      console.error('❌ Error applying specific crop filter:', error)
+      // Fallback to client-side logic if API fails
+      const activeListings = listings.filter(listing => 
+        listing.status !== 'sold' && listing.status !== 'deleted'
+      )
+      
+      const listingsWithCompatibility = activeListings.map(listing => {
+        const wasteType = listing.name || listing.category || 'Animal Waste'
+        const compatibility = checkCropCompatibility(wasteType, null, specificCrop)
+        
+        // Check if the specific crop is in the compatible crops
+        const isSpecificMatch = compatibility?.compatibleCrops.some(crop => 
+          crop.id === specificCrop
+        )
+        
+        return {
+          ...listing,
+          cropCompatibility: {
+            topCrops: compatibility?.compatibleCrops || [],
+            analysis: compatibility ? `This waste is compatible with: ${compatibility.compatibleCrops.map(c => c.name).join(', ')}` : 'No specific compatibility found'
+          },
+          compatibilityScore: isSpecificMatch ? 100 : (compatibility?.score || 0),
+          isSpecificMatch
+        }
+      })
+      
+      // Filter to show only listings with the specific crop
+      const filteredListings = listingsWithCompatibility.filter(listing => listing.isSpecificMatch)
+      
+      setFilteredListings(filteredListings)
+    }
+    
+    setLoading(false)
+  }
+
+  // Function to analyze crop-waste compatibility
+  const analyzeCropWasteCompatibility = async (wasteType, cropCategory) => {
+    try {
+      const response = await fetch('https://context-based-2.onrender.com/crop-waste-compatibility', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          wasteType: wasteType,
+          wasteDescription: wasteType,
+          cropCategory: cropCategory
+        })
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        console.log('✅ Crop-waste compatibility analysis:', result)
+        return result
+      }
+    } catch (error) {
+      console.error('❌ Error analyzing crop-waste compatibility:', error)
+    }
+    return null
+  }
 
   // Search handling functions
   const generateListingEmbedding = async (listingId) => {
@@ -1932,6 +2837,11 @@ useEffect(() => {
     console.log('🚀 PERFORM SEARCH CALLED with query:', searchText)
     console.log('🚀 User role:', userRole)
     console.log('🚀 Search results length before:', searchResults.length)
+    
+    // Reset crop type and specific crop dropdowns when searching
+    setSelectedCropType('')
+    setSelectedSpecificCrop('')
+    setSpecificCropsForType([])
     
     // Categorize and store search
     const searchCategory = categorizeSearch(searchText);
@@ -2759,6 +3669,29 @@ useEffect(() => {
           )}
         </div>
         
+        {/* Top Compatible Crop - Only show when dropdown is selected */}
+        {userRole === 'crop_farmer' && (selectedCropType || selectedSpecificCrop) && listing.cropCompatibility && listing.cropCompatibility.topCrops && listing.cropCompatibility.topCrops.length > 0 && (
+          <div style={{
+            marginTop: '10px',
+            padding: '8px 12px',
+            backgroundColor: '#f0f8f0',
+            borderRadius: '6px',
+            border: '1px solid #4caf50',
+            fontSize: '13px',
+            color: '#2d5a27'
+          }}>
+            <div style={{ fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span>🌱</span> Top Match:
+            </div>
+            <div style={{ fontWeight: '500' }}>
+              {listing.cropCompatibility.topCrops[0].name}
+            </div>
+            <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
+              {listing.cropCompatibility.topCrops[0].reason}
+            </div>
+          </div>
+        )}
+        
         <div className={styles.cardActions}>
           {userRole === 'crop_farmer' ? (
             (() => {
@@ -2852,6 +3785,100 @@ useEffect(() => {
         <div className={styles.headerContainer}>
           <div className={styles.headerLeft}>
             <h1 className={styles.title}>{getRoleDisplayTitle()}</h1>
+            
+            {/* Crop Type and Specific Crop Filter Dropdowns - Only for Crop Farmers */}
+            {userRole === 'crop_farmer' && userCropTypes.length > 0 && (
+              <div className={styles.headerDropdowns}>
+                <div className={styles.filterGroup}>
+                  <label className={styles.filterLabel}>Crop Type</label>
+                  <select 
+                    className={styles.filterSelect}
+                    value={selectedCropType}
+                    onChange={async (e) => {
+                      const cropType = e.target.value
+                      setSelectedCropType(cropType)
+                      setSelectedSpecificCrop('')
+                      
+                      if (cropType) {
+                        setLoading(true)
+                        // Handle the combined herbs_spices category
+                        const actualCropType = cropType === 'spices' ? 'herbs_spices' : cropType
+                        
+                        // Get specific crops for this crop type from user's selections
+                        const filteredSpecificCrops = userSpecificCrops.filter(cropId => {
+                          // Check if this specific crop belongs to the selected crop type
+                          return specificCrops[actualCropType]?.some(crop => crop.id === cropId)
+                        })
+                        
+                        setSpecificCropsForType(filteredSpecificCrops)
+                        
+                        // Apply crop-waste compatibility search
+                        await applyCropWasteFilter(cropType)
+                        setLoading(false)
+                      } else {
+                        setSpecificCropsForType([])
+                        // Reset to show all listings
+                        setFilteredListings(listings.filter(listing => 
+                          listing.status !== 'sold' && listing.status !== 'deleted'
+                        ))
+                      }
+                    }}
+                  >
+                    <option value="">All Crop Types</option>
+                    {userCropTypes.map(cropType => (
+                      <option key={cropType} value={cropType}>
+                        {cropType.charAt(0).toUpperCase() + cropType.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className={styles.filterGroup}>
+                  <label className={styles.filterLabel}>Specific Crop</label>
+                  <select 
+                    className={styles.filterSelect}
+                    value={selectedSpecificCrop}
+                    onChange={async (e) => {
+                      const specificCrop = e.target.value
+                      setSelectedSpecificCrop(specificCrop)
+                      
+                      if (specificCrop && selectedCropType) {
+                        setLoading(true)
+                        // Apply search for specific crop
+                        await applyCropSpecificFilter(specificCrop)
+                        setLoading(false)
+                      } else if (!specificCrop && selectedCropType) {
+                        // If specific crop is cleared, re-apply crop type filter
+                        setLoading(true)
+                        await applyCropWasteFilter(selectedCropType)
+                        setLoading(false)
+                      }
+                    }}
+                    disabled={!selectedCropType}
+                  >
+                    <option value="">All Specific Crops</option>
+                    {specificCropsForType.map(cropId => (
+                      <option key={cropId} value={cropId}>
+                        {cropId.charAt(0).toUpperCase() + cropId.slice(1).replace(/-/g, ' ')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                {(selectedCropType || selectedSpecificCrop) && (
+                  <button 
+                    className={styles.clearFiltersBtn}
+                    onClick={() => {
+                      setSelectedCropType('')
+                      setSelectedSpecificCrop('')
+                      setSpecificCropsForType([])
+                    }}
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           
           <div className={styles.headerRight}>
@@ -2895,6 +3922,100 @@ useEffect(() => {
           </div>
         </div>
         
+        {/* Crop Type and Specific Crop Filter Dropdowns - Only for Crop Farmers */}
+        {userRole === 'crop_farmer' && userCropTypes.length > 0 && (
+          <div className={styles.filterDropdownContainer}>
+            <div className={styles.filterRow}>
+              <div className={styles.filterGroup}>
+                <label className={styles.filterLabel}>Crop Type</label>
+                <select 
+                  className={styles.filterSelect}
+                  value={selectedCropType}
+                  onChange={async (e) => {
+                    const cropType = e.target.value
+                    setSelectedCropType(cropType)
+                    setSelectedSpecificCrop('')
+                    
+                    if (cropType) {
+                      setLoading(true)
+                      // Handle the combined herbs_spices category
+                      const actualCropType = cropType === 'spices' ? 'herbs_spices' : cropType
+                      // Get specific crops for this crop type from user's selections
+                      const filteredSpecificCrops = userSpecificCrops.filter(cropId => {
+                        // Check if this specific crop belongs to the selected crop type
+                        return specificCrops[actualCropType]?.some(crop => crop.id === cropId)
+                      })
+                      
+                      setSpecificCropsForType(filteredSpecificCrops)
+                      
+                      // Apply crop-waste compatibility search
+                      await applyCropWasteFilter(cropType)
+                      setLoading(false)
+                    } else {
+                      setSpecificCropsForType([])
+                    }
+                  }}
+                >
+                  <option value="">All Crop Types</option>
+                  {userCropTypes.map(cropType => (
+                    <option key={cropType} value={cropType}>
+                      {cropType.charAt(0).toUpperCase() + cropType.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className={styles.filterGroup}>
+                <label className={styles.filterLabel}>Specific Crop</label>
+                <select 
+                  className={styles.filterSelect}
+                  value={selectedSpecificCrop}
+                  onChange={async (e) => {
+                    const specificCrop = e.target.value
+                    setSelectedSpecificCrop(specificCrop)
+                    
+                    if (specificCrop && selectedCropType) {
+                      setLoading(true)
+                      // Apply search for specific crop
+                      await applyCropSpecificFilter(specificCrop)
+                      setLoading(false)
+                    } else if (!specificCrop && selectedCropType) {
+                      // If specific crop is cleared, re-apply crop type filter
+                      setLoading(true)
+                      await applyCropWasteFilter(selectedCropType)
+                      setLoading(false)
+                    }
+                  }}
+                  disabled={!selectedCropType}
+                >
+                  <option value="">All Specific Crops</option>
+                  {specificCropsForType.map(cropId => {
+                    const specificCrop = Object.values(specificCrops).flat().find(c => c.id === cropId)
+                    return (
+                      <option key={cropId} value={cropId}>
+                        {specificCrop?.name || cropId.charAt(0).toUpperCase() + cropId.slice(1).replace(/-/g, ' ')}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+              
+              {(selectedCropType || selectedSpecificCrop) && (
+                <button 
+                  className={styles.clearFiltersBtn}
+                  onClick={() => {
+                    setSelectedCropType('')
+                    setSelectedSpecificCrop('')
+                    setSpecificCropsForType([])
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        
         {/* Loading Content */}
         <div className={styles.listingsLoadingContainer}>
           <div className={styles.listingsLoadingSpinner}></div>
@@ -2929,6 +4050,113 @@ useEffect(() => {
         <div className={styles.headerLeft}>
           <h1 className={styles.title}>{getRoleDisplayTitle()}</h1>
         </div>
+        
+        {/* Crop Type and Specific Crop Filter Dropdowns - Only for Crop Farmers */}
+        {userRole === 'crop_farmer' && userCropTypes.length > 0 && (
+          <div className={styles.headerDropdowns}>
+            <div className={styles.filterGroup}>
+              <label className={styles.filterLabel}>Crop Type</label>
+              <select 
+                className={styles.filterSelect}
+                value={selectedCropType}
+                onChange={async (e) => {
+                  const cropType = e.target.value
+                  setSelectedCropType(cropType)
+                  setSelectedSpecificCrop('')
+                  
+                  if (cropType) {
+                    setLoading(true)
+                    // Handle the combined herbs_spices category
+                    const actualCropType = cropType === 'spices' ? 'herbs_spices' : cropType
+                    // Get specific crops for this crop type from user's selections
+                    const filteredSpecificCrops = userSpecificCrops.filter(cropId => {
+                      // Check if this specific crop belongs to the selected crop type
+                      return specificCrops[actualCropType]?.some(crop => crop.id === cropId)
+                    })
+                    
+                    setSpecificCropsForType(filteredSpecificCrops)
+                    
+                    // Apply crop-waste compatibility search
+                    await applyCropWasteFilter(cropType)
+                    setLoading(false)
+                  } else {
+                    // Show all user's specific crops when no crop type is selected
+                    setSpecificCropsForType(userSpecificCrops)
+                  }
+                }}
+              >
+                <option value="">All Crop Types</option>
+                {userCropTypes.map(cropTypeId => {
+                  const cropType = cropTypes.find(c => c.id === cropTypeId)
+                  return (
+                    <option key={cropTypeId} value={cropTypeId}>
+                      {cropType?.name || cropTypeId}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+            
+            <div className={styles.filterGroup}>
+              <label className={styles.filterLabel}>Specific Crop</label>
+              <select 
+                className={styles.filterSelect}
+                value={selectedSpecificCrop}
+                onChange={async (e) => {
+                  const specificCrop = e.target.value
+                  setSelectedSpecificCrop(specificCrop)
+                  
+                  if (specificCrop && selectedCropType) {
+                    setLoading(true)
+                    // Apply search for specific crop
+                    await applyCropSpecificFilter(specificCrop)
+                    setLoading(false)
+                  } else if (!specificCrop && selectedCropType) {
+                    // If specific crop is cleared, re-apply crop type filter
+                    setLoading(true)
+                    await applyCropWasteFilter(selectedCropType)
+                    setLoading(false)
+                  }
+                }}
+                disabled={!selectedCropType}
+              >
+                <option value="">All Specific Crops</option>
+                {specificCropsForType.map(cropId => {
+                  // Find the crop details to get the proper name
+                  let cropName = cropId.charAt(0).toUpperCase() + cropId.slice(1).replace(/-/g, ' ')
+                  
+                  // Search through all categories to find the crop details
+                  for (const [category, crops] of Object.entries(specificCrops)) {
+                    const found = crops.find(c => c.id === cropId)
+                    if (found) {
+                      cropName = found.name
+                      break
+                    }
+                  }
+                  
+                  return (
+                    <option key={cropId} value={cropId}>
+                      {cropName}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+            
+            {(selectedCropType || selectedSpecificCrop) && (
+              <button 
+                className={styles.clearFiltersBtn}
+                onClick={() => {
+                  setSelectedCropType('')
+                  setSelectedSpecificCrop('')
+                  setSpecificCropsForType([])
+                }}
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+        )}
         
         <div className={styles.headerRight}>
           {/* Search Bar for Crop Farmers */}
@@ -3327,27 +4555,159 @@ useEffect(() => {
               {modalStep === 1 && (
                 <div className={styles.stepContent}>
                   <h3 className={styles.stepTitle}>Basic Information</h3>
-                  <div className={styles.formGroup}>
-                    <label>Listing Title *</label>
-                    <input
-                      type="text"
-                      className={styles.input}
-                      placeholder="e.g., Cattle Manure, Compost, Chicken Manure"
-                      value={formData.name}
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    />
-                  </div>
                   
-                  <div className={styles.formGroup}>
-                    <label>Listing Description *</label>
-                    <textarea
-                      className={styles.textarea}
-                      placeholder="Describe your product: nutrient content, condition, storage method, etc."
-                      value={formData.details}
-                      onChange={(e) => setFormData({...formData, details: e.target.value})}
-                      rows={5}
-                    />
-                  </div>
+                  {/* AI Verification Info Box for Text */}
+                  {userRole === 'livestock_owner' && (
+                    <div className={styles.verificationInfoBox} style={{ marginBottom: '20px' }}>
+                      <div className={styles.infoText}>
+                        <strong>AI Text Verification (Required)</strong>
+                        <p>Your listing title and description will be analyzed by AI to ensure they are aligned. Make sure your description accurately matches the waste type in your title.</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {userRole === 'livestock_owner' && userLivestockAnimals.length > 0 ? (
+                    // Show dropdown for livestock owners
+                    <>
+                      <div className={styles.formGroup} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '40px' }}>
+                        <label style={{ margin: 0, minWidth: '120px' }}>Listing Title</label>
+                        {getLivestockWasteOptions(userLivestockAnimals, userSpecificAnimals).length > 1 ? (
+                          <select
+                            className={styles.input}
+                            value={selectedWasteType}
+                            onChange={async (e) => {
+                              const wasteType = e.target.value
+                              setSelectedWasteType(wasteType)
+                              setFormData({
+                                ...formData,
+                                name: wasteType
+                              })
+                              // Reset text validation when title changes
+                              setTextValidationResult(null)
+                              setIsTextVerified(false)
+                              setHasAttemptedTextVerification(false)
+                            }}
+                            style={{ flex: 1 }}
+                          >
+                            <option value="">Select waste type</option>
+                            {getLivestockWasteOptions(userLivestockAnimals, userSpecificAnimals).map((wasteType, index) => (
+                              <option key={index} value={wasteType}>
+                                {wasteType}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          // Single waste type - show as readonly input
+                          <input
+                            type="text"
+                            className={styles.input}
+                            value={formData.name}
+                            readOnly
+                            style={{ flex: 1 }}
+                          />
+                        )}
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label>Listing Description</label>
+                        <textarea
+                          className={styles.textarea}
+                          placeholder="Describe your product: nutrient content, condition, storage method, etc."
+                          value={formData.details}
+                          onChange={async (e) => {
+                              setFormData({...formData, details: e.target.value})
+                              // Reset text validation when description changes
+                              setTextValidationResult(null)
+                              setIsTextVerified(false)
+                              setHasAttemptedTextVerification(false)
+                            }}
+                          rows={5}
+                        />
+                      </div>
+                      
+                      {/* Text Validation Status - Always visible for livestock owners */}
+                      {userRole === 'livestock_owner' && (
+                        <div className={styles.validationStatus} style={{ marginTop: '20px' }}>
+                          {isTextValidating ? (
+                            <div className={styles.validating} style={{ marginBottom: '50px' }}>
+                              <div className={styles.validationSpinner}></div>
+                              <span>AI is analyzing your listing title and description...</span>
+                            </div>
+                          ) : textValidationResult ? (
+                            <>
+                              {/* Text Analysis Section */}
+                              <div className={styles.analysisContainer}>
+                                <h4 className={styles.analysisHeader}>AI Verification</h4>
+                                <div className={styles.analysisContent}>
+                                  {textValidationResult.error ? (
+                                    <span style={{ color: '#dc3545' }}>{textValidationResult.message}</span>
+                                  ) : (
+                                    <>
+                                      <div style={{ marginBottom: '10px' }}>
+                                        <strong>Verdict:</strong> {textValidationResult.verdict === 'VERIFIED_ALIGNED' ? 
+                                          <span style={{ color: '#28a745' }}> ALIGNED - Title and description match</span> : 
+                                          <span style={{ color: '#dc3545' }}> NOT ALIGNED - Title and description don't match</span>
+                                        }
+                                      </div>
+                                      {textValidationResult.verdict !== 'VERIFIED_ALIGNED' && (
+                                        <p style={{ color: '#dc3545', fontSize: '14px', marginTop: '10px' }}>
+                                          Please update your title or description to match before proceeding.
+                                        </p>
+                                      )}
+                                      <div>
+                                        <strong>Reason:</strong> {textValidationResult.reason || 'No specific reason provided'}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <button 
+                                className={styles.revalidateButton}
+                                onClick={() => validateListingText(formData.name, formData.details)}
+                                disabled={isTextValidating}
+                                style={{ marginBottom: '30px' }}
+                              >
+                                Re-analyze Text
+                              </button>
+                            </>
+                          ) : (
+                            <p style={{ color: '#666', fontSize: '14px', marginBottom: '50px' }}>Please fill in both title and description to enable AI verification. Make sure that the listing title and listing details should match.</p>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    // Regular input for crop farmers or users without livestock
+                    <>
+                      <div className={styles.formGroup} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                        <label style={{ margin: 0, minWidth: '120px' }}>Listing Title</label>
+                        <input
+                          type="text"
+                          className={styles.input}
+                          placeholder="e.g., Cattle Manure, Compost, Chicken Manure"
+                          value={formData.name}
+                          onChange={(e) => setFormData({...formData, name: e.target.value})}
+                          style={{ flex: 1 }}
+                        />
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label>Listing Description</label>
+                        <textarea
+                          className={styles.textarea}
+                          placeholder="Describe your product: nutrient content, condition, storage method, etc."
+                          value={formData.details}
+                          onChange={async (e) => {
+                              setFormData({...formData, details: e.target.value})
+                              // Reset text validation when description changes
+                              setTextValidationResult(null)
+                              setIsTextVerified(false)
+                              setHasAttemptedTextVerification(false)
+                            }}
+                          rows={5}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -3368,7 +4728,7 @@ useEffect(() => {
                         className={styles.quantityInput}
                         placeholder="e.g., 50, 100, 500"
                         value={formData.measurements}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const value = e.target.value.replace(/[^0-9]/g, '')
                           setFormData({...formData, measurements: value})
                         }}
@@ -3406,7 +4766,7 @@ useEffect(() => {
                         className={styles.priceInput}
                         placeholder="0.00"
                         value={formData.isFree ? '' : formData.price}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const value = e.target.value.replace(/[^0-9.]/g, '')
                           setFormData({...formData, price: value, isFree: false})
                         }}
@@ -3550,17 +4910,24 @@ useEffect(() => {
                 {modalStep === 1 ? 'Cancel' : 'Back'}
               </button>
               {modalStep < 4 ? (
-                <button className={styles.nextButton} onClick={nextStep} disabled={!isCurrentStepValid()}>
-                  Next
+                <button 
+                  className={styles.nextButton} 
+                  onClick={modalStep === 1 && userRole === 'livestock_owner' && (!hasAttemptedTextVerification || textValidationResult?.verdict !== 'VERIFIED_ALIGNED') ? handleVerify : nextStep} 
+                  disabled={!isCurrentStepValid() || (modalStep === 1 && userRole === 'livestock_owner' && (!hasAttemptedTextVerification || textValidationResult?.verdict !== 'VERIFIED_ALIGNED') && isTextValidating)}
+                >
+                  {modalStep === 1 && userRole === 'livestock_owner' && (!hasAttemptedTextVerification || textValidationResult?.verdict !== 'VERIFIED_ALIGNED') ? 
+                    (isTextValidating ? 'Verifying by AI...' : 'Verify') : 
+                    'Next'
+                  }
                 </button>
               ) : (
                 <button
                   type="button"
                   className={`${styles.nextButton} ${styles.createButton}`}
                   onClick={saveListing}
-                  disabled={isCreatingListing || isImageValidating || !areAllStepsCompleted()}
+                  disabled={isCreatingListing || isImageValidating || isTextValidating || !areAllStepsCompleted()}
                 >
-                  {isCreatingListing ? 'Creating...' : isImageValidating ? 'Validating Image...' : 'Create Listing'}
+                  {isCreatingListing ? 'Creating...' : isImageValidating || isTextValidating ? 'Validating...' : 'Create Listing'}
                 </button>
               )}
             </div>
@@ -3632,7 +4999,7 @@ useEffect(() => {
                   {(() => {
                     const imageUrl = selectedListing.images?.[0] || selectedListing.imageUrls?.[0] || selectedListing.imageUrl || selectedListing.image || selectedListing.photo || selectedListing.photoUrl || selectedListing.photos?.[0]
                     return imageUrl ? (
-                      <div className={styles.detailsImageContainer}>
+                      <div className={styles.detailsImageContainer} style={{ position: 'relative' }}>
                         <img 
                           src={imageUrl} 
                           alt={selectedListing.name}
@@ -3643,6 +5010,28 @@ useEffect(() => {
                             e.target.nextSibling.style.display = 'flex'
                           }}
                         />
+                        {/* AI Verification Badge - Top Right of Image */}
+                        {selectedListing.isAiVerified && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '10px',
+                            right: '10px',
+                            backgroundColor: '#4caf50',
+                            color: 'white',
+                            padding: '6px 12px',
+                            borderRadius: '20px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            boxShadow: '0 2px 8px rgba(76, 175, 80, 0.3)',
+                            zIndex: 10
+                          }}>
+                            <span>✓</span>
+                            Verified by AI
+                          </div>
+                        )}
                         <div className={styles.detailsPlaceholder} style={{ display: 'none' }}>
                           <p>Failed to load image</p>
                         </div>
@@ -3653,6 +5042,158 @@ useEffect(() => {
                       </div>
                     )
                   })()}
+                  
+                  {/* AI Verification Results - Only for livestock owners viewing their own listings */}
+                  {userRole === 'livestock_owner' && selectedListing.ownerId === user?.uid && (
+                    <>
+                      {/* Text Verification */}
+                      {selectedListing.textValidationResult ? (
+                        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                          <h5 style={{ marginBottom: '10px', color: '#333', fontSize: '16px' }}> AI Listing Name and Description</h5>
+                          <div style={{ marginBottom: '8px' }}>
+                            <strong>Verdict:</strong> 
+                            <span style={{ 
+                              backgroundColor: selectedListing.textValidationResult.verdict === 'VERIFIED_ALIGNED' ? '#28a745' : '#dc3545',
+                              color: 'white',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              marginLeft: '8px',
+                              fontSize: '14px'
+                            }}>
+                              {selectedListing.textValidationResult.verdict === 'VERIFIED_ALIGNED' ? 
+                                'ALIGNED' : 
+                                'NOT ALIGNED'
+                              }
+                            </span>
+                          </div>
+                          <div>
+                            <strong>Reason:</strong> 
+                            <p style={{ marginTop: '5px', fontSize: '14px', lineHeight: '1.4' }}>
+                              {selectedListing.textValidationResult.reason || 'No reason provided'}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                          <h5 style={{ marginBottom: '10px', color: '#666', fontSize: '16px' }}> AI Listing Name and Description</h5>
+                          <p style={{ color: '#666', fontSize: '14px' }}>Not verified</p>
+                        </div>
+                      )}
+                      
+                      {/* Image Verification */}
+                      {selectedListing.imageValidationResult ? (
+                        <div style={{ marginTop: '15px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                          <h5 style={{ marginBottom: '10px', color: '#333', fontSize: '16px' }}> AI Image Verification</h5>
+                          <div style={{ marginBottom: '8px' }}>
+                            <strong>Verdict:</strong> 
+                            <span style={{ 
+                              backgroundColor: selectedListing.imageValidationResult.verdict === 'VERIFIED_LEGITIMATE' ? '#28a745' : '#dc3545',
+                              color: 'white',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              marginLeft: '8px',
+                              fontSize: '14px'
+                            }}>
+                              {selectedListing.imageValidationResult.verdict === 'VERIFIED_LEGITIMATE' ? 
+                                'LEGITIMATE' : 
+                                selectedListing.imageValidationResult.verdict === 'VERIFIED_NOT_LEGITIMATE' ?
+                                'NOT LEGITIMATE' :
+                                'UNABLE TO VERIFY'
+                              }
+                            </span>
+                          </div>
+                          <div>
+                            <strong>Analysis:</strong> 
+                            <p style={{ marginTop: '5px', fontSize: '14px', lineHeight: '1.4' }}>
+                              {selectedListing.imageValidationResult.reason || 'No analysis provided'}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: '15px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                          <h5 style={{ marginBottom: '10px', color: '#666', fontSize: '16px' }}> AI Image Verification</h5>
+                          <p style={{ color: '#666', fontSize: '14px' }}>Not verified</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Crop Compatibility - Only for Crop Farmers */}
+                  {userRole === 'crop_farmer' && selectedListing.cropCompatibility && (
+                    <div className={styles.detailsSection} style={{ marginTop: '20px', backgroundColor: '#f0f8f0', padding: '15px', borderRadius: '8px', border: '1px solid #4caf50' }}>
+                      <h4 style={{ color: '#2d5a27', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>🌱</span> Top 5 Crops Best Suited for This Waste
+                      </h4>
+                      <p style={{ fontSize: '14px', color: '#666', marginBottom: '15px' }}>
+                        {selectedListing.cropCompatibility.analysis}
+                      </p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {selectedListing.cropCompatibility.topCrops.map((cropInfo, index) => (
+                          <div key={index} style={{ 
+                            backgroundColor: 'white', 
+                            padding: '10px', 
+                            borderRadius: '6px', 
+                            border: '1px solid #e0e0e0',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                              <span style={{ 
+                                backgroundColor: '#4caf50', 
+                                color: 'white', 
+                                width: '24px', 
+                                height: '24px', 
+                                borderRadius: '50%', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                fontSize: '12px',
+                                fontWeight: 'bold',
+                                flexShrink: 0
+                              }}>
+                                {index + 1}
+                              </span>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                                  <h5 style={{ margin: '0', color: '#2d5a27', fontSize: '16px' }}>
+                                    {cropInfo.name}
+                                  </h5>
+                                  {cropInfo.score && (
+                                    <span style={{ 
+                                      fontSize: '14px', 
+                                      fontWeight: '600',
+                                      color: cropInfo.score >= 80 ? '#4caf50' : cropInfo.score >= 60 ? '#ff9800' : '#f44336'
+                                    }}>
+                                      {cropInfo.score.toFixed(1)}%
+                                    </span>
+                                  )}
+                                </div>
+                                {cropInfo.score && (
+                                  <div style={{ 
+                                    width: '100%', 
+                                    height: '8px', 
+                                    backgroundColor: '#e0e0e0', 
+                                    borderRadius: '4px',
+                                    marginBottom: '8px',
+                                    overflow: 'hidden'
+                                  }}>
+                                    <div style={{
+                                      width: `${cropInfo.score}%`,
+                                      height: '100%',
+                                      backgroundColor: cropInfo.score >= 80 ? '#4caf50' : cropInfo.score >= 60 ? '#ff9800' : '#f44336',
+                                      transition: 'width 0.3s ease'
+                                    }} />
+                                  </div>
+                                )}
+                                <p style={{ margin: '0', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
+                                  {cropInfo.reason}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Right Column - Details */}
@@ -3692,26 +5233,22 @@ useEffect(() => {
                     )}
                   </div>
                   
-                  {/* Similarity Score - Always visible for debugging */}
-                  <div className={styles.detailsSection}>
-                    <h4>Similarity score:</h4>
-                    <div className={styles.similarityScore}>
-                      {selectedListing?.semanticScore ? 
-                        `Match: ${(selectedListing.semanticScore * 100).toFixed(1)}%` : 
-                        'No score available'
-                      }
+                  {/* Similarity Score - Hide for livestock owners */}
+                  {userRole !== 'livestock_owner' && (
+                    <div className={styles.detailsSection}>
+                      <h4>Similarity score:</h4>
+                      <div className={styles.similarityScore}>
+                        {selectedListing?.semanticScore ? 
+                          `Match: ${(selectedListing.semanticScore * 100).toFixed(1)}%` : 
+                          'No score available'
+                        }
+                      </div>
                     </div>
-                    {(() => {
-                      console.log('🔍 MODAL RENDER DEBUG - selectedListing:', selectedListing)
-                      console.log('🔍 MODAL RENDER DEBUG - semanticScore:', selectedListing?.semanticScore)
-                      console.log('🔍 MODAL RENDER DEBUG - semanticScore type:', typeof selectedListing?.semanticScore)
-                      return null
-                    })()}
-                  </div>
+                  )}
                   
                   {/* Description */}
                   {selectedListing.details && (
-                    <div className={styles.detailsSection}>
+                    <div className={styles.detailsSection} style={{ marginTop: '0' }}>
                       <h4>Description:</h4>
                       <p className={styles.detailsDescription}>{selectedListing.details}</p>
                     </div>
@@ -3786,6 +5323,17 @@ useEffect(() => {
                   >
                     Edit
                   </button>
+                  {selectedListing.status !== 'sold' && (
+                    <button 
+                      className={styles.markSoldButton}
+                      onClick={() => {
+                        closeDetailsModal()
+                        markAsSold(selectedListing)
+                      }}
+                    >
+                      Sold
+                    </button>
+                  )}
                   <button 
                     className={styles.deleteButton}
                     onClick={() => {

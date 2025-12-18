@@ -37,7 +37,7 @@
   border-radius: 16px;
   padding: 30px;
   width: 1200px;
-  height: 626px;
+  min-height: 626px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   position: relative;
   z-index: 1;
@@ -49,7 +49,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 50px;
+  margin-bottom: 20px;
 }
 
 .topBar .backButton {
@@ -82,21 +82,34 @@
   height: auto;
 }
 
+/* Step 2 specific layout override */
+.step2Layout {
+  display: flex;
+  flex-direction: column !important;
+  padding: 0 20px;
+}
+
+.step2Container .content {
+  height: 626px !important;
+  overflow: hidden !important;
+}
+
 .mainContent {
   display: flex;
   align-items: flex-start;
 }
 
 .leftSection {
-  flex: 0.4;
+  flex: none;
   display: flex;
   flex-direction: column;
   justify-content: center;
   margin-left: 20px;
+  margin-right: 20px;
 }
 
 .rightSection {
-  flex: 0.7;
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -114,9 +127,9 @@
 .subtitle {
   font-size: 1.1rem;
   color: #666;
-  margin: 0;
+  margin-bottom: 10px;
   line-height: 1.6;
-  max-width: 400px;
+  max-width: 100%;
 }
 
 .nextButton {
@@ -125,13 +138,14 @@
   border: none;
   border-radius: 10px;
   padding: 14px 32px;
-  margin-top: 30px;
+  margin-top: 20px;
   margin-right: 19px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
   font-family: 'Poppins', sans-serif;
+  align-self: flex-end;
 }
 
 .nextButton:hover {
@@ -141,10 +155,186 @@
 }
 
 .optionsGrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   margin-right: 20px;
+  margin-bottom: 30px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.specificOptionsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 15px;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.categorySection {
+  margin-bottom: 20px;
+}
+
+.categoryTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a4318;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.specificCard {
+  padding: 4px 8px;
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  white-space: normal;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: fit-content !important;
+  max-width: none !important;
+  min-width: unset !important;
+  height: auto !important;
+  min-height: unset !important;
+  flex-shrink: 0;
+}
+
+.specificCard:hover {
+  border-color: #fa9100;
+  background: #fff8f0;
+}
+
+.specificCard.selected {
+  background: #2d5a27 !important;
+  color: #ffffff !important;
+  border-color: #2d5a27 !important;
+}
+
+.specificCard.selected h4 {
+  color: #ffffff !important;
+}
+
+.specificCard.selected p {
+  color: #ffffff !important;
+}
+
+.optionTitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2d5a27;
+  margin-bottom: 1px;
+  line-height: 1.1;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  white-space: normal;
+}
+
+.optionTagalog {
+  font-size: 9px;
+  color: #666;
+  margin: 0;
+  line-height: 1.0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  white-space: normal;
+}
+
+/* Search Styles */
+.searchContainer {
+  margin-bottom: 20px;
+}
+
+.titleContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.titleContainer .searchContainer {
+  margin-bottom: 0;
+  max-width: 400px;
+}
+
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchBox i {
+  position: absolute;
+  left: 15px;
+  color: #999;
+}
+
+.searchBox input {
+  width: 100%;
+  padding: 12px 15px 12px 45px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.searchBox input:focus {
+  border-color: #2d5a27;
+}
+
+/* Top-Bottom Layout Styles for Step 2 */
+.topSection {
+  width: 100%;
+}
+
+.titleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: top;
+  margin-bottom: -15px;
+  width: 100%;
+}
+
+.titleRow .searchContainer {
+  margin-bottom: 0;
+  max-width: 400px;
+}
+
+.bottomSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.scrollableContainer {
+  height: 320px !important;
+  overflow-y: auto;
+  padding-right: 10px;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e0e0e0;
 }
 
 .farmSizeGrid {
@@ -184,13 +374,14 @@
   transition: all 0.3s ease;
   position: relative;
   min-height: 140px;
-  width: 100%;
+  width: fit-content;
   text-align: center;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  white-space: nowrap;
 }
 
 .optionCard:hover {
@@ -243,10 +434,11 @@
 }
 
 .optionTitle {
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #2d5a27;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+  line-height: 1.2;
 }
 
 .optionDescription {
@@ -385,17 +577,18 @@
 
   .subtitle {
     font-size: 1rem;
+    margin-bottom: 10px;
   }
 
   .optionsGrid {
-    grid-template-columns: repeat(2, 1fr);
+    flex-direction: column;
     gap: 12px;
   }
 
   .optionCard {
     padding: 16px 12px;
     min-height: 120px;
-    width: 100%;
+    width: fit-content;
   }
 
   .cropIcon {
@@ -428,12 +621,14 @@
   }
 
   .optionsGrid {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .optionCard {
     padding: 14px 10px;
     min-height: 100px;
+    width: fit-content;
   }
 
   .cropIcon {

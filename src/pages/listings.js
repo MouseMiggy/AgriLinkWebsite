@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { db, auth } from '../lib/firebase'
 import { collection, onSnapshot, query, where, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore'
@@ -333,6 +333,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
   const [userSpecificAnimals, setUserSpecificAnimals] = useState([])
   const [userSpecificCrops, setUserSpecificCrops] = useState([])
   const [compatibilityMap, setCompatibilityMap] = useState(new Map())
+  const abortControllerRef = useRef(null) // For canceling previous requests
   const [selectedCropType, setSelectedCropType] = useState('')
   const [selectedSpecificCrop, setSelectedSpecificCrop] = useState('')
   const [specificCropsForType, setSpecificCropsForType] = useState([])
@@ -354,8 +355,14 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     measurementUnit: 'kg',
     price: '',
     isFree: false,
+    negotiable: false,
+    description: '',
     image: null,
-    imagePreview: null
+    imagePreview: null,
+    category: '',
+    subcategory: '',
+    tags: [],
+    quantity: ''
   })
   const [selectedWasteType, setSelectedWasteType] = useState('')
   const [otherAnimalType, setOtherAnimalType] = useState('')
@@ -2121,7 +2128,7 @@ useEffect(() => {
           listing.status !== 'sold' && listing.status !== 'deleted'
         );
         setListings(activeListings);
-        setFilteredListings(mergeCompatibilityData(activeListings, true));
+        setFilteredListings(mergeCompatibilityData(activeListings));
       } catch (err) {
         console.error('❌ Error loading recommended listings for crop farmer:', err)
         setError('Failed to load listings')
@@ -2171,7 +2178,7 @@ useEffect(() => {
           
           newCompatibilityMap.set(item.listingId, {
             topCrops: topCrops,
-            analysis: `AI-powered analysis based on agricultural science`
+            analysis: `AI-powered analysis`
           })
         })
         
@@ -2189,8 +2196,20 @@ useEffect(() => {
 
   // Function to merge compatibility data with listings
   const mergeCompatibilityData = (listingsToMerge, filterByCompatibility = false) => {
-    if (userRole !== 'crop_farmer' || compatibilityMap.size === 0) {
+    if (userRole !== 'crop_farmer') {
       return listingsToMerge
+    }
+    
+    // If compatibility map is empty, return listings without filtering
+    if (compatibilityMap.size === 0) {
+      return listingsToMerge.map(listing => ({
+        ...listing,
+        cropCompatibility: {
+          topCrops: [],
+          analysis: 'Loading compatibility data...'
+        },
+        compatibilityScore: 0
+      }))
     }
     
     const mergedListings = listingsToMerge.map(listing => {
@@ -2351,10 +2370,10 @@ useEffect(() => {
     console.log('🌾 Applying crop-waste filter for category:', cropCategory)
     
     if (!cropCategory) {
-      // Reset to show all listings with compatibility data
+      // Reset to show all listings
       setFilteredListings(mergeCompatibilityData(listings.filter(listing => 
         listing.status !== 'sold' && listing.status !== 'deleted'
-      ), true))
+      )))
       return
     }
     
@@ -2405,11 +2424,18 @@ useEffect(() => {
           id: item.listingId,
           cropCompatibility: {
             topCrops: topCrops,
-            analysis: `AI-powered analysis based on MPNet semantic similarity`
+            analysis: `AI-powered analysis`
           },
           compatibilityScore: topCrops[0]?.score || 0
         }
       })
+      
+      // Update the compatibility map with the new data
+      const newCompatibilityMap = new Map(compatibilityMap)
+      compatibleListings.forEach(listing => {
+        newCompatibilityMap.set(listing.id, listing.cropCompatibility)
+      })
+      setCompatibilityMap(newCompatibilityMap)
       
       setFilteredListings(compatibleListings)
       console.log('✅ Applied AI crop-waste filter:', compatibleListings.length, 'listings')
@@ -2435,6 +2461,15 @@ useEffect(() => {
         }
       })
       
+      // Update the compatibility map with fallback data
+      const newCompatibilityMap = new Map(compatibilityMap)
+      listingsWithCompatibility.forEach(listing => {
+        if (!newCompatibilityMap.has(listing.id)) {
+          newCompatibilityMap.set(listing.id, listing.cropCompatibility)
+        }
+      })
+      setCompatibilityMap(newCompatibilityMap)
+      
       listingsWithCompatibility.sort((a, b) => b.compatibilityScore - a.compatibilityScore)
       setFilteredListings(listingsWithCompatibility)
     }
@@ -2446,11 +2481,20 @@ useEffect(() => {
   const applyCropSpecificFilter = async (specificCrop) => {
     console.log('🌱 Applying specific crop filter for:', specificCrop)
     
+    // Cancel previous request if it exists
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    // Create new AbortController for this request
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+    
     if (!specificCrop) {
-      // Reset to show all listings with compatibility data
+      // Reset to show all listings
       setFilteredListings(mergeCompatibilityData(listings.filter(listing => 
         listing.status !== 'sold' && listing.status !== 'deleted'
-      ), true))
+      )))
       return
     }
     
@@ -2467,13 +2511,26 @@ useEffect(() => {
           cropIds: [specificCrop],
           cropCategory: null
         }),
+        signal: abortController.signal
       })
+      
+      // Check if request was aborted
+      if (abortController.signal.aborted) {
+        console.log('Request was aborted for:', specificCrop)
+        return
+      }
       
       if (!response.ok) {
         throw new Error('Failed to analyze compatibility')
       }
       
       const data = await response.json()
+      
+      // Check if request was aborted during response processing
+      if (abortController.signal.aborted) {
+        console.log('Request was aborted during response processing for:', specificCrop)
+        return
+      }
       
       // Transform the data for display
       const compatibleListings = data.compatibleListings.map(item => {
@@ -2491,20 +2548,27 @@ useEffect(() => {
           id: item.listingId,
           cropCompatibility: {
             topCrops: topCrops,
-            analysis: `AI-powered analysis based on agricultural science`
+            analysis: `AI-powered analysis`
           },
           compatibilityScore: topCrops[0]?.score || 0,
           isSpecificMatch: topCrops[0]?.id === specificCrop
         }
       })
       
-      // Filter to show ONLY listings where the selected crop is in top 5
-      const filteredListings = compatibleListings.filter(listing => 
-        listing.cropCompatibility.topCrops.some(crop => crop.id === specificCrop)
-      )
+      // Show ALL listings with compatibility data
+      const allListingsWithCompatibility = mergeCompatibilityData(listings.filter(listing => 
+        listing.status !== 'sold' && listing.status !== 'deleted'
+      ), true)
       
-      // Sort: listings where selected crop is #1 first, then by score
-      filteredListings.sort((a, b) => {
+      // Update the compatibility map with the specific crop data
+      const newCompatibilityMap = new Map(compatibilityMap)
+      compatibleListings.forEach(listing => {
+        newCompatibilityMap.set(listing.id, listing.cropCompatibility)
+      })
+      setCompatibilityMap(newCompatibilityMap)
+      
+      // Sort listings: those where selected crop is ranked higher appear first
+      allListingsWithCompatibility.sort((a, b) => {
         const aCropIndex = a.cropCompatibility.topCrops.findIndex(c => c.id === specificCrop)
         const bCropIndex = b.cropCompatibility.topCrops.findIndex(c => c.id === specificCrop)
         
@@ -2513,18 +2577,29 @@ useEffect(() => {
           if (aCropIndex !== bCropIndex) {
             return aCropIndex - bCropIndex
           }
-          // If same position, sort by score
-          return b.compatibilityScore - a.compatibilityScore
+          // If same position, sort by the crop's score
+          return a.cropCompatibility.topCrops[aCropIndex].score - b.cropCompatibility.topCrops[bCropIndex].score
         }
         
         // If only one has the crop, it comes first
-        return aCropIndex !== -1 ? -1 : 1
+        if (aCropIndex !== -1 && bCropIndex === -1) return -1
+        if (aCropIndex === -1 && bCropIndex !== -1) return 1
+        
+        // If neither has the crop, sort by overall compatibility score
+        return b.compatibilityScore - a.compatibilityScore
       })
       
-      setFilteredListings(filteredListings)
-      console.log('✅ Applied specific crop filter:', filteredListings.length, 'listings')
+      // Final check before updating state
+      if (!abortController.signal.aborted) {
+        setFilteredListings(allListingsWithCompatibility)
+        console.log('✅ Applied specific crop filter:', allListingsWithCompatibility.length, 'listings')
+      }
       
     } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('Fetch was aborted for:', specificCrop)
+        return
+      }
       console.error('❌ Error applying specific crop filter:', error)
       // Fallback to client-side logic if API fails
       const activeListings = listings.filter(listing => 
@@ -2551,10 +2626,25 @@ useEffect(() => {
         }
       })
       
-      // Filter to show only listings with the specific crop
-      const filteredListings = listingsWithCompatibility.filter(listing => listing.isSpecificMatch)
+      // Sort by whether the specific crop is compatible
+      listingsWithCompatibility.sort((a, b) => {
+        if (a.isSpecificMatch && !b.isSpecificMatch) return -1
+        if (!a.isSpecificMatch && b.isSpecificMatch) return 1
+        return b.compatibilityScore - a.compatibilityScore
+      })
       
-      setFilteredListings(filteredListings)
+      // Update the compatibility map with fallback data
+      const newCompatibilityMap = new Map(compatibilityMap)
+      listingsWithCompatibility.forEach(listing => {
+        if (!newCompatibilityMap.has(listing.id)) {
+          newCompatibilityMap.set(listing.id, listing.cropCompatibility)
+        }
+      })
+      setCompatibilityMap(newCompatibilityMap)
+      
+      if (!abortController.signal.aborted) {
+        setFilteredListings(listingsWithCompatibility)
+      }
     }
     
     setLoading(false)
@@ -3393,8 +3483,8 @@ useEffect(() => {
     )
     
     if (userRole === 'crop_farmer') {
-      // For crop farmers, show only listings with compatibility data
-      setFilteredListings(mergeCompatibilityData(activeListings, true))
+      // For crop farmers, show all listings (compatibility data may still be loading)
+      setFilteredListings(mergeCompatibilityData(activeListings))
       return
     }
 
@@ -3410,8 +3500,8 @@ useEffect(() => {
     )
     
     if (userRole === 'crop_farmer') {
-      // For crop farmers, show only listings with compatibility data
-      setFilteredListings(mergeCompatibilityData(activeListings, true))
+      // For crop farmers, show all listings (compatibility data may still be loading)
+      setFilteredListings(mergeCompatibilityData(activeListings))
       return
     }
 
@@ -3765,8 +3855,8 @@ useEffect(() => {
             fontSize: '13px',
             color: '#2d5a27'
           }}>
-            <div style={{ fontWeight: '600', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span>🌱</span> Top Match:
+            <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+              Top Match:
             </div>
             <div style={{ fontWeight: '500' }}>
               {listing.cropCompatibility.topCrops[0].name}
@@ -3902,10 +3992,10 @@ useEffect(() => {
                         setLoading(false)
                       } else {
                         setSpecificCropsForType([])
-                        // Reset to show all listings with compatibility data
+                        // Reset to show all listings
                         setFilteredListings(mergeCompatibilityData(listings.filter(listing => 
                           listing.status !== 'sold' && listing.status !== 'deleted'
-                        ), true))
+                        )))
                       }
                     }}
                   >
@@ -5206,8 +5296,8 @@ useEffect(() => {
                   {/* Crop Compatibility - Only for Crop Farmers */}
                   {userRole === 'crop_farmer' && selectedListing.cropCompatibility && (
                     <div className={styles.detailsSection} style={{ marginTop: '20px', backgroundColor: '#f0f8f0', padding: '15px', borderRadius: '8px', border: '1px solid #4caf50' }}>
-                      <h4 style={{ color: '#2d5a27', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>🌱</span> Top 5 Crops Best Suited for This Waste
+                      <h4 style={{ color: '#2d5a27', marginBottom: '12px' }}>
+                        Top 5 Crops Best Suited for This Waste
                       </h4>
                       <p style={{ fontSize: '14px', color: '#666', marginBottom: '15px' }}>
                         {selectedListing.cropCompatibility.analysis}

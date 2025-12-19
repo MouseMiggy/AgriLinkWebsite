@@ -440,6 +440,10 @@ export default function CropOnboarding() {
         updatedAt: new Date()
       })
 
+      // Dispatch event to notify profile page of role change
+      window.dispatchEvent(new Event('roleChanged'))
+      console.log('✅ Role change event dispatched')
+
       // Navigate to completion screen
       router.push('/onboarding-complete')
     } catch (err) {

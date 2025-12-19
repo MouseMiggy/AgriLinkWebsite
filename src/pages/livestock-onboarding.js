@@ -155,10 +155,38 @@ export default function LivestockOnboarding() {
       }
       setCurrentStep(2)
     } else if (currentStep === 2) {
-      if (selectedSpecificAnimals.length === 0) {
-        showErrorToast('Please select at least one specific animal')
-        return
+      // Validate that each selected animal type has at least one specific animal
+      for (const animalType of selectedAnimals) {
+        if (animalType === 'others') {
+          // For "others", check if any specific animal is selected
+          const hasSelectedOthers = specificAnimals.others.some(animal => 
+            selectedSpecificAnimals.includes(animal.id)
+          )
+          if (!hasSelectedOthers) {
+            showErrorToast('Please select at least one specific animal for "Others"')
+            return
+          }
+        } else {
+          // For other types, check if any specific animal is selected
+          const hasSelectedType = specificAnimals[animalType]?.some(animal => 
+            selectedSpecificAnimals.includes(animal.id)
+          )
+          if (!hasSelectedType) {
+            // Get display name for the animal type
+            const animalNames = {
+              'cattle': 'cattle',
+              'poultry': 'poultry',
+              'swine': 'swine',
+              'goat': 'goat',
+              'sheep': 'sheep',
+              'rabbit': 'rabbit'
+            }
+            showErrorToast(`Please select at least one specific ${animalNames[animalType] || animalType}`)
+            return
+          }
+        }
       }
+      
       handleComplete()
     }
   }
@@ -175,21 +203,45 @@ export default function LivestockOnboarding() {
     setLoading(true)
 
     try {
+      console.log('🔍 Debug livestock onboarding save:')
+      console.log('- selectedAnimals:', selectedAnimals)
+      console.log('- selectedSpecificAnimals:', selectedSpecificAnimals)
+      console.log('- user.uid:', user.uid)
+      
       // Create/update user profile with livestock information matching mobile app structure
       const userDocRef = doc(db, 'users', user.uid)
-      await setDoc(userDocRef, {
+      const saveData = {
         role: 'livestock_owner',
         livestock: {
           animals: selectedAnimals,
           specificAnimals: selectedSpecificAnimals
         },
         'onboarding.livestockTypes': selectedAnimals,
+        'onboarding.specificAnimals': selectedSpecificAnimals,
         'onboarding.livestockTypesCompleted': true,
         'onboarding.livestockOnboardingCompleted': true,
         onboardingCompleted: true,
         onboardingCompletedAt: new Date(),
         updatedAt: new Date()
-      }, { merge: true })
+      }
+      
+      console.log('📝 Data being saved to Firestore:', saveData)
+      
+      await setDoc(userDocRef, saveData, { merge: true })
+      
+      // Verify the save by reading it back
+      const verifyDoc = await getDoc(userDocRef)
+      if (verifyDoc.exists()) {
+        const savedData = verifyDoc.data()
+        console.log('✅ Verification - saved data:')
+        console.log('- savedData.livestock:', savedData.livestock)
+        console.log('- savedData.onboarding.livestockTypes:', savedData.onboarding?.livestockTypes)
+        console.log('- savedData.onboarding.specificAnimals:', savedData.onboarding?.specificAnimals)
+      }
+
+      // Dispatch event to notify profile page of role change
+      window.dispatchEvent(new Event('roleChanged'))
+      console.log('✅ Role change event dispatched')
 
       // Navigate to completion screen
       router.push('/onboarding-complete')

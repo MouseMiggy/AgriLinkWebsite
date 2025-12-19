@@ -3397,25 +3397,132 @@ useEffect(() => {
             const boostedResults = userInterests ? 
               boostListingsByInterests(finalResults, userInterests) : finalResults;
             
+            // Add crop compatibility data for crop farmers
+            if (userRole === 'crop_farmer' && userSpecificCrops.length > 0) {
+              console.log('🌾 Adding crop compatibility to search results...');
+              
+              // Call AI compatibility endpoint for search results
+              try {
+                const compatibilityResponse = await fetch('https://context-based-2.onrender.com/crop-compatibility-analysis', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    cropIds: userSpecificCrops,
+                    cropCategory: null
+                  }),
+                });
+                
+                if (compatibilityResponse.ok) {
+                  const compatibilityData = await compatibilityResponse.json();
+                  
+                  // Create compatibility map
+                  const compatibilityMap = new Map();
+                  compatibilityData.compatibleListings.forEach(item => {
+                    const topCrops = item.cropScores.map(crop => ({
+                      id: crop.cropId,
+                      name: crop.cropName,
+                      reason: crop.reason,
+                      score: crop.score,
+                      npk: crop.npk,
+                      usage: crop.usage
+                    }));
+                    
+                    compatibilityMap.set(item.listingId, {
+                      topCrops: topCrops,
+                      analysis: `AI-powered analysis`
+                    });
+                  });
+                  
+                  // Add compatibility data to boosted results
+                  const resultsWithCompatibility = boostedResults.map(listing => ({
+                    ...listing,
+                    cropCompatibility: compatibilityMap.get(listing.id) || {
+                      topCrops: [],
+                      analysis: 'No compatibility data'
+                    },
+                    compatibilityScore: compatibilityMap.get(listing.id)?.topCrops[0]?.score || 0
+                  }));
+                  
+                  console.log('✅ Added compatibility data to', resultsWithCompatibility.length, 'search results');
+                  setSearchResults(resultsWithCompatibility);
+                } else {
+                  // If compatibility API fails, still show boosted results
+                  setSearchResults(boostedResults);
+                }
+              } catch (compatibilityError) {
+                console.log('⚠️ Compatibility API failed for search results:', compatibilityError);
+                setSearchResults(boostedResults);
+              }
+            } else {
+              setSearchResults(boostedResults);
+            }
+            
             console.log('🎯 Interest-based boosting applied:', {
               hasInterests: !!userInterests,
               interests: userInterests?.detectedInterests || [],
               originalCount: finalResults.length,
               boostedCount: boostedResults.length
             });
-            
-            // Debug: Check if distance is preserved in boosted results
-            console.log('🔍 DEBUG: Distance in boosted results:', boostedResults.slice(0, 3).map(l => ({
-              name: l.name,
-              distanceKm: l.distanceKm,
-              hasDistance: l.distanceKm != null
-            })));
-            
-            setSearchResults(boostedResults);
-            console.log(`Semantic search returned ${boostedResults.length} interest-boosted results`);
           } else {
-            setSearchResults(finalResults);
-            console.log(`Semantic search returned ${finalResults.length} high-quality results`);
+            // Add compatibility data for crop farmers even without interests
+            if (userRole === 'crop_farmer' && userSpecificCrops.length > 0) {
+              console.log('🌾 Adding crop compatibility to search results...');
+              
+              try {
+                const compatibilityResponse = await fetch('https://context-based-2.onrender.com/crop-compatibility-analysis', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    cropIds: userSpecificCrops,
+                    cropCategory: null
+                  }),
+                });
+                
+                if (compatibilityResponse.ok) {
+                  const compatibilityData = await compatibilityResponse.json();
+                  
+                  const compatibilityMap = new Map();
+                  compatibilityData.compatibleListings.forEach(item => {
+                    const topCrops = item.cropScores.map(crop => ({
+                      id: crop.cropId,
+                      name: crop.cropName,
+                      reason: crop.reason,
+                      score: crop.score,
+                      npk: crop.npk,
+                      usage: crop.usage
+                    }));
+                    
+                    compatibilityMap.set(item.listingId, {
+                      topCrops: topCrops,
+                      analysis: `AI-powered analysis`
+                    });
+                  });
+                  
+                  const resultsWithCompatibility = finalResults.map(listing => ({
+                    ...listing,
+                    cropCompatibility: compatibilityMap.get(listing.id) || {
+                      topCrops: [],
+                      analysis: 'No compatibility data'
+                    },
+                    compatibilityScore: compatibilityMap.get(listing.id)?.topCrops[0]?.score || 0
+                  }));
+                  
+                  console.log('✅ Added compatibility data to', resultsWithCompatibility.length, 'search results');
+                  setSearchResults(resultsWithCompatibility);
+                } else {
+                  setSearchResults(finalResults);
+                }
+              } catch (compatibilityError) {
+                console.log('⚠️ Compatibility API failed for search results:', compatibilityError);
+                setSearchResults(finalResults);
+              }
+            } else {
+              setSearchResults(finalResults);
+            }
           }
         } catch (error) {
           console.error('❌ Error applying interest-based boosting:', error);
@@ -3519,7 +3626,63 @@ useEffect(() => {
             return listingWithDistance;
           });
         
-        setSearchResults(matchingListings)
+        // Add compatibility data to matching listings
+        if (userSpecificCrops.length > 0) {
+          console.log('🌾 Adding compatibility data to fallback search results...');
+          
+          try {
+            const compatibilityResponse = await fetch('https://context-based-2.onrender.com/crop-compatibility-analysis', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                cropIds: userSpecificCrops,
+                cropCategory: null
+              }),
+            });
+            
+            if (compatibilityResponse.ok) {
+              const compatibilityData = await compatibilityResponse.json();
+              
+              const compatibilityMap = new Map();
+              compatibilityData.compatibleListings.forEach(item => {
+                const topCrops = item.cropScores.map(crop => ({
+                  id: crop.cropId,
+                  name: crop.cropName,
+                  reason: crop.reason,
+                  score: crop.score,
+                  npk: crop.npk,
+                  usage: crop.usage
+                }));
+                
+                compatibilityMap.set(item.listingId, {
+                  topCrops: topCrops,
+                  analysis: `AI-powered analysis`
+                });
+              });
+              
+              const matchingWithCompatibility = matchingListings.map(listing => ({
+                ...listing,
+                cropCompatibility: compatibilityMap.get(listing.id) || {
+                  topCrops: [],
+                  analysis: 'No compatibility data'
+                },
+                compatibilityScore: compatibilityMap.get(listing.id)?.topCrops[0]?.score || 0
+              }));
+              
+              setSearchResults(matchingWithCompatibility);
+            } else {
+              setSearchResults(matchingListings);
+            }
+          } catch (error) {
+            console.log('⚠️ Compatibility API failed for fallback search:', error);
+            setSearchResults(matchingListings);
+          }
+        } else {
+          setSearchResults(matchingListings);
+        }
+        
         setOutsideSearchResults(nonMatchingListings)
       }
       
@@ -3867,6 +4030,36 @@ useEffect(() => {
         })()}
       </div>
 
+      {/* Crop Compatibility - Show for crop farmers when compatibility data is available */}
+      {userRole === 'crop_farmer' && listing.cropCompatibility && listing.cropCompatibility.topCrops && listing.cropCompatibility.topCrops.length > 0 && (
+        <div style={{
+          padding: '10px 12px',
+          backgroundColor: '#f0f8f0',
+          borderRadius: '0 0 6px 6px',
+          border: '1px solid #4caf50',
+          borderTop: 'none',
+          fontSize: '13px',
+          color: '#2d5a27'
+        }}>
+          <div style={{ fontWeight: '600', marginBottom: '4px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Best for {listing.cropCompatibility.topCrops[0].name}
+          </div>
+          <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.4' }}>
+            {listing.cropCompatibility.topCrops[0].reason}
+          </div>
+          {listing.cropCompatibility.topCrops[0].score && (
+            <div style={{ 
+              marginTop: '4px', 
+              fontSize: '10px', 
+              color: '#4caf50',
+              fontWeight: '600'
+            }}>
+              {listing.cropCompatibility.topCrops[0].score.toFixed(1)}% Match
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Card Content */}
       <div className={styles.cardContent}>
         <div className={styles.cardHeader}>
@@ -3913,29 +4106,6 @@ useEffect(() => {
             </span>
           )}
         </div>
-        
-        {/* Top Compatible Crop - Show for crop farmers when compatibility data is available */}
-        {userRole === 'crop_farmer' && listing.cropCompatibility && listing.cropCompatibility.topCrops && listing.cropCompatibility.topCrops.length > 0 && (
-          <div style={{
-            marginTop: '10px',
-            padding: '8px 12px',
-            backgroundColor: '#f0f8f0',
-            borderRadius: '6px',
-            border: '1px solid #4caf50',
-            fontSize: '13px',
-            color: '#2d5a27'
-          }}>
-            <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-              Top Match:
-            </div>
-            <div style={{ fontWeight: '500' }}>
-              {listing.cropCompatibility.topCrops[0].name}
-            </div>
-            <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
-              {listing.cropCompatibility.topCrops[0].reason}
-            </div>
-          </div>
-        )}
         
         <div className={styles.cardActions}>
           {userRole === 'crop_farmer' ? (
@@ -4059,6 +4229,9 @@ useEffect(() => {
                         
                         // Apply crop-waste compatibility search
                         await applyCropWasteFilter(cropType)
+                        // Clear search query when using dropdown filter
+                        setSearchQuery('')
+                        setSearchInput('')
                         setLoading(false)
                       } else {
                         setSpecificCropsForType([])
@@ -4117,6 +4290,12 @@ useEffect(() => {
                       setSelectedCropType('')
                       setSelectedSpecificCrop('')
                       setSpecificCropsForType([])
+                      setSearchQuery('')
+                      setSearchInput('')
+                      const activeListings = listings.filter(listing => 
+                        listing.status !== 'sold' && listing.status !== 'deleted'
+                      )
+                      setFilteredListings(mergeCompatibilityData(activeListings))
                     }}
                   >
                     Clear Filters
@@ -4195,6 +4374,9 @@ useEffect(() => {
                       
                       // Apply crop-waste compatibility search
                       await applyCropWasteFilter(cropType)
+                      // Clear search query when using dropdown filter
+                      setSearchQuery('')
+                      setSearchInput('')
                       setLoading(false)
                     } else {
                       setSpecificCropsForType([])
@@ -4323,6 +4505,9 @@ useEffect(() => {
                     
                     // Apply crop-waste compatibility search
                     await applyCropWasteFilter(cropType)
+                    // Clear search query when using dropdown filter
+                    setSearchQuery('')
+                    setSearchInput('')
                     setLoading(false)
                   } else {
                     // Show all user's specific crops when no crop type is selected
@@ -4645,9 +4830,9 @@ useEffect(() => {
             )}
 
             {/* No Search Results Message */}
-            {searchResults.length === 0 && (
+            {searchQuery.trim() && searchResults.length === 0 && (
               <div className={styles.noSearchResults}>
-                <p>{userRole === 'livestock_owner' ? 'no listing found' : 'no livestock owner listings found'}</p>
+                <p>{userRole === 'livestock_owner' ? 'no listing found' : 'no listings found'}</p>
               </div>
             )}
           </>
@@ -4667,7 +4852,7 @@ useEffect(() => {
                   </>
                 ) : (
                   <>
-                    No livestock owner listings yet <br />
+                    No crop waste listings yet <br />
                     Check back later for available waste products
                   </>
                 )}

@@ -395,57 +395,61 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
 
   const measurementUnits = ['kg', 'ton', 'sack', 'bag', 'liter', 'cubic meter', 'pieces', 'bundle']
 
-  // Helper function to map livestock to waste types
-  const getLivestockWasteOptions = (livestockAnimals, specificAnimals = []) => {
-    const wasteMap = {
-      'cattle': 'Cattle Manure (Dumi ng Baka)',
-      'poultry': 'Poultry Waste (Dumi ng Manok)',
-      'swine': 'Swine Waste (Dumi ng Baboy)',
-      'goats': 'Goat Waste (Dumi ng Kambing)',
-      'sheep': 'Sheep Manure (Dumi ng Tupa)',
-      'rabbits': 'Rabbit Manure (Dumi ng Kuneho)',
-      // Mobile app IDs
-      'pigs': 'Swine Waste (Dumi ng Baboy)',
-      'chickens': 'Poultry Waste (Dumi ng Manok)',
-      'ducks': 'Poultry Waste (Dumi ng Pato)',
-      'buffalo': 'Cattle Manure (Dumi ng Baka)',
-      'carabao': 'Cattle Manure (Dumi ng Kalabaw)'
-    }
+  // Helper function to map specific livestock to waste types
+  const getLivestockWasteOptions = (specificAnimals = []) => {
+    console.log('🔍 Getting waste options for specific animals:', specificAnimals)
     
-    // Map for specific animals
+    // Map each specific animal to its waste type
     const specificWasteMap = {
-      'carabao': 'Carabao waste (Dumi ng Kalabaw)',
-      'horse': 'Horse waste (Dumi ng Kabayo)',
-      'donkey': 'Donkey waste (Dumi ng Asno)',
-      'bee': 'Bee waste (Dumi ng Bubuyog / Maya)',
-      'silkworm': 'Silkworm waste (Uod ng Seda)',
-      'ostrich': 'Ostrich waste (Dumi ng Ostrich)',
-      'camel': 'Camel waste (Dumi ng Kamelyo)'
+      // Cattle
+      'cow': 'Cow Manure (Dumi ng Baka)',
+      'dairy-cow': 'Dairy Cow Manure (Dumi ng Baka pang-gatas)',
+      'beef-cow': 'Beef Cow Manure (Dumi ng Baka pang-karne)',
+      // Poultry
+      'chicken': 'Chicken Manure (Dumi ng Manok)',
+      'layer-chicken': 'Layer Chicken Manure (Dumi ng Manok pang-itlog)',
+      'broiler-chicken': 'Broiler Chicken Manure (Dumi ng Manok pang-karne)',
+      'duck': 'Duck Waste (Dumi ng Pato)',
+      'muscovy-duck': 'Muscovy Duck Waste (Dumi ng Pato Muscovy)',
+      'turkey': 'Turkey Waste (Dumi ng Pabo)',
+      'quail': 'Quail Waste (Dumi ng Pugo)',
+      'goose': 'Goose Waste (Dumi ng Gansa)',
+      // Swine
+      'pig': 'Pig Manure (Dumi ng Baboy)',
+      'native-pig': 'Native Pig Manure (Dumi ng Baboy katutubo)',
+      'crossbred-pig': 'Crossbred Pig Manure (Dumi ng Baboy halong lahi)',
+      // Goats
+      'goat': 'Goat Manure (Dumi ng Kambing)',
+      'native-goat': 'Native Goat Manure (Dumi ng Kambing katutubo)',
+      'boer-goat': 'Boer Goat Manure (Dumi ng Kambing Boer)',
+      // Sheep
+      'sheep': 'Sheep Manure (Dumi ng Tupa)',
+      'native-sheep': 'Native Sheep Manure (Dumi ng Tupa katutubo)',
+      // Rabbits
+      'rabbit': 'Rabbit Manure (Dumi ng Kuneho)',
+      'native-rabbit': 'Native Rabbit Manure (Dumi ng Kuneho katutubo)',
+      // Others
+      'carabao': 'Carabao Manure (Dumi ng Kalabaw)',
+      'horse': 'Horse Manure (Dumi ng Kabayo)',
+      'donkey': 'Donkey Manure (Dumi ng Asno)',
+      'bee': 'Bee Waste (Dumi ng Bubuyog / Maya)',
+      'silkworm': 'Silkworm Waste (Uod ng Seda)',
+      'ostrich': 'Ostrich Waste (Dumi ng Ostrich)',
+      'camel': 'Camel Waste (Dumi ng Kamelyo)'
     }
     
-    // Check if user selected "others" to include specific animal options
-    const hasOthers = livestockAnimals.includes('others')
-    
+    // Get unique waste types from specific animals
     let wasteTypes = []
-    
-    // Add mapped waste types for regular animals
-    livestockAnimals.forEach(animal => {
-      if (animal !== 'others' && wasteMap[animal]) {
-        wasteTypes.push(wasteMap[animal])
+    specificAnimals.forEach(animalId => {
+      if (specificWasteMap[animalId]) {
+        const wasteType = specificWasteMap[animalId]
+        if (!wasteTypes.includes(wasteType)) {
+          wasteTypes.push(wasteType)
+        }
       }
     })
     
-    // Add specific animal options if "others" was selected
-    if (hasOthers && specificAnimals.length > 0) {
-      specificAnimals.forEach(animalId => {
-        if (specificWasteMap[animalId]) {
-          wasteTypes.push(specificWasteMap[animalId])
-        }
-      })
-    }
-    
-    // Remove duplicates and return
-    return [...new Set(wasteTypes)]
+    return wasteTypes
   }
 
   // Helper function to get waste description
@@ -701,12 +705,38 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     return true // Step 4 doesn't need Next button
   }
 
-  const openAddModal = () => {
+  const openAddModal = async () => {
     console.log('📝 Opening add listing modal for user:', { 
       uid: user?.uid, 
       role: userRole, 
       email: user?.email 
     })
+    
+    // Clear any cached validation data
+    setTextValidationResult(null)
+    setIsTextVerified(false)
+    setHasAttemptedTextVerification(false)
+    
+    // Refresh user profile data to get latest animal selections
+    if (user && userRole === 'livestock_owner') {
+      try {
+        console.log('🔄 Refreshing user profile data before opening modal...')
+        const userDoc = await getDoc(doc(db, 'users', user.uid))
+        if (userDoc.exists()) {
+          const userData = userDoc.data()
+          if (userData.livestock?.animals) {
+            setUserLivestockAnimals(userData.livestock.animals)
+            console.log('✅ Refreshed livestock animals:', userData.livestock.animals)
+          }
+          if (userData.livestock?.specificAnimals) {
+            setUserSpecificAnimals(userData.livestock.specificAnimals)
+            console.log('✅ Refreshed specific animals:', userData.livestock.specificAnimals)
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error refreshing user profile:', error)
+      }
+    }
     
     // Reset form data
     setFormData({
@@ -725,8 +755,8 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     setOtherAnimalType('')
     
     // Auto-fill for livestock owners with single animal type
-    if (userRole === 'livestock_owner' && userLivestockAnimals.length > 0) {
-      const wasteOptions = getLivestockWasteOptions(userLivestockAnimals, userSpecificAnimals)
+    if (userRole === 'livestock_owner' && userSpecificAnimals.length > 0) {
+      const wasteOptions = getLivestockWasteOptions(userSpecificAnimals)
       if (wasteOptions.length === 1) {
         // Auto-fill if only one waste type
         setSelectedWasteType(wasteOptions[0])
@@ -965,6 +995,9 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     console.log('🚀 saveListing called with formData:', formData)
     console.log('👤 User data:', { uid: user?.uid, email: user?.email, role: userRole })
     console.log('🔥 Database initialized:', !!db)
+    console.log('🐐 User livestock animals:', userLivestockAnimals)
+    console.log('🐐 User specific animals:', userSpecificAnimals)
+    console.log('📝 Selected waste type:', selectedWasteType)
 
     // Validate all required fields first
     if (!formData.name.trim()) {
@@ -2193,6 +2226,35 @@ useEffect(() => {
     
     enrichListingsWithCompatibility()
   }, [user, userRole, userSpecificCrops, listings])
+  
+  // Refresh user data when component mounts or when livestockUpdated event fires
+  useEffect(() => {
+    const refreshUserData = async () => {
+      if (user && userRole === 'livestock_owner') {
+        try {
+          console.log('🔄 Refreshing livestock data...')
+          const userDoc = await getDoc(doc(db, 'users', user.uid))
+          if (userDoc.exists()) {
+            const userData = userDoc.data()
+            if (userData.livestock?.specificAnimals) {
+              setUserSpecificAnimals(userData.livestock.specificAnimals)
+              console.log('✅ Refreshed specific animals:', userData.livestock.specificAnimals)
+            }
+          }
+        } catch (error) {
+          console.error('❌ Error refreshing livestock data:', error)
+        }
+      }
+    }
+    
+    const handleLivestockUpdate = refreshUserData
+    window.addEventListener('livestockUpdated', handleLivestockUpdate)
+    
+    // Initial refresh
+    refreshUserData()
+    
+    return () => window.removeEventListener('livestockUpdated', handleLivestockUpdate)
+  }, [user, userRole])
 
   // Function to merge compatibility data with listings
   const mergeCompatibilityData = (listingsToMerge, filterByCompatibility = false) => {
@@ -2415,7 +2477,7 @@ useEffect(() => {
         const topCrops = item.cropScores.map(crop => ({
           id: crop.cropId,
           name: crop.cropName,
-          reason: `AI analysis shows ${crop.score.toFixed(1)}% compatibility based on waste composition and crop requirements`,
+          reason: crop.reason || `AI analysis shows ${crop.score.toFixed(1)}% compatibility based on waste composition and crop requirements`,
           score: crop.score
         }))
         
@@ -3478,6 +3540,11 @@ useEffect(() => {
 
   const clearSearch = () => {
     setSearchQuery('')
+    setSearchInput('')
+    setSelectedCropType('')
+    setSelectedSpecificCrop('')
+    setSpecificCropsForType([])
+    
     const activeListings = listings.filter(listing => 
       listing.status !== 'sold' && listing.status !== 'deleted'
     )
@@ -3499,6 +3566,12 @@ useEffect(() => {
       listing.status !== 'sold' && listing.status !== 'deleted'
     )
     
+    // Don't overwrite filteredListings if dropdown filters are active
+    if (userRole === 'crop_farmer' && (selectedCropType || selectedSpecificCrop)) {
+      console.log('🔍 Dropdown filter active, skipping search effect')
+      return
+    }
+    
     if (userRole === 'crop_farmer') {
       // For crop farmers, show all listings (compatibility data may still be loading)
       setFilteredListings(mergeCompatibilityData(activeListings))
@@ -3506,9 +3579,6 @@ useEffect(() => {
     }
 
     if (!searchQuery.trim()) {
-      setFilteredListings(activeListings)
-    } else {
-      // IMPORTANT: Use searchResults directly when search is active to preserve semanticScore
       if (searchResults.length > 0) {
         console.log('🎯 Using searchResults with semanticScore:', searchResults.length, 'listings')
         setFilteredListings(searchResults)
@@ -3524,7 +3594,7 @@ useEffect(() => {
         setFilteredListings(filtered)
       }
     }
-  }, [searchQuery, listings, userRole]) // Remove searchResults to prevent overwriting semantic search
+  }, [searchQuery, listings, userRole, selectedCropType, selectedSpecificCrop]) // Add filter states to dependencies
 
   // Calculate pagination values for main listings
   // Use searchResults during search, otherwise use filteredListings (recommendations)
@@ -4577,7 +4647,7 @@ useEffect(() => {
             {/* No Search Results Message */}
             {searchResults.length === 0 && (
               <div className={styles.noSearchResults}>
-                <p>no listing found</p>
+                <p>{userRole === 'livestock_owner' ? 'no listing found' : 'no livestock owner listings found'}</p>
               </div>
             )}
           </>
@@ -4590,8 +4660,17 @@ useEffect(() => {
               </div>
               <h3>No listings yet</h3>
               <p className={styles.emptyStateDescription}>
-                Start sharing your livestock <br />
-                waste with the AgriLink community
+                {userRole === 'livestock_owner' ? (
+                  <>
+                    Start sharing your livestock <br />
+                    waste with the AgriLink community
+                  </>
+                ) : (
+                  <>
+                    No livestock owner listings yet <br />
+                    Check back later for available waste products
+                  </>
+                )}
               </p>
               <button 
                 className={styles.addListingButton}
@@ -4741,12 +4820,15 @@ useEffect(() => {
                     </div>
                   )}
                   
-                  {userRole === 'livestock_owner' && userLivestockAnimals.length > 0 ? (
+                  {userRole === 'livestock_owner' && userSpecificAnimals.length > 0 ? (
                     // Show dropdown for livestock owners
                     <>
+                      {console.log('🔍 Rendering livestock dropdown:')}
+                      {console.log('- userSpecificAnimals:', userSpecificAnimals)}
+                      {console.log('- waste options:', getLivestockWasteOptions(userSpecificAnimals))}
                       <div className={styles.formGroup} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '40px' }}>
                         <label style={{ margin: 0, minWidth: '120px' }}>Listing Title</label>
-                        {getLivestockWasteOptions(userLivestockAnimals, userSpecificAnimals).length > 1 ? (
+                        {getLivestockWasteOptions(userSpecificAnimals).length > 1 ? (
                           <select
                             className={styles.input}
                             value={selectedWasteType}
@@ -4765,11 +4847,14 @@ useEffect(() => {
                             style={{ flex: 1 }}
                           >
                             <option value="">Select waste type</option>
-                            {getLivestockWasteOptions(userLivestockAnimals, userSpecificAnimals).map((wasteType, index) => (
-                              <option key={index} value={wasteType}>
-                                {wasteType}
-                              </option>
-                            ))}
+                            {getLivestockWasteOptions(userSpecificAnimals).map((wasteType, index) => {
+                              console.log(`📋 Rendering waste option ${index}:`, wasteType)
+                              return (
+                                <option key={index} value={wasteType}>
+                                  {wasteType}
+                                </option>
+                              )
+                            })}
                           </select>
                         ) : (
                           // Single waste type - show as readonly input

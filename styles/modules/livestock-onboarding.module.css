@@ -92,6 +92,9 @@
 .step2Container .content {
   height: 626px !important;
   overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .step2Content {
@@ -454,7 +457,7 @@
 }
 
 .scrollableContainer {
-  max-height: 350px !important;
+  max-height: 250px !important;
   overflow-y: auto;
   padding-right: 10px;
   width: 100%;

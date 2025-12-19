@@ -23,7 +23,7 @@ export default function OnboardingComplete() {
         
         // Get user data from Firestore
         try {
-          const userDocRef = doc(db, 'Users', currentUser.uid)
+          const userDocRef = doc(db, 'users', currentUser.uid)
           const userDoc = await getDoc(userDocRef)
           
           if (userDoc.exists()) {

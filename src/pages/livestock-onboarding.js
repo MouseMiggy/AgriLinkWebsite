@@ -3,7 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { auth, db } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
-import { doc, updateDoc, getDoc } from 'firebase/firestore'
+import { doc, updateDoc, getDoc, setDoc } from 'firebase/firestore'
 import StepIndicator from '../components/StepIndicator'
 import styles from '../../styles/modules/livestock-onboarding.module.css'
 
@@ -175,9 +175,9 @@ export default function LivestockOnboarding() {
     setLoading(true)
 
     try {
-      // Update user profile with livestock information matching mobile app structure
-      const userDocRef = doc(db, 'Users', user.uid)
-      await updateDoc(userDocRef, {
+      // Create/update user profile with livestock information matching mobile app structure
+      const userDocRef = doc(db, 'users', user.uid)
+      await setDoc(userDocRef, {
         role: 'livestock_owner',
         livestock: {
           animals: selectedAnimals,
@@ -189,7 +189,7 @@ export default function LivestockOnboarding() {
         onboardingCompleted: true,
         onboardingCompletedAt: new Date(),
         updatedAt: new Date()
-      })
+      }, { merge: true })
 
       // Navigate to completion screen
       router.push('/onboarding-complete')
@@ -296,7 +296,15 @@ export default function LivestockOnboarding() {
                     ))}
                   </div>
                   
-                  <button className={styles.nextButton} onClick={handleNext}>
+                  <button 
+                    className={styles.nextButton} 
+                    onClick={handleNext}
+                    disabled={selectedAnimals.length === 0}
+                    style={{
+                      opacity: selectedAnimals.length === 0 ? 0.5 : 1,
+                      cursor: selectedAnimals.length === 0 ? 'not-allowed' : 'pointer'
+                    }}
+                  >
                     Next
                   </button>
                 </div>
@@ -360,7 +368,15 @@ export default function LivestockOnboarding() {
                     })}
                   </div>
                   
-                  <button className={styles.nextButton} onClick={handleNext}>
+                  <button 
+                    className={styles.nextButton} 
+                    onClick={handleNext}
+                    disabled={selectedSpecificAnimals.length === 0}
+                    style={{
+                      opacity: selectedSpecificAnimals.length === 0 ? 0.5 : 1,
+                      cursor: selectedSpecificAnimals.length === 0 ? 'not-allowed' : 'pointer'
+                    }}
+                  >
                     Done
                   </button>
                 </div>

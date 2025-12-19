@@ -26,7 +26,7 @@ const specificAnimals = {
     { id: 'native-pig', name: 'Native pig', tagalog: 'Baboy katutubo' },
     { id: 'crossbred-pig', name: 'Crossbred pig', tagalog: 'Baboy halong lahi' }
   ],
-  goats: [
+  goat: [
     { id: 'goat', name: 'Goat', tagalog: 'Kambing' },
     { id: 'native-goat', name: 'Native goat', tagalog: 'Kambing katutubo' },
     { id: 'boer-goat', name: 'Boer goat', tagalog: 'Kambing Boer' }
@@ -35,7 +35,7 @@ const specificAnimals = {
     { id: 'sheep', name: 'Sheep', tagalog: 'Tupa' },
     { id: 'native-sheep', name: 'Native sheep', tagalog: 'Tupa katutubo' }
   ],
-  rabbits: [
+  rabbit: [
     { id: 'rabbit', name: 'Rabbit', tagalog: 'Kuneho' },
     { id: 'native-rabbit', name: 'Native rabbit', tagalog: 'Kuneho katutubo' }
   ],
@@ -404,6 +404,8 @@ export default function UserProfile() {
   const [showLivestockPopup, setShowLivestockPopup] = useState(false)
   const [editSpecificLivestock, setEditSpecificLivestock] = useState([])
   const [editSpecificLivestockByType, setEditSpecificLivestockByType] = useState({})
+  const [editLivestockModalLoading, setEditLivestockModalLoading] = useState(false)
+  const [editLivestockModalLoadingMessage, setEditLivestockModalLoadingMessage] = useState('')
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
@@ -441,8 +443,8 @@ export default function UserProfile() {
   const loadUserProfile = async (userId) => {
     try {
       console.log('🔄 Loading user profile for userId:', userId)
-      // Use 'Users' collection (capital U) - matching dashboard.js
-      const userDoc = await getDoc(doc(db, 'Users', userId))
+      // Use 'users' collection (lowercase) - matching listings.js
+      const userDoc = await getDoc(doc(db, 'users', userId))
       if (userDoc.exists()) {
         const userData = userDoc.data()
         console.log('📊 User profile loaded from Firestore:', userData)
@@ -479,9 +481,9 @@ export default function UserProfile() {
       'cattle': { icon: '/assets/images/cattle.png', name: 'Cattle' },
       'poultry': { icon: '/assets/images/chicken.png', name: 'Poultry' },
       'swine': { icon: '/assets/images/swine.png', name: 'Swine' },
-      'goats': { icon: '/assets/images/goat.png', name: 'Goats' },
+      'goat': { icon: '/assets/images/goat.png', name: 'Goats' },
       'sheep': { icon: '/assets/images/sheep.png', name: 'Sheep' },
-      'rabbits': { icon: '/assets/images/rabbit.png', name: 'Rabbits' },
+      'rabbit': { icon: '/assets/images/rabbit.png', name: 'Rabbits' },
       'others': { icon: '/assets/images/livestock.png', name: 'Others' }
     }
     return animalMap[animalId] || { icon: '/assets/images/livestock.png', name: animalId }
@@ -489,7 +491,36 @@ export default function UserProfile() {
 
   // Helper function to get specific animal display information
   const getSpecificAnimalDisplayInfo = (animalId) => {
+    // All specific animals from all categories
     const animalMap = {
+      // Cattle
+      'cow': { icon: '/assets/images/cattle.png', name: 'Cow' },
+      'dairy-cow': { icon: '/assets/images/cattle.png', name: 'Dairy Cow' },
+      'beef-cow': { icon: '/assets/images/cattle.png', name: 'Beef Cow' },
+      // Poultry
+      'chicken': { icon: '/assets/images/chicken.png', name: 'Chicken' },
+      'layer-chicken': { icon: '/assets/images/chicken.png', name: 'Layer Chicken' },
+      'broiler-chicken': { icon: '/assets/images/chicken.png', name: 'Broiler Chicken' },
+      'duck': { icon: '/assets/images/duck.png', name: 'Duck' },
+      'muscovy-duck': { icon: '/assets/images/duck.png', name: 'Muscovy Duck' },
+      'turkey': { icon: '/assets/images/turkey.png', name: 'Turkey' },
+      'quail': { icon: '/assets/images/quail.png', name: 'Quail' },
+      'goose': { icon: '/assets/images/goose.png', name: 'Goose' },
+      // Swine
+      'pig': { icon: '/assets/images/swine.png', name: 'Pig' },
+      'native-pig': { icon: '/assets/images/swine.png', name: 'Native Pig' },
+      'crossbred-pig': { icon: '/assets/images/swine.png', name: 'Crossbred Pig' },
+      // Goats
+      'goat': { icon: '/assets/images/goat.png', name: 'Goat' },
+      'native-goat': { icon: '/assets/images/goat.png', name: 'Native Goat' },
+      'boer-goat': { icon: '/assets/images/goat.png', name: 'Boer Goat' },
+      // Sheep
+      'sheep': { icon: '/assets/images/sheep.png', name: 'Sheep' },
+      'native-sheep': { icon: '/assets/images/sheep.png', name: 'Native Sheep' },
+      // Rabbits
+      'rabbit': { icon: '/assets/images/rabbit.png', name: 'Rabbit' },
+      'native-rabbit': { icon: '/assets/images/rabbit.png', name: 'Native Rabbit' },
+      // Others
       'carabao': { icon: '/assets/images/carabao.png', name: 'Carabao' },
       'horse': { icon: '/assets/images/horse.png', name: 'Horse' },
       'donkey': { icon: '/assets/images/donkey.png', name: 'Donkey' },
@@ -802,28 +833,65 @@ export default function UserProfile() {
 
   // Open livestock editing modal
   const openEditLivestockModal = () => {
-    // Initialize livestock from user profile
-    setEditLivestock(userProfile?.livestock?.animals || [])
+    console.log('🔧 Opening livestock edit modal')
+    console.log('📊 Profile data:', userProfile?.livestock)
+    
+    // Initialize livestock from user profile and normalize old IDs
+    let livestockAnimals = userProfile?.livestock?.animals || []
+    // Normalize old plural IDs to singular
+    livestockAnimals = livestockAnimals.map(animal => {
+      if (animal === 'goats') return 'goat'
+      if (animal === 'rabbits') return 'rabbit'
+      return animal
+    })
+    setEditLivestock(livestockAnimals)
     
     // Initialize specific animals by type
     const specificByType = {}
     const allSpecificAnimals = userProfile?.livestock?.specificAnimals || []
     
+    console.log('🐐 All specific animals from profile:', allSpecificAnimals)
+    console.log('📝 Available specific animals data structure:', Object.keys(specificAnimals))
+    
     // Group specific animals by their type
     Object.keys(specificAnimals).forEach(type => {
       if (type !== 'others') {
-        specificByType[type] = allSpecificAnimals.filter(id => 
-          specificAnimals[type].some(animal => animal.id === id)
-        )
+        const typeAnimals = allSpecificAnimals.filter(id => {
+          const found = specificAnimals[type].some(animal => animal.id === id)
+          if (found) {
+            console.log(`✅ Found ${id} in category ${type}`)
+          }
+          return found
+        })
+        if (typeAnimals.length > 0) {
+          specificByType[type] = typeAnimals
+          console.log(`📦 ${type}:`, typeAnimals)
+        }
       }
     })
     
+    // Additional debugging for rabbits
+    console.log('🐰 Checking for rabbit-specific animals:')
+    console.log('specificAnimals.rabbit:', specificAnimals.rabbit)
+    console.log('All specific animals containing "rabbit":', allSpecificAnimals.filter(id => id.includes('rabbit')))
+    console.log('Rabbit category filter result:', allSpecificAnimals.filter(id => specificAnimals.rabbit?.some(animal => animal.id === id)))
+    
     // Handle "others" separately
-    const othersAnimals = allSpecificAnimals.filter(id => 
-      specificAnimals.others.some(animal => animal.id === id)
-    )
+    const othersAnimals = allSpecificAnimals.filter(id => {
+      const found = specificAnimals.others.some(animal => animal.id === id)
+      if (found) {
+        console.log(`✅ Found ${id} in others category`)
+      }
+      return found
+    })
     setEditSpecificLivestock(othersAnimals)
     setEditSpecificLivestockByType(specificByType)
+    
+    console.log('🔧 Final edit modal state:', {
+      livestock: livestockAnimals,
+      specificByType: specificByType,
+      others: othersAnimals
+    })
     
     setShowLivestockPopup(true)
     // Prevent background scrolling
@@ -958,7 +1026,7 @@ export default function UserProfile() {
       console.log('Edit crops:', editCrops)
       console.log('Edit specific crops:', editSpecificCrops)
       
-      const userRef = doc(db, 'Users', user.uid)
+      const userRef = doc(db, 'users', user.uid)
       
       // Use updateDoc for better control over nested fields
       const updateData = {
@@ -1023,6 +1091,11 @@ export default function UserProfile() {
     }
 
     // Validate that each selected livestock type has at least one specific animal selected
+    console.log('🔍 Validating livestock selection:')
+    console.log('editLivestock:', editLivestock)
+    console.log('editSpecificLivestockByType:', editSpecificLivestockByType)
+    console.log('editSpecificLivestock:', editSpecificLivestock)
+    
     for (const animalType of editLivestock) {
       if (animalType === 'others') {
         if (editSpecificLivestock.length === 0) {
@@ -1031,8 +1104,18 @@ export default function UserProfile() {
         }
       } else {
         const specificAnimalsForType = editSpecificLivestockByType[animalType] || []
+        console.log(`📝 Checking ${animalType}:`, specificAnimalsForType)
         if (specificAnimalsForType.length === 0) {
-          alert(`Please select at least one specific ${animalType} type`)
+          // Get the display name for the animal type
+          const animalNames = {
+            'cattle': 'cattle',
+            'poultry': 'poultry',
+            'swine': 'swine',
+            'goat': 'goat',
+            'sheep': 'sheep',
+            'rabbit': 'rabbit'
+          }
+          alert(`Please select at least one specific ${animalNames[animalType] || animalType} type`)
           return
         }
       }
@@ -1053,52 +1136,61 @@ export default function UserProfile() {
         allSpecificAnimals.push(...animals)
       })
       
-      const userRef = doc(db, 'Users', user.uid)
+      console.log('🔍 Debug save:')
+      console.log('- editSpecificLivestock:', editSpecificLivestock)
+      console.log('- editSpecificLivestockByType:', editSpecificLivestockByType)
+      console.log('- Combined allSpecificAnimals:', allSpecificAnimals)
+      console.log('- Length of allSpecificAnimals:', allSpecificAnimals.length)
+      
+      const userRef = doc(db, 'users', user.uid)
       
       // Use updateDoc for better control over nested fields
       const updateData = {
         updatedAt: new Date(),
         'livestock.animals': editLivestock,
-        'livestock.specificAnimals': allSpecificAnimals
+        'livestock.specificAnimals': allSpecificAnimals,
+        'onboarding.livestockTypes': editLivestock,
+        'onboarding.livestockTypesCompleted': true,
+        'onboarding.livestockOnboardingCompleted': true
       }
-
       console.log('📝 Update data:', updateData)
-      
       await updateDoc(userRef, updateData)
-      console.log('✅ Livestock changes saved successfully!')
-
-      // Update local state
-      setUserProfile(prev => {
-        const updatedProfile = {
-          ...prev,
-          livestock: { 
-            ...prev.livestock,
-            animals: editLivestock,
-            specificAnimals: allSpecificAnimals
-          }
-        }
-        console.log('📊 Updated local profile state:', updatedProfile)
-        return updatedProfile
-      })
-
-      // Show success message
-      setEditLivestockModalLoading(false)
-      setEditLivestockModalLoadingMessage('Livestock updated successfully!')
       
-      // Close modal after a short delay
-      setTimeout(() => {
-        closeEditLivestockModal()
-        setEditLivestockModalLoadingMessage('')
-      }, 1500)
+      // Update local state
+      const updatedProfile = {
+        ...userProfile,
+        livestock: {
+          animals: editLivestock,
+          specificAnimals: allSpecificAnimals
+        },
+        onboarding: {
+          ...userProfile.onboarding,
+          livestockTypes: editLivestock,
+          livestockTypesCompleted: true,
+          livestockOnboardingCompleted: true
+        }
+      }
+      setUserProfile(updatedProfile)
+      
+      // Clear search query
+      setSearchQuery('')
+      
+      // Show success message
+      showSuccessPopup('Livestock animals updated successfully!')
+      
+      // Notify other components that livestock has been updated
+      window.dispatchEvent(new Event('livestockUpdated'))
+      
+      // Close modal
+      closeEditLivestockModal()
     } catch (error) {
       console.error('❌ Error saving livestock changes:', error)
-      alert('Failed to save livestock changes. Please try again.')
+      showErrorPopup('Failed to save livestock changes. Please try again.')
+    } finally {
       setEditLivestockModalLoading(false)
       setEditLivestockModalLoadingMessage('')
     }
   }
-
-  // Save Profile Changes
   const saveProfileChanges = async () => {
     setShowConfirmModal(false)
     setEditProfileLoading(true)
@@ -1115,7 +1207,7 @@ export default function UserProfile() {
       }
 
       // Update user document in Firebase (use setDoc with merge to create if doesn't exist)
-      const userRef = doc(db, 'Users', user.uid)
+      const userRef = doc(db, 'users', user.uid)
       const updateData = {
         firstName: editFirstName.trim(),
         lastName: editLastName.trim(),
@@ -1343,30 +1435,15 @@ export default function UserProfile() {
                   )
                   })()
                 ) : (
-                  userProfile.livestock?.animals && userProfile.livestock.animals.length > 0 ? (
+                  userProfile.livestock?.specificAnimals && userProfile.livestock.specificAnimals.length > 0 ? (
                     <div className={styles.itemsGrid}>
-                      {userProfile.livestock.animals.map((animalId, index) => {
-                        // If it's "others", show the specific animals instead
-                        if (animalId === 'others') {
-                          const specificAnimals = userProfile.livestock?.specificAnimals || []
-                          return specificAnimals.map((specificId, idx) => {
-                            const specificAnimalInfo = getSpecificAnimalDisplayInfo(specificId);
-                            return (
-                              <div key={`others-${idx}`} className={styles.itemChip}>
-                                <img src={specificAnimalInfo.icon} alt={specificAnimalInfo.name} className={styles.itemIconImage} />
-                                <span className={styles.itemName}>{specificAnimalInfo.name}</span>
-                              </div>
-                            );
-                          });
-                        } else {
-                          const animalInfo = getAnimalDisplayInfo(animalId);
-                          return (
-                            <div key={index} className={styles.itemChip}>
-                              <img src={animalInfo.icon} alt={animalInfo.name} className={styles.itemIconImage} />
-                              <span className={styles.itemName}>{animalInfo.name}</span>
-                            </div>
-                          );
-                        }
+                      {userProfile.livestock.specificAnimals.map((animalId, index) => {
+                        const specificAnimalInfo = getSpecificAnimalDisplayInfo(animalId);
+                        return (
+                          <div key={index} className={styles.itemChip}>
+                            <span className={styles.itemName}>{specificAnimalInfo.name}</span>
+                          </div>
+                        );
                       })}
                     </div>
                   ) : (
@@ -2055,9 +2132,9 @@ export default function UserProfile() {
                     { id: 'cattle', name: 'Cattle', icon: '/assets/images/cattle.png' },
                     { id: 'poultry', name: 'Poultry', icon: '/assets/images/chicken.png' },
                     { id: 'swine', name: 'Swine', icon: '/assets/images/swine.png' },
-                    { id: 'goats', name: 'Goats', icon: '/assets/images/goat.png' },
+                    { id: 'goat', name: 'Goats', icon: '/assets/images/goat.png' },
                     { id: 'sheep', name: 'Sheep', icon: '/assets/images/sheep.png' },
-                    { id: 'rabbits', name: 'Rabbits', icon: '/assets/images/rabbit.png' },
+                    { id: 'rabbit', name: 'Rabbits', icon: '/assets/images/rabbit.png' },
                     { id: 'others', name: 'Others', icon: '/assets/images/livestock.png' }
                   ].map(animal => (
                     <button
@@ -2065,18 +2142,28 @@ export default function UserProfile() {
                       type="button"
                       className={`${styles.selectionButton} ${editLivestock.includes(animal.id) ? styles.selected : ''}`}
                       onClick={() => {
+                        const isCurrentlySelected = editLivestock.includes(animal.id)
                         setEditLivestock(prev => 
                           prev.includes(animal.id) 
                             ? prev.filter(id => id !== animal.id)
                             : [...prev, animal.id]
                         )
-                        // Clear specific livestock when type is removed
-                        if (!editLivestock.includes(animal.id)) {
-                          setEditSpecificLivestockByType(prev => {
-                            const newState = { ...prev }
-                            delete newState[animal.id]
-                            return newState
-                          })
+                        // Clear specific livestock when type is removed (check old state)
+                        if (isCurrentlySelected) {
+                          console.log(`🗑️ Unselecting animal type: ${animal.id}`)
+                          if (animal.id === 'others') {
+                            console.log('Clearing all "others" specific animals')
+                            setEditSpecificLivestock([])
+                          } else {
+                            console.log(`Clearing specific animals for type: ${animal.id}`)
+                            setEditSpecificLivestockByType(prev => {
+                              const newState = { ...prev }
+                              console.log(`Before delete, ${animal.id} had:`, newState[animal.id])
+                              delete newState[animal.id]
+                              console.log('After delete:', newState)
+                              return newState
+                            })
+                          }
                         }
                       }}
                     >

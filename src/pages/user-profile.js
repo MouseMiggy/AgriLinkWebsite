@@ -61,10 +61,10 @@ const cropTypes = [
   { id: 'corn', name: 'Corn', icon: '/assets/images/corn.png', description: 'Corn and maize varieties' },
   { id: 'vegetables', name: 'Vegetables', icon: '/assets/images/lettuce.png', description: 'Leafy and fruit vegetables' },
   { id: 'fruits', name: 'Fruits', icon: '/assets/images/fruits.png', description: 'Tropical and seasonal fruits' },
-  { id: 'rootCrops', name: 'Root Crops', icon: '/assets/images/rootcrop.png', description: 'Underground crops' },
+  { id: 'root_crops', name: 'Root Crops', icon: '/assets/images/rootcrop.png', description: 'Underground crops' },
   { id: 'legumes', name: 'Legumes', icon: '/assets/images/other.png', description: 'Beans and peas' },
-  { id: 'spices', name: 'Herbs & Spices', icon: '/assets/images/other.png', description: 'Spices, seasonings, and culinary herbs' },
-  { id: 'industrial', name: 'Industrial Crops', icon: '/assets/images/sugarcane.png', description: 'Commercial and industrial crops' },
+  { id: 'herbs_spices', name: 'Herbs & Spices', icon: '/assets/images/other.png', description: 'Spices, seasonings, and culinary herbs' },
+  { id: 'industrial_crops', name: 'Industrial Crops', icon: '/assets/images/sugarcane.png', description: 'Commercial and industrial crops' },
   { id: 'mushrooms', name: 'Mushrooms', icon: '/assets/images/other.png', description: 'Edible fungi varieties' }
 ]
 
@@ -214,7 +214,7 @@ const specificCrops = {
     { id: 'blueberry', name: 'Blueberry', tagalog: 'Blueberry' },
     { id: 'grapes', name: 'Grapes', tagalog: 'Ubas' }
   ],
-  rootCrops: [
+  root_crops: [
     { id: 'sweet-potato-root', name: 'Sweet potato', tagalog: 'Kamote' },
     { id: 'cassava-root', name: 'Cassava', tagalog: 'Kamoteng kahoy' },
     { id: 'taro-root', name: 'Taro', tagalog: 'Gabi' },
@@ -330,7 +330,7 @@ const specificCrops = {
     { id: 'banaba', name: 'Banaba', tagalog: 'Banaba' },
     { id: 'bitter-melon-leaves', name: 'Bitter melon leaves', tagalog: 'Ampalaya leaves' }
   ],
-  industrial: [
+  industrial_crops: [
     { id: 'tobacco', name: 'Tobacco', tagalog: 'Tabako' },
     { id: 'rubber', name: 'Rubber', tagalog: 'Goma' },
     { id: 'abaca', name: 'Abaca', tagalog: 'Abaka' },
@@ -443,21 +443,36 @@ export default function UserProfile() {
   const loadUserProfile = async (userId) => {
     try {
       console.log('🔄 Loading user profile for userId:', userId)
-      // Use 'users' collection (lowercase) - matching listings.js
-      const userDoc = await getDoc(doc(db, 'users', userId))
+      console.log('🔍 Checking collection: users (lowercase)')
+      
+      // Try lowercase 'users' first
+      let userDoc = await getDoc(doc(db, 'Users', userId))
+      
+      if (!userDoc.exists()) {
+        console.log('⚠️ Not found in "users", trying "Users" (uppercase)...')
+        userDoc = await getDoc(doc(db, 'Users', userId))
+      }
+      
       if (userDoc.exists()) {
         const userData = userDoc.data()
-        console.log('📊 User profile loaded from Firestore:', userData)
+        console.log('✅ User profile found!')
+        console.log('📊 Full userData:', userData)
+        console.log('👤 userData.role:', userData.role)
+        console.log('👤 userData.userType:', userData.userType)
+        console.log('👤 userData.accountType:', userData.accountType)
         console.log('🌱 userData.onboarding?.specificCrops:', userData.onboarding?.specificCrops)
         console.log('🌾 userData.cropFarmer?.specificCrops:', userData.cropFarmer?.specificCrops)
         console.log('📦 userData.cropFarmer?.cropType:', userData.cropFarmer?.cropType)
         console.log('📦 userData.onboarding?.cropTypes:', userData.onboarding?.cropTypes)
+        console.log('🐄 userData.livestock?.animals:', userData.livestock?.animals)
         setUserProfile(userData)
       } else {
-        console.log('❌ User document not found')
+        console.log('❌ User document not found in either "users" or "Users" collection')
+        console.log('💡 This user may need to complete onboarding first')
+        console.log('💡 Or the account was created but profile was never set up')
       }
     } catch (error) {
-      console.error('Error loading user profile:', error)
+      console.error('❌ Error loading user profile:', error)
     }
   }
 
@@ -851,13 +866,24 @@ export default function UserProfile() {
     const allSpecificAnimals = userProfile?.livestock?.specificAnimals || []
     
     console.log('🐐 All specific animals from profile:', allSpecificAnimals)
+    console.log('📝 Type of allSpecificAnimals:', typeof allSpecificAnimals, Array.isArray(allSpecificAnimals))
     console.log('📝 Available specific animals data structure:', Object.keys(specificAnimals))
     
     // Group specific animals by their type
+    // Handle both array and object formats for allSpecificAnimals
+    const specificAnimalsArray = Array.isArray(allSpecificAnimals) 
+      ? allSpecificAnimals 
+      : Object.values(allSpecificAnimals).flat()
+    
     Object.keys(specificAnimals).forEach(type => {
       if (type !== 'others') {
-        const typeAnimals = allSpecificAnimals.filter(id => {
-          const found = specificAnimals[type].some(animal => animal.id === id)
+        const typeAnimals = specificAnimalsArray.filter(id => {
+          // specificAnimals[type] is an array of animal names (strings)
+          const found = specificAnimals[type].some(animal => {
+            // Handle both string and object formats
+            const animalId = typeof animal === 'string' ? animal : animal.id
+            return animalId === id
+          })
           if (found) {
             console.log(`✅ Found ${id} in category ${type}`)
           }
@@ -873,12 +899,18 @@ export default function UserProfile() {
     // Additional debugging for rabbits
     console.log('🐰 Checking for rabbit-specific animals:')
     console.log('specificAnimals.rabbit:', specificAnimals.rabbit)
-    console.log('All specific animals containing "rabbit":', allSpecificAnimals.filter(id => id.includes('rabbit')))
-    console.log('Rabbit category filter result:', allSpecificAnimals.filter(id => specificAnimals.rabbit?.some(animal => animal.id === id)))
+    console.log('All specific animals containing "rabbit":', specificAnimalsArray.filter(id => id.includes('rabbit')))
+    console.log('Rabbit category filter result:', specificAnimalsArray.filter(id => specificAnimals.rabbit?.some(animal => {
+      const animalId = typeof animal === 'string' ? animal : animal.id
+      return animalId === id
+    })))
     
     // Handle "others" separately
-    const othersAnimals = allSpecificAnimals.filter(id => {
-      const found = specificAnimals.others.some(animal => animal.id === id)
+    const othersAnimals = specificAnimalsArray.filter(id => {
+      const found = specificAnimals.others.some(animal => {
+        const animalId = typeof animal === 'string' ? animal : animal.id
+        return animalId === id
+      })
       if (found) {
         console.log(`✅ Found ${id} in others category`)
       }
@@ -1026,20 +1058,78 @@ export default function UserProfile() {
       console.log('Edit crops:', editCrops)
       console.log('Edit specific crops:', editSpecificCrops)
       
-      const userRef = doc(db, 'users', user.uid)
+      // Convert specificCrops array to cropVarieties object format (for mobile compatibility)
+      const cropVarieties = {}
+      editSpecificCrops.forEach(cropId => {
+        // Find which category this crop belongs to
+        for (const [category, crops] of Object.entries(specificCrops)) {
+          const found = crops.find(c => c.id === cropId)
+          if (found) {
+            if (!cropVarieties[category]) {
+              cropVarieties[category] = []
+            }
+            // Store the full name with tagalog (matching mobile format)
+            cropVarieties[category].push(`${found.name} (${found.tagalog})`)
+            break
+          }
+        }
+      })
       
-      // Use updateDoc for better control over nested fields
-      const updateData = {
-        updatedAt: new Date(),
-        'cropFarmer.cropType': editCrops,
-        'cropFarmer.specificCrops': editSpecificCrops,
-        'onboarding.cropTypes': editCrops,
-        'onboarding.specificCrops': editSpecificCrops
+      console.log('📦 Converted to cropVarieties format:', cropVarieties)
+      
+      const userRef = doc(db, 'Users', user.uid)
+      
+      // Check if document exists first
+      const docSnap = await getDoc(userRef)
+      
+      if (!docSnap.exists()) {
+        console.log('📝 User document does not exist, creating new document...')
+        // Create new document with all required fields
+        await setDoc(userRef, {
+          uid: user.uid,
+          email: user.email,
+          role: 'crop_farmer',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          cropFarmer: {
+            cropType: editCrops,
+            specificCrops: editSpecificCrops,
+            cropVarieties: cropVarieties
+          },
+          onboarding: {
+            cropTypes: editCrops,
+            specificCrops: editSpecificCrops,
+            cropVarieties: cropVarieties,
+            cropTypesCompleted: true,
+            specificCropsCompleted: true,
+            cropVarietiesCompleted: true,
+            cropOnboardingCompleted: true,
+            completed: true
+          }
+        })
+      } else {
+        console.log('📝 User document exists, updating...')
+        // Update existing document
+        await setDoc(userRef, {
+          updatedAt: new Date(),
+          cropFarmer: {
+            cropType: editCrops,
+            specificCrops: editSpecificCrops,
+            cropVarieties: cropVarieties
+          },
+          onboarding: {
+            cropTypes: editCrops,
+            specificCrops: editSpecificCrops,
+            cropVarieties: cropVarieties,
+            cropTypesCompleted: true,
+            specificCropsCompleted: true,
+            cropVarietiesCompleted: true,
+            cropOnboardingCompleted: true,
+            completed: true
+          }
+        }, { merge: true })
       }
-
-      console.log('📝 Update data:', updateData)
       
-      await updateDoc(userRef, updateData)
       console.log('✅ Crops saved to Firestore successfully')
 
       // Verify save by reading back the data
@@ -1054,15 +1144,23 @@ export default function UserProfile() {
       setUserProfile(prev => {
         const updatedProfile = {
           ...prev,
+          role: prev?.role || 'crop_farmer',
           cropFarmer: { 
-            ...prev.cropFarmer,
+            ...prev?.cropFarmer,
             cropType: editCrops, 
-            specificCrops: editSpecificCrops 
+            specificCrops: editSpecificCrops,
+            cropVarieties: cropVarieties
           },
           onboarding: {
-            ...prev.onboarding,
+            ...prev?.onboarding,
             cropTypes: editCrops,
-            specificCrops: editSpecificCrops
+            specificCrops: editSpecificCrops,
+            cropVarieties: cropVarieties,
+            cropTypesCompleted: true,
+            specificCropsCompleted: true,
+            cropVarietiesCompleted: true,
+            cropOnboardingCompleted: true,
+            completed: true
           }
         }
         console.log('📊 Updated local profile state:', updatedProfile)
@@ -1077,7 +1175,8 @@ export default function UserProfile() {
       window.dispatchEvent(new Event('cropsUpdated'))
     } catch (error) {
       console.error('❌ Error updating crops:', error)
-      alert('Failed to update crops. Please try again.')
+      console.error('❌ Error details:', error.message)
+      alert('Failed to update crops: ' + error.message)
       setEditCropsModalLoading(false)
       setEditCropsModalLoadingMessage('')
     }
@@ -1105,18 +1204,26 @@ export default function UserProfile() {
       } else {
         const specificAnimalsForType = editSpecificLivestockByType[animalType] || []
         console.log(`📝 Checking ${animalType}:`, specificAnimalsForType)
-        if (specificAnimalsForType.length === 0) {
-          // Get the display name for the animal type
-          const animalNames = {
-            'cattle': 'cattle',
-            'poultry': 'poultry',
-            'swine': 'swine',
-            'goat': 'goat',
-            'sheep': 'sheep',
-            'rabbit': 'rabbit'
+        
+        // Only validate if the animal type is in editLivestock
+        // Skip validation if specificAnimalsForType is empty but the type might not need specific selection
+        if (specificAnimalsForType.length === 0 && editLivestock.includes(animalType)) {
+          // Check if this animal type actually has specific varieties to choose from
+          const hasSpecificVarieties = specificAnimals[animalType] && specificAnimals[animalType].length > 0
+          
+          if (hasSpecificVarieties) {
+            // Get the display name for the animal type
+            const animalNames = {
+              'cattle': 'cattle',
+              'poultry': 'poultry',
+              'swine': 'swine',
+              'goat': 'goat',
+              'sheep': 'sheep',
+              'rabbit': 'rabbit'
+            }
+            alert(`Please select at least one specific ${animalNames[animalType] || animalType} type`)
+            return
           }
-          alert(`Please select at least one specific ${animalNames[animalType] || animalType} type`)
-          return
         }
       }
     }
@@ -1142,7 +1249,7 @@ export default function UserProfile() {
       console.log('- Combined allSpecificAnimals:', allSpecificAnimals)
       console.log('- Length of allSpecificAnimals:', allSpecificAnimals.length)
       
-      const userRef = doc(db, 'users', user.uid)
+      const userRef = doc(db, 'Users', user.uid)
       
       // Use updateDoc for better control over nested fields
       const updateData = {
@@ -1207,7 +1314,7 @@ export default function UserProfile() {
       }
 
       // Update user document in Firebase (use setDoc with merge to create if doesn't exist)
-      const userRef = doc(db, 'users', user.uid)
+      const userRef = doc(db, 'Users', user.uid)
       const updateData = {
         firstName: editFirstName.trim(),
         lastName: editLastName.trim(),
@@ -1359,96 +1466,181 @@ export default function UserProfile() {
       <div className={styles.mainContent}>
         {/* Left Sidebar */}
         <aside className={styles.leftSidebar}>
-          {/* Farming Info Card */}
+          {/* Farming Info Card - "What I'm Growing" / "My Livestock" */}
           {userProfile && (
             <div className={styles.farmingInfoCard}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <div className={styles.farmingInfoHeader}>
                 <h2 className={styles.cardTitle}>
-                  {userProfile.role === 'crop_farmer' ? 'Crops Grown' : 'Livestock Animals'}
+                  {userProfile.role === 'crop_farmer' ? "What I'm Growing" : 'My Livestock'}
                 </h2>
-                {userProfile.role === 'crop_farmer' && (
-                  <button 
-                    className={styles.editCropsBtn}
-                    onClick={openEditCropsModal}
-                    style={{
-                      background: 'none',
-                      border: '1px solid #ddd',
-                      padding: '5px 15px',
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      fontSize: '14px'
-                    }}
-                  >
-                    Edit
-                  </button>
-                )}
-                {userProfile.role === 'livestock_owner' && (
-                  <button 
-                    className={styles.editCropsBtn}
-                    onClick={openEditLivestockModal}
-                    style={{
-                      background: 'none',
-                      border: '1px solid #ddd',
-                      padding: '5px 15px',
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      fontSize: '14px'
-                    }}
-                  >
-                    Edit
-                  </button>
-                )}
+                <button 
+                  className={styles.editButton}
+                  onClick={userProfile.role === 'crop_farmer' ? openEditCropsModal : openEditLivestockModal}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                  </svg>
+                  Edit
+                </button>
               </div>
-              <div className={styles.farmingContent}>
+              
+              <div className={styles.farmingInfoContent}>
                 {userProfile.role === 'crop_farmer' ? (
                   (() => {
-                    const userSpecificCrops = userProfile.onboarding?.specificCrops || userProfile.cropFarmer?.specificCrops || []
-                    return userSpecificCrops.length > 0 ? (
-                      <div className={styles.specificCropsContainer}>
-                        {userSpecificCrops.map((cropId, index) => {
-                        // Find the specific crop details
-                        let cropDetails = null
-                        let categoryName = ''
-                        
-                        // Search through all categories to find the specific crop
-                        for (const [category, crops] of Object.entries(specificCrops)) {
-                          const found = crops.find(c => c.id === cropId)
-                          if (found) {
-                            cropDetails = found
-                            categoryName = cropTypes.find(ct => ct.id === category)?.name || category
-                            break
-                          }
-                        }
-                        
-                        if (!cropDetails) return null
-                        
-                        return (
-                          <div key={index} className={`${cropOnboardingStyles.specificCard} ${styles.profileCropButton}`}>
-                            <h4 className={cropOnboardingStyles.optionTitle}>{cropDetails.name}</h4>
-                            <p className={cropOnboardingStyles.optionTagalog}>{cropDetails.tagalog}</p>
+                    const cropType = userProfile.cropFarmer?.cropType || []
+                    const specificCropsData = userProfile.onboarding?.specificCrops || userProfile.cropFarmer?.specificCrops || []
+                    
+                    console.log('🌾 What I\'m Growing Card Data:')
+                    console.log('  - cropType:', cropType)
+                    console.log('  - specificCropsData:', specificCropsData)
+                    console.log('  - userProfile.onboarding?.specificCrops:', userProfile.onboarding?.specificCrops)
+                    console.log('  - userProfile.cropFarmer?.specificCrops:', userProfile.cropFarmer?.specificCrops)
+                    
+                    if (cropType.length === 0 && specificCropsData.length === 0) {
+                      return (
+                        <div className={styles.noInfoContainer}>
+                          <p className={styles.noInfoText}>No crop information added yet</p>
+                          <button className={styles.addInfoButton} onClick={openEditCropsModal}>
+                            Add Crop Information
+                          </button>
+                        </div>
+                      )
+                    }
+                    
+                    return (
+                      <>
+                        {/* Crop Types */}
+                        {cropType.length > 0 && (
+                          <div className={styles.infoSection}>
+                            <p className={styles.infoLabel}>Crop Types:</p>
+                            <div className={styles.chipsContainer}>
+                              {cropType.map((type, index) => (
+                                <div key={index} className={styles.cropTypeChip}>
+                                  {type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <p className={styles.noItems}>No crops added yet</p>
-                  )
+                        )}
+                        
+                        {/* Specific Varieties */}
+                        {specificCropsData.length > 0 && (
+                          <div className={styles.infoSection}>
+                            <p className={styles.infoLabel}>Varieties:</p>
+                            {(() => {
+                              console.log('🌱 Displaying varieties for specificCropsData:', specificCropsData)
+                              // Group specific crops by their category
+                              const groupedCrops = {}
+                              specificCropsData.forEach(cropId => {
+                                console.log('🔍 Looking for crop ID:', cropId)
+                                for (const [category, crops] of Object.entries(specificCrops)) {
+                                  const found = crops.find(c => c.id === cropId)
+                                  if (found) {
+                                    console.log('✅ Found crop:', found.name, 'in category:', category)
+                                    if (!groupedCrops[category]) {
+                                      groupedCrops[category] = []
+                                    }
+                                    groupedCrops[category].push(found)
+                                    break
+                                  }
+                                }
+                              })
+                              
+                              console.log('📦 Grouped crops:', groupedCrops)
+                              console.log('📊 Number of categories:', Object.keys(groupedCrops).length)
+                              
+                              return Object.entries(groupedCrops).map(([category, crops]) => (
+                                <div key={category} className={styles.varietyGroup}>
+                                  <p className={styles.varietyGroupTitle}>
+                                    {category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ')}:
+                                  </p>
+                                  <div className={styles.varietyChipsContainer}>
+                                    {crops.filter(crop => crop && crop.name).map((crop, index) => (
+                                      <div key={index} className={styles.varietyChip}>
+                                        {crop.name} ({crop.tagalog})
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))
+                            })()}
+                          </div>
+                        )}
+                      </>
+                    )
                   })()
                 ) : (
-                  userProfile.livestock?.specificAnimals && userProfile.livestock.specificAnimals.length > 0 ? (
-                    <div className={styles.itemsGrid}>
-                      {userProfile.livestock.specificAnimals.map((animalId, index) => {
-                        const specificAnimalInfo = getSpecificAnimalDisplayInfo(animalId);
-                        return (
-                          <div key={index} className={styles.itemChip}>
-                            <span className={styles.itemName}>{specificAnimalInfo.name}</span>
+                  (() => {
+                    const livestockTypes = userProfile.onboarding?.livestockTypes || []
+                    const specificAnimalsData = userProfile.livestock?.specificAnimals || []
+                    
+                    if (livestockTypes.length === 0 && specificAnimalsData.length === 0) {
+                      return (
+                        <div className={styles.noInfoContainer}>
+                          <p className={styles.noInfoText}>No livestock information added yet</p>
+                          <button className={styles.addInfoButton} onClick={openEditLivestockModal}>
+                            Add Livestock Information
+                          </button>
+                        </div>
+                      )
+                    }
+                    
+                    return (
+                      <>
+                        {/* Livestock Types */}
+                        {livestockTypes.length > 0 && (
+                          <div className={styles.infoSection}>
+                            <p className={styles.infoLabel}>Livestock Types:</p>
+                            <div className={styles.chipsContainer}>
+                              {livestockTypes.map((type, index) => (
+                                <div key={index} className={styles.cropTypeChip}>
+                                  {type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className={styles.noItems}>No livestock added yet</p>
-                  )
+                        )}
+                        
+                        {/* Specific Animals */}
+                        {specificAnimalsData.length > 0 && (
+                          <div className={styles.infoSection}>
+                            <p className={styles.infoLabel}>Specific Animals:</p>
+                            {(() => {
+                              // Group specific animals by their category
+                              const groupedAnimals = {}
+                              specificAnimalsData.forEach(animalId => {
+                                for (const [category, animals] of Object.entries(specificAnimals)) {
+                                  const found = animals.find(a => a.id === animalId)
+                                  if (found) {
+                                    if (!groupedAnimals[category]) {
+                                      groupedAnimals[category] = []
+                                    }
+                                    groupedAnimals[category].push(found)
+                                    break
+                                  }
+                                }
+                              })
+                              
+                              return Object.entries(groupedAnimals).map(([category, animals]) => (
+                                <div key={category} className={styles.varietyGroup}>
+                                  <p className={styles.varietyGroupTitle}>
+                                    {category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ')}:
+                                  </p>
+                                  <div className={styles.varietyChipsContainer}>
+                                    {animals.filter(animal => animal && animal.name).map((animal, index) => (
+                                      <div key={index} className={styles.varietyChip}>
+                                        {animal.name} ({animal.tagalog})
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))
+                            })()}
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()
                 )}
               </div>
             </div>
@@ -1981,8 +2173,7 @@ export default function UserProfile() {
                           )
                           // Clear specific crops when category is removed
                           if (isCurrentlySelected) {
-                            const actualCropType = crop.id === 'spices' ? 'herbs_spices' : crop.id
-                            const categoryCrops = specificCrops[actualCropType] || []
+                            const categoryCrops = specificCrops[crop.id] || []
                             setEditSpecificCrops(prev => 
                               prev.filter(id => !categoryCrops.some(c => c.id === id))
                             )
@@ -2028,10 +2219,15 @@ export default function UserProfile() {
                     
                     <div className={styles.specificCropsContainer}>
                       {editCrops.map(cropType => {
-                        // Handle the combined herbs_spices category
-                        const actualCropType = cropType === 'spices' ? 'herbs_spices' : cropType
                         const crop = cropTypes.find(c => c.id === cropType)
-                        const categoryCrops = specificCrops[actualCropType]?.filter(specificCrop => 
+                        
+                        // Skip if crop type not found
+                        if (!crop) {
+                          console.warn('⚠️ Crop type not found:', cropType)
+                          return null
+                        }
+                        
+                        const categoryCrops = specificCrops[cropType]?.filter(specificCrop => 
                           specificCrop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           specificCrop.tagalog.toLowerCase().includes(searchQuery.toLowerCase())
                         ) || []

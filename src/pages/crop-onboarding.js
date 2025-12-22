@@ -23,10 +23,10 @@ export default function CropOnboarding() {
     { id: 'corn', name: 'Corn', icon: '/assets/images/corn.png', description: 'Corn and maize varieties' },
     { id: 'vegetables', name: 'Vegetables', icon: '/assets/images/lettuce.png', description: 'Leafy and fruit vegetables' },
     { id: 'fruits', name: 'Fruits', icon: '/assets/images/fruits.png', description: 'Tropical and seasonal fruits' },
-    { id: 'rootCrops', name: 'Root Crops', icon: '/assets/images/rootcrop.png', description: 'Underground crops' },
+    { id: 'root_crops', name: 'Root Crops', icon: '/assets/images/rootcrop.png', description: 'Underground crops' },
     { id: 'legumes', name: 'Legumes', icon: '/assets/images/other.png', description: 'Beans and peas' },
-    { id: 'spices', name: 'Herbs & Spices', icon: '/assets/images/other.png', description: 'Spices, seasonings, and culinary herbs' },
-    { id: 'industrial', name: 'Industrial Crops', icon: '/assets/images/sugarcane.png', description: 'Commercial and industrial crops' },
+    { id: 'herbs_spices', name: 'Herbs & Spices', icon: '/assets/images/other.png', description: 'Spices, seasonings, and culinary herbs' },
+    { id: 'industrial_crops', name: 'Industrial Crops', icon: '/assets/images/sugarcane.png', description: 'Commercial and industrial crops' },
     { id: 'mushrooms', name: 'Mushrooms', icon: '/assets/images/other.png', description: 'Edible fungi varieties' }
   ]
 
@@ -175,7 +175,7 @@ export default function CropOnboarding() {
       { id: 'blueberry', name: 'Blueberry', tagalog: 'Blueberry' },
       { id: 'grapes', name: 'Grapes', tagalog: 'Ubas' }
     ],
-    rootCrops: [
+    root_crops: [
       { id: 'sweet-potato-root', name: 'Sweet potato', tagalog: 'Kamote' },
       { id: 'cassava-root', name: 'Cassava', tagalog: 'Kamoteng kahoy' },
       { id: 'taro-root', name: 'Taro', tagalog: 'Gabi' },
@@ -291,7 +291,7 @@ export default function CropOnboarding() {
       { id: 'banaba', name: 'Banaba', tagalog: 'Banaba' },
       { id: 'bitter-melon-leaves', name: 'Bitter melon leaves', tagalog: 'Ampalaya leaves' }
     ],
-    industrial: [
+    industrial_crops: [
       { id: 'tobacco', name: 'Tobacco', tagalog: 'Tabako' },
       { id: 'rubber', name: 'Rubber', tagalog: 'Goma' },
       { id: 'abaca', name: 'Abaca', tagalog: 'Abaka' },
@@ -420,19 +420,37 @@ export default function CropOnboarding() {
     setLoading(true)
 
     try {
+      // Convert web format (array of IDs) to mobile format (object with arrays of full names)
+      // Mobile format: { rice: ['White rice (Puting bigas)', 'Brown rice (Kayumangging bigas)'], ... }
+      const cropVarieties = {}
+      
+      selectedCrops.forEach(cropType => {
+        const cropsForType = specificCrops[cropType] || []
+        const selectedForType = cropsForType
+          .filter(crop => selectedSpecificCrops.includes(crop.id))
+          .map(crop => `${crop.name} (${crop.tagalog})`)
+        
+        if (selectedForType.length > 0) {
+          cropVarieties[cropType] = selectedForType
+        }
+      })
+      
       // Update user profile with crop farming information matching mobile app structure
       console.log('Saving onboarding data...')
       console.log('selectedCrops:', selectedCrops)
       console.log('selectedSpecificCrops:', selectedSpecificCrops)
+      console.log('cropVarieties (mobile format):', cropVarieties)
       const userDocRef = doc(db, 'Users', user.uid)
       await updateDoc(userDocRef, {
         role: 'crop_farmer',
         cropFarmer: {
           cropType: selectedCrops,
-          specificCrops: selectedSpecificCrops
+          specificCrops: selectedSpecificCrops, // Keep for backward compatibility
+          cropVarieties: cropVarieties // Add mobile format
         },
         'onboarding.cropTypes': selectedCrops,
         'onboarding.specificCrops': selectedSpecificCrops,
+        'onboarding.cropVarieties': cropVarieties, // Add mobile format
         'onboarding.cropTypesCompleted': true,
         'onboarding.cropOnboardingCompleted': true,
         onboardingCompleted: true,

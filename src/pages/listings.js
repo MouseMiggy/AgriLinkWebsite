@@ -1858,6 +1858,105 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
     return
   }
   
+  // Normalize crop type IDs to match mobile/API convention (snake_case)
+  const normalizeCropTypeId = (cropTypeId) => {
+    const mapping = {
+      'rootCrops': 'root_crops',
+      'spices': 'herbs_spices',
+      'industrial': 'industrial_crops'
+    }
+    return mapping[cropTypeId] || cropTypeId
+  }
+
+  // Normalize an array of crop type IDs
+  const normalizeCropTypes = (cropTypes) => {
+    return cropTypes.map(normalizeCropTypeId)
+  }
+
+  // Migrate user's crop data to snake_case format
+  const migrateCropDataToSnakeCase = async (userId) => {
+    try {
+      const userDocRef = doc(db, 'Users', userId)
+      const userDoc = await getDoc(userDocRef)
+      
+      if (!userDoc.exists()) return
+      
+      const userData = userDoc.data()
+      let needsUpdate = false
+      const updates = {}
+      
+      // Check and normalize cropFarmer.cropType
+      if (userData.cropFarmer?.cropType) {
+        const normalizedCropTypes = normalizeCropTypes(userData.cropFarmer.cropType)
+        if (JSON.stringify(normalizedCropTypes) !== JSON.stringify(userData.cropFarmer.cropType)) {
+          updates['cropFarmer.cropType'] = normalizedCropTypes
+          needsUpdate = true
+        }
+      }
+      
+      // Check and normalize cropFarmer.cropVarieties keys
+      if (userData.cropFarmer?.cropVarieties) {
+        const oldVarieties = userData.cropFarmer.cropVarieties
+        const newVarieties = {}
+        let varietiesChanged = false
+        
+        Object.keys(oldVarieties).forEach(cropType => {
+          const normalizedKey = normalizeCropTypeId(cropType)
+          newVarieties[normalizedKey] = oldVarieties[cropType]
+          if (normalizedKey !== cropType) {
+            varietiesChanged = true
+          }
+        })
+        
+        if (varietiesChanged) {
+          updates['cropFarmer.cropVarieties'] = newVarieties
+          needsUpdate = true
+        }
+      }
+      
+      // Check and normalize onboarding.cropTypes
+      if (userData.onboarding?.cropTypes) {
+        const normalizedCropTypes = normalizeCropTypes(userData.onboarding.cropTypes)
+        if (JSON.stringify(normalizedCropTypes) !== JSON.stringify(userData.onboarding.cropTypes)) {
+          updates['onboarding.cropTypes'] = normalizedCropTypes
+          needsUpdate = true
+        }
+      }
+      
+      // Check and normalize onboarding.cropVarieties keys
+      if (userData.onboarding?.cropVarieties) {
+        const oldVarieties = userData.onboarding.cropVarieties
+        const newVarieties = {}
+        let varietiesChanged = false
+        
+        Object.keys(oldVarieties).forEach(cropType => {
+          const normalizedKey = normalizeCropTypeId(cropType)
+          newVarieties[normalizedKey] = oldVarieties[cropType]
+          if (normalizedKey !== cropType) {
+            varietiesChanged = true
+          }
+        })
+        
+        if (varietiesChanged) {
+          updates['onboarding.cropVarieties'] = newVarieties
+          needsUpdate = true
+        }
+      }
+      
+      // Apply updates if needed
+      if (needsUpdate) {
+        await updateDoc(userDocRef, updates)
+        console.log('✅ Migrated crop data to snake_case format:', updates)
+        return true
+      }
+      
+      return false
+    } catch (error) {
+      console.error('❌ Error migrating crop data:', error)
+      return false
+    }
+  }
+
   // Listen for crop updates from profile page
   const handleCropsUpdated = async () => {
     console.log('🔄 Crops updated event received, refreshing user data...')
@@ -1869,6 +1968,7 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
           
           // Update crop types and specific crops
           if (userData.role === 'crop_farmer' && userData.cropFarmer?.cropType) {
+            // Data should already be in snake_case after migration, but just in case
             setUserCropTypes(userData.cropFarmer.cropType)
             
             // Get crop varieties and convert to IDs (same as mobile)
@@ -1878,9 +1978,10 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
             Object.keys(cropVarieties).forEach(cropType => {
               const varieties = cropVarieties[cropType] || []
               varieties.forEach(variety => {
-                const cropId = variety.toLowerCase()
+                const englishName = variety.split('(')[0].trim()
+                const cropId = englishName.toLowerCase()
                   .replace(/\s+/g, '-')
-                  .replace(/[()]/g, '')
+                  .replace(/[^\w-]/g, '')
                   .trim()
                 allCropIds.push(cropId)
               })
@@ -1920,29 +2021,69 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
           
           // Get crop types for crop farmers
           if (userData.role === 'crop_farmer') {
-            // Try multiple sources for crop types
-            const cropTypes = userData.cropFarmer?.cropType || userData.onboarding?.cropTypes || []
-            console.log('✅ Setting user crop types:', cropTypes)
-            setUserCropTypes(cropTypes)
+            // Migrate crop data to snake_case format (one-time operation)
+            const wasMigrated = await migrateCropDataToSnakeCase(currentUser.uid)
             
-            // Get crop varieties (mobile format) and convert to IDs
-            const cropVarieties = userData.cropFarmer?.cropVarieties || userData.onboarding?.cropVarieties || {}
-            const allCropIds = []
-            
-            // Convert variety strings to crop IDs (same as mobile)
-            Object.keys(cropVarieties).forEach(cropType => {
-              const varieties = cropVarieties[cropType] || []
-              varieties.forEach(variety => {
-                const cropId = variety.toLowerCase()
-                  .replace(/\s+/g, '-')
-                  .replace(/[()]/g, '')
-                  .trim()
-                allCropIds.push(cropId)
+            // If data was migrated, reload it
+            if (wasMigrated) {
+              const updatedUserDoc = await getDoc(doc(db, 'Users', currentUser.uid))
+              if (updatedUserDoc.exists()) {
+                const updatedUserData = updatedUserDoc.data()
+                
+                // Use the migrated data
+                const cropTypes = updatedUserData.cropFarmer?.cropType || updatedUserData.onboarding?.cropTypes || []
+                console.log('✅ Setting user crop types (after migration):', cropTypes)
+                setUserCropTypes(cropTypes)
+                
+                const cropVarieties = updatedUserData.cropFarmer?.cropVarieties || updatedUserData.onboarding?.cropVarieties || {}
+                const allCropIds = []
+                
+                Object.keys(cropVarieties).forEach(cropType => {
+                  const varieties = cropVarieties[cropType] || []
+                  varieties.forEach(variety => {
+                    const englishName = variety.split('(')[0].trim()
+                    const cropId = englishName.toLowerCase()
+                      .replace(/\s+/g, '-')
+                      .replace(/[^\w-]/g, '')
+                      .trim()
+                    allCropIds.push(cropId)
+                  })
+                })
+                
+                console.log('🌾 User crop IDs (after migration):', allCropIds)
+                setUserSpecificCrops(allCropIds)
+              }
+            } else {
+              // No migration needed, use existing data
+              const cropTypes = userData.cropFarmer?.cropType || userData.onboarding?.cropTypes || []
+              console.log('✅ Setting user crop types:', cropTypes)
+              setUserCropTypes(cropTypes)
+              
+              const cropVarieties = userData.cropFarmer?.cropVarieties || userData.onboarding?.cropVarieties || {}
+              const allCropIds = []
+              
+              Object.keys(cropVarieties).forEach(cropType => {
+                const varieties = cropVarieties[cropType] || []
+                varieties.forEach(variety => {
+                  const englishName = variety.split('(')[0].trim()
+                  const cropId = englishName.toLowerCase()
+                    .replace(/\s+/g, '-')
+                    .replace(/[^\w-]/g, '')
+                    .trim()
+                  allCropIds.push(cropId)
+                })
               })
-            })
-            
-            console.log('✅ Converted cropVarieties to IDs:', allCropIds)
-            setUserSpecificCrops(allCropIds)
+              
+              console.log('🌾 User crop IDs:', allCropIds)
+              setUserSpecificCrops(allCropIds)
+              
+              console.log('🔍 ========== CROP VARIETIES DEBUG ==========')
+              console.log('🔍 cropVarieties object:', cropVarieties)
+              console.log('🔍 cropVarieties keys:', Object.keys(cropVarieties))
+              console.log('🔍 Final allCropIds:', allCropIds)
+              console.log('🔍 allCropIds length:', allCropIds.length)
+              console.log('🔍 ==========================================')
+            }
           } else {
             console.log('⚠️ Not a crop farmer, clearing crop data')
             setUserCropTypes([])
@@ -2134,14 +2275,31 @@ useEffect(() => {
 
   // Check if user has location enabled and show toast if not
   useEffect(() => {
+    console.log('🔍 ========== LOCATION TOAST CHECK ==========')
+    console.log('🔍 authLoading:', authLoading)
+    console.log('🔍 hasUser:', !!user)
+    console.log('🔍 user.uid:', user?.uid)
+    console.log('🔍 userRole:', userRole)
+    console.log('🔍 userLocation:', userLocation)
+    console.log('🔍 userLocation type:', typeof userLocation)
+    console.log('🔍 userLocation keys:', userLocation ? Object.keys(userLocation) : 'null')
+    console.log('🔍 shouldShowToast:', !authLoading && user && userRole === 'crop_farmer' && !userLocation)
+    console.log('🔍 ==========================================')
+    
     if (!authLoading && user && userRole === 'crop_farmer' && !userLocation) {
+      console.log('⚠️ ========== SHOWING LOCATION TOAST ==========')
+      console.log('⚠️ userLocation is:', userLocation)
       setLocationToastMessage('Please enable your location in account settings to see distance to listings. This helps you find the nearest agricultural products.')
       setShowLocationToast(true)
+      console.log('⚠️ Toast state set to true')
+      console.log('⚠️ ==========================================')
       
       // Auto-hide after 8 seconds
       setTimeout(() => {
         setShowLocationToast(false)
       }, 8000)
+    } else if (userLocation) {
+      console.log('✅ Location toast hidden because userLocation exists:', userLocation)
     }
   }, [authLoading, user, userRole, userLocation])
 
@@ -2184,129 +2342,150 @@ useEffect(() => {
           listing.status !== 'sold' && listing.status !== 'deleted'
         )
         
-        // Step 2: If user has crops, call API and wait for compatibility data
+        // STEP 1: Display ALL listings immediately (don't wait for API)
+        console.log('📊 STEP 1: Displaying all', activeListings.length, 'listings immediately')
+        setListings(activeListings)
+        setFilteredListings(activeListings)
+        setLoading(false) // Stop loading spinner immediately
+        
+        // STEP 2: Fetch compatibility data in background (if user has crops)
         if (userSpecificCrops.length > 0) {
-          console.log('🌾 Fetching compatibility data before displaying listings...')
+          console.log('🔍 STEP 2: Fetching compatibility data in background...');
+          console.log('🌾 User crops:', userSpecificCrops);
           
-          try {
-            // Check cache first
-            const cacheKey = `compatibility_${userSpecificCrops.sort().join('_')}`
-            
-            // Clear old cache to ensure we get fresh API data
-            // sessionStorage.removeItem(cacheKey) // Uncomment to force refresh
-            
-            const cachedData = sessionStorage.getItem(cacheKey)
-            
-            let compatibilityData
-            
-            if (cachedData) {
-              console.log('⚡ Using cached compatibility data')
-              compatibilityData = new Map(JSON.parse(cachedData))
-            } else {
-              // Call API with retry logic
-              let retries = 3
-              let response = null
+          // Fetch compatibility asynchronously without blocking UI
+          ;(async () => {
+            try {
+              // Check cache first
+              const cacheKey = `compatibility_${userSpecificCrops.sort().join('_')}`
+              const cachedData = sessionStorage.getItem(cacheKey)
               
-              for (let attempt = 1; attempt <= retries; attempt++) {
-                try {
-                  console.log(`📡 Calling compatibility API (attempt ${attempt}/${retries})...`)
-                  response = await Promise.race([
-                    fetch('https://context-based-2.onrender.com/crop-compatibility-analysis', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        cropIds: userSpecificCrops,
-                        cropCategory: null
-                      })
-                    }),
-                    new Promise((_, reject) => 
-                      setTimeout(() => reject(new Error('Request timeout')), 60000)
-                    )
-                  ])
-                  
-                  if (response.ok) {
-                    console.log('✅ API call successful')
-                    break
-                  }
-                } catch (error) {
-                  console.log(`⚠️ Attempt ${attempt} failed:`, error.message)
-                  if (attempt === retries) throw error
-                  await new Promise(resolve => setTimeout(resolve, attempt * 2000))
-                }
-              }
+              let compatibilityData
               
-              if (!response || !response.ok) {
-                throw new Error(`API error: ${response?.status}`)
-              }
-              
-              const data = await response.json()
-              console.log('📥 Received compatibility data:', data.compatibleListings?.length || 0, 'listings')
-              
-              // Build compatibility map
-              compatibilityData = new Map()
-              data.compatibleListings.forEach(item => {
-                const topCrops = item.cropScores.map(crop => ({
-                  id: crop.cropId,
-                  name: crop.cropName,
-                  reason: crop.reason,
-                  score: crop.score,
-                  npk: crop.npk,
-                  usage: crop.usage
-                }))
+              if (cachedData) {
+                console.log('⚡ Using cached compatibility data')
+                compatibilityData = new Map(JSON.parse(cachedData))
+              } else {
+                console.log('🔄 Calling API for fresh compatibility data...')
+                console.log('⏰ Note: Server may be sleeping, this could take 1-2 minutes')
                 
-                compatibilityData.set(item.listingId, {
-                  topCrops: topCrops,
-                  analysis: 'AI-powered analysis'
-                })
-              })
-              
-              // Cache the data
-              sessionStorage.setItem(cacheKey, JSON.stringify(Array.from(compatibilityData.entries())))
-              console.log('💾 Cached compatibility data')
-            }
-            
-            // Add client-side fallback for listings not in API response
-            // REMOVED: To match mobile behavior, only show API-validated listings
-            /*
-            activeListings.forEach(listing => {
-              if (!compatibilityData.has(listing.id)) {
-                const fallback = calculateClientSideCompatibility(listing, userSpecificCrops)
-                if (fallback && fallback.topCrops.length > 0) {
-                  compatibilityData.set(listing.id, fallback)
+                // Wake up server with health check
+                try {
+                  console.log('🏥 Waking up server...')
+                  await Promise.race([
+                    fetch('https://context-based-2.onrender.com/health', { method: 'GET' }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Health check timeout')), 30000))
+                  ])
+                  console.log('✅ Server is awake')
+                } catch (healthError) {
+                  console.log('⚠️ Health check failed:', healthError.message)
                 }
+                
+                // Call API with retry logic
+                let retries = 3
+                let response = null
+                
+                for (let attempt = 1; attempt <= retries; attempt++) {
+                  try {
+                    console.log(`📡 API call attempt ${attempt}/${retries}...`)
+                    const timeout = 60000 + (attempt * 30000) // 60s, 90s, 120s
+                    
+                    response = await Promise.race([
+                      fetch('https://context-based-2.onrender.com/crop-compatibility-analysis', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          cropIds: userSpecificCrops,
+                          cropCategory: null
+                        })
+                      }),
+                      new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error(`Timeout after ${timeout/1000}s`)), timeout)
+                      )
+                    ])
+                    
+                    if (response.ok) {
+                      console.log('✅ API call successful')
+                      break
+                    }
+                  } catch (error) {
+                    console.log(`⚠️ Attempt ${attempt} failed:`, error.message)
+                    if (attempt === retries) throw error
+                    await new Promise(resolve => setTimeout(resolve, attempt * 3000))
+                  }
+                }
+                
+                if (!response || !response.ok) {
+                  throw new Error(`API error: ${response?.status}`)
+                }
+                
+                const data = await response.json()
+                console.log('📥 Received compatibility data:', data.compatibleListings?.length || 0, 'listings')
+                
+                // Build compatibility map
+                compatibilityData = new Map()
+                data.compatibleListings.forEach(item => {
+                  const topCrops = item.cropScores.map(crop => ({
+                    id: crop.cropId,
+                    name: crop.cropName,
+                    reason: crop.reason,
+                    score: crop.score,
+                    npk: crop.npk,
+                    usage: crop.usage
+                  }))
+                  
+                  compatibilityData.set(item.listingId, {
+                    topCrops: topCrops,
+                    analysis: 'AI-powered analysis'
+                  })
+                })
+                
+                // Cache the data
+                sessionStorage.setItem(cacheKey, JSON.stringify(Array.from(compatibilityData.entries())))
+                console.log('💾 Cached compatibility data')
               }
-            })
-            */
-            
-            // Set compatibility map
-            setCompatibilityMap(compatibilityData)
-            console.log('✅ Compatibility map ready:', compatibilityData.size, 'listings')
-            
-            // Filter to only show listings that have compatibility data (like mobile)
-            const listingsWithCompatibility = activeListings
-              .filter(listing => compatibilityData.has(listing.id))
-              .map(listing => ({
+              
+              // Set compatibility map
+              setCompatibilityMap(compatibilityData)
+              console.log('✅ Compatibility map ready:', compatibilityData.size, 'listings')
+              
+              // STEP 3: Update listings with compatibility data
+              const listingsWithCompatibility = activeListings.map(listing => ({
                 ...listing,
-                cropCompatibility: compatibilityData.get(listing.id),
+                cropCompatibility: compatibilityData.get(listing.id) || null,
                 compatibilityScore: compatibilityData.get(listing.id)?.topCrops[0]?.score || 0
               }))
-            
-            console.log(`📊 Showing ${listingsWithCompatibility.length} of ${activeListings.length} listings (API-validated only)`)
-            
-            // Set listings with compatibility data
-            setListings(listingsWithCompatibility)
-            setFilteredListings(listingsWithCompatibility)
-            
-          } catch (error) {
-            console.error('❌ Error fetching compatibility:', error)
-            // Fallback: show listings without compatibility data
-            setListings(activeListings)
-            setFilteredListings(activeListings)
-          }
-        } else {
-          // No crops selected, just show listings
-          setListings(activeListings)
-          setFilteredListings(activeListings)
+              
+              // Sort by compatibility score
+              listingsWithCompatibility.sort((a, b) => {
+                if (a.compatibilityScore === 0 && b.compatibilityScore === 0) return 0
+                if (a.compatibilityScore === 0) return 1
+                if (b.compatibilityScore === 0) return -1
+                return b.compatibilityScore - a.compatibilityScore
+              })
+              
+              console.log('🔍 STEP 3: Updating listings with effectiveness percentages')
+              console.log(`📊 ${compatibilityData.size} listings now have compatibility data`)
+              
+              // Debug first listing
+              if (listingsWithCompatibility.length > 0 && listingsWithCompatibility[0].cropCompatibility) {
+                console.log('🔍 First listing with compatibility:', {
+                  id: listingsWithCompatibility[0].id,
+                  name: listingsWithCompatibility[0].name,
+                  topCrops: listingsWithCompatibility[0].cropCompatibility.topCrops.slice(0, 2)
+                })
+              }
+              
+              // Update state - this will trigger re-render with percentages
+              setListings(listingsWithCompatibility)
+              setFilteredListings(listingsWithCompatibility)
+              console.log('✅ Listings updated with effectiveness percentages!')
+              
+            } catch (error) {
+              console.error('❌ Error fetching compatibility:', error)
+              console.log('⚠️ Listings remain displayed without compatibility data')
+            }
+          })()
         }
         
         // Set search results
@@ -2322,7 +2501,6 @@ useEffect(() => {
       } catch (err) {
         console.error('❌ Error loading recommended listings for crop farmer:', err)
         setError('Failed to load listings')
-      } finally {
         setLoading(false)
       }
     }
@@ -2784,12 +2962,14 @@ useEffect(() => {
       const allCropIds = []
       Object.keys(cropVarieties).forEach(category => {
         const varietiesForCategory = cropVarieties[category] || []
-        const cropIds = varietiesForCategory.map(variety => 
-          variety.toLowerCase()
+        const cropIds = varietiesForCategory.map(variety => {
+          // Extract only the English name before parentheses (e.g., "White rice (Puting bigas)" -> "white-rice")
+          const englishName = variety.split('(')[0].trim()
+          return englishName.toLowerCase()
             .replace(/\s+/g, '-')
-            .replace(/[()]/g, '')
+            .replace(/[^\w-]/g, '')
             .trim()
-        )
+        })
         allCropIds.push(...cropIds)
       })
       
@@ -2927,12 +3107,14 @@ useEffect(() => {
       }
       
       // Convert variety strings to crop IDs (same as mobile)
-      const cropIdsForCategory = varietiesForCategory.map(variety => 
-        variety.toLowerCase()
+      const cropIdsForCategory = varietiesForCategory.map(variety => {
+        // Extract only the English name before parentheses (e.g., "White rice (Puting bigas)" -> "white-rice")
+        const englishName = variety.split('(')[0].trim()
+        return englishName.toLowerCase()
           .replace(/\s+/g, '-')
-          .replace(/[()]/g, '')
+          .replace(/[^\w-]/g, '')
           .trim()
-      )
+      })
       
       console.log(`🌾 Crop IDs for ${cropCategory}:`, cropIdsForCategory)
       
@@ -3231,16 +3413,24 @@ useEffect(() => {
       if (listing.status === 'sold' || listing.status === 'deleted') return false
       
       const name = (listing.name || '').toLowerCase()
-      const livestockType = (listing.livestockType || '').toLowerCase()
+      // Handle both livestockType (singular) and livestockTypes (plural array) for backward compatibility
+      const livestockType = listing.livestockType 
+        ? (listing.livestockType || '').toLowerCase()
+        : (listing.livestockTypes || []).join(' ').toLowerCase()
       const category = (listing.category || '').toLowerCase()
       const ownerName = (listing.ownerName || '').toLowerCase()
       
-      // Check if any search term matches in name, livestock type, category, or owner name
+      // STRICT MATCHING: Only match if the search term appears as a complete word or part of the livestock type
+      // This prevents "baboy" from matching listings that don't actually contain pig/swine/hog/baboy
       const isMatch = searchTerms.some(term => {
-        const nameMatch = name.includes(term)
-        const typeMatch = livestockType.includes(term)
-        const categoryMatch = category.includes(term)
-        const ownerMatch = ownerName.includes(term)
+        // Use word boundary matching for more precise results
+        // Match if term appears as a standalone word in name, type, category, or owner
+        const wordBoundaryRegex = new RegExp(`\\b${term}\\b`, 'i')
+        
+        const nameMatch = wordBoundaryRegex.test(name)
+        const typeMatch = wordBoundaryRegex.test(livestockType)
+        const categoryMatch = wordBoundaryRegex.test(category)
+        const ownerMatch = wordBoundaryRegex.test(ownerName)
         
         if (nameMatch || typeMatch || categoryMatch || ownerMatch) {
           console.log(`✅ Match found in "${listing.name}":`, {
@@ -3251,7 +3441,7 @@ useEffect(() => {
             ownerMatch: ownerMatch ? `owner contains "${term}"` : false,
             fullName: listing.name,
             fullCategory: listing.category,
-            fullType: listing.livestockType,
+            fullType: listing.livestockType || listing.livestockTypes,
             fullOwner: listing.ownerName
           })
           return true

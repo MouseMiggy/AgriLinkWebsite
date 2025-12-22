@@ -148,45 +148,31 @@ export default function LivestockOnboarding() {
 
 
   const handleNext = () => {
+    console.log('🔍 ========== HANDLE NEXT CALLED ==========')
+    console.log('🔍 currentStep:', currentStep)
+    console.log('🔍 selectedAnimals:', selectedAnimals)
+    console.log('🔍 selectedSpecificAnimals:', selectedSpecificAnimals)
+    
     if (currentStep === 1) {
       if (selectedAnimals.length === 0) {
+        console.log('❌ Step 1: No animals selected')
         showErrorToast('Please select at least one type of livestock animal')
         return
       }
+      console.log('✅ Step 1 validation passed, moving to step 2')
       setCurrentStep(2)
     } else if (currentStep === 2) {
-      // Validate that each selected animal type has at least one specific animal
-      for (const animalType of selectedAnimals) {
-        if (animalType === 'others') {
-          // For "others", check if any specific animal is selected
-          const hasSelectedOthers = specificAnimals.others.some(animal => 
-            selectedSpecificAnimals.includes(animal.id)
-          )
-          if (!hasSelectedOthers) {
-            showErrorToast('Please select at least one specific animal for "Others"')
-            return
-          }
-        } else {
-          // For other types, check if any specific animal is selected
-          const hasSelectedType = specificAnimals[animalType]?.some(animal => 
-            selectedSpecificAnimals.includes(animal.id)
-          )
-          if (!hasSelectedType) {
-            // Get display name for the animal type
-            const animalNames = {
-              'cattle': 'cattle',
-              'poultry': 'poultry',
-              'swine': 'swine',
-              'goat': 'goat',
-              'sheep': 'sheep',
-              'rabbit': 'rabbit'
-            }
-            showErrorToast(`Please select at least one specific ${animalNames[animalType] || animalType}`)
-            return
-          }
-        }
+      console.log('🔍 Validating step 2...')
+      
+      // Simple validation: just check if at least one specific animal is selected
+      if (selectedSpecificAnimals.length === 0) {
+        console.log('❌ No specific animals selected')
+        showErrorToast('Please select at least one specific animal')
+        return
       }
       
+      console.log('✅ Step 2 validation passed!')
+      console.log('✅ Calling handleComplete()...')
       handleComplete()
     }
   }
@@ -203,13 +189,27 @@ export default function LivestockOnboarding() {
     setLoading(true)
 
     try {
-      console.log('🔍 Debug livestock onboarding save:')
+      console.log('🔍 ========== LIVESTOCK ONBOARDING SAVE ==========')
       console.log('- selectedAnimals:', selectedAnimals)
       console.log('- selectedSpecificAnimals:', selectedSpecificAnimals)
       console.log('- user.uid:', user.uid)
       
+      if (selectedAnimals.length === 0) {
+        console.error('❌ No animals selected!')
+        showErrorToast('Please select at least one livestock type')
+        setLoading(false)
+        return
+      }
+      
+      if (selectedSpecificAnimals.length === 0) {
+        console.error('❌ No specific animals selected!')
+        showErrorToast('Please select at least one specific animal')
+        setLoading(false)
+        return
+      }
+      
       // Create/update user profile with livestock information matching mobile app structure
-      const userDocRef = doc(db, 'users', user.uid)
+      const userDocRef = doc(db, 'Users', user.uid) // Fixed: Use 'Users' (capital U) to match the rest of the codebase
       const saveData = {
         role: 'livestock_owner',
         livestock: {
@@ -220,14 +220,16 @@ export default function LivestockOnboarding() {
         'onboarding.specificAnimals': selectedSpecificAnimals,
         'onboarding.livestockTypesCompleted': true,
         'onboarding.livestockOnboardingCompleted': true,
+        'onboarding.completed': true, // Added: Mark overall onboarding as complete
         onboardingCompleted: true,
         onboardingCompletedAt: new Date(),
         updatedAt: new Date()
       }
       
-      console.log('📝 Data being saved to Firestore:', saveData)
+      console.log('📝 Data being saved to Firestore (Users collection):', saveData)
       
       await setDoc(userDocRef, saveData, { merge: true })
+      console.log('✅ Data saved to Firestore successfully')
       
       // Verify the save by reading it back
       const verifyDoc = await getDoc(userDocRef)
@@ -237,18 +239,29 @@ export default function LivestockOnboarding() {
         console.log('- savedData.livestock:', savedData.livestock)
         console.log('- savedData.onboarding.livestockTypes:', savedData.onboarding?.livestockTypes)
         console.log('- savedData.onboarding.specificAnimals:', savedData.onboarding?.specificAnimals)
+        console.log('- savedData.onboarding.completed:', savedData.onboarding?.completed)
+        console.log('- savedData.onboarding.livestockOnboardingCompleted:', savedData.onboarding?.livestockOnboardingCompleted)
+      } else {
+        console.error('❌ Verification failed - document does not exist!')
+        throw new Error('Failed to verify saved data')
       }
 
       // Dispatch event to notify profile page of role change
       window.dispatchEvent(new Event('roleChanged'))
       console.log('✅ Role change event dispatched')
 
-      // Navigate to completion screen
-      router.push('/onboarding-complete')
+      console.log('🔄 Navigating to onboarding-complete...')
+      
+      // Use window.location.href for more reliable navigation
+      window.location.href = '/onboarding-complete'
+      
+      console.log('✅ ========== NAVIGATION INITIATED ==========')
     } catch (err) {
+      console.error('❌ ========== ERROR SAVING LIVESTOCK DATA ==========')
       console.error('Error completing onboarding:', err)
+      console.error('Error message:', err.message)
+      console.error('Error stack:', err.stack)
       showErrorToast('Failed to save your information. Please try again.')
-    } finally {
       setLoading(false)
     }
   }
@@ -422,7 +435,12 @@ export default function LivestockOnboarding() {
                   
                   <button 
                     className={styles.nextButton} 
-                    onClick={handleNext}
+                    onClick={() => {
+                      console.log('🔘 Done button clicked!')
+                      console.log('🔘 selectedSpecificAnimals.length:', selectedSpecificAnimals.length)
+                      console.log('🔘 Button disabled?', selectedSpecificAnimals.length === 0)
+                      handleNext()
+                    }}
                     disabled={selectedSpecificAnimals.length === 0}
                     style={{
                       opacity: selectedSpecificAnimals.length === 0 ? 0.5 : 1,

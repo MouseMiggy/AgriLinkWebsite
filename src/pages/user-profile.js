@@ -1108,26 +1108,30 @@ export default function UserProfile() {
           }
         })
       } else {
-        console.log('📝 User document exists, updating...')
-        // Update existing document
-        await setDoc(userRef, {
+        console.log('📝 User document exists, REPLACING crop data completely...')
+        
+        // First, get the current document to preserve non-crop fields
+        const currentData = docSnap.data()
+        
+        // COMPLETELY REPLACE cropFarmer and onboarding.cropVarieties (not merge)
+        await updateDoc(userRef, {
           updatedAt: new Date(),
-          cropFarmer: {
-            cropType: editCrops,
-            specificCrops: editSpecificCrops,
-            cropVarieties: cropVarieties
-          },
-          onboarding: {
-            cropTypes: editCrops,
-            specificCrops: editSpecificCrops,
-            cropVarieties: cropVarieties,
-            cropTypesCompleted: true,
-            specificCropsCompleted: true,
-            cropVarietiesCompleted: true,
-            cropOnboardingCompleted: true,
-            completed: true
-          }
-        }, { merge: true })
+          // Completely replace the cropFarmer object
+          'cropFarmer.cropType': editCrops,
+          'cropFarmer.specificCrops': editSpecificCrops,
+          'cropFarmer.cropVarieties': cropVarieties,
+          // Completely replace the onboarding crop fields
+          'onboarding.cropTypes': editCrops,
+          'onboarding.specificCrops': editSpecificCrops,
+          'onboarding.cropVarieties': cropVarieties,
+          'onboarding.cropTypesCompleted': true,
+          'onboarding.specificCropsCompleted': true,
+          'onboarding.cropVarietiesCompleted': true,
+          'onboarding.cropOnboardingCompleted': true,
+          'onboarding.completed': true
+        })
+        
+        console.log('✅ Crop data REPLACED (not merged) in Firestore')
       }
       
       console.log('✅ Crops saved to Firestore successfully')

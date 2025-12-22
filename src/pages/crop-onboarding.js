@@ -404,6 +404,25 @@ export default function CropOnboarding() {
         showErrorToast('Please select at least one specific crop')
         return
       }
+      
+      // Validate that each selected crop type has at least one variety
+      const missingVarieties = []
+      selectedCrops.forEach(cropType => {
+        const actualCropType = cropType === 'spices' ? 'herbs_spices' : cropType
+        const cropsForType = specificCrops[actualCropType] || []
+        const selectedForType = cropsForType.filter(crop => selectedSpecificCrops.includes(crop.id))
+        
+        if (selectedForType.length === 0) {
+          const cropTypeName = cropTypes.find(c => c.id === cropType)?.name || cropType
+          missingVarieties.push(cropTypeName)
+        }
+      })
+      
+      if (missingVarieties.length > 0) {
+        showErrorToast(`Please select at least one variety for: ${missingVarieties.join(', ')}`)
+        return
+      }
+      
       handleComplete()
     }
   }

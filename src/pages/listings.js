@@ -1959,24 +1959,40 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
 
   // Listen for crop updates from profile page
   const handleCropsUpdated = async () => {
+    console.log('🔄 ========== CROPS UPDATED EVENT ==========')
     console.log('🔄 Crops updated event received, refreshing user data...')
     if (user) {
       try {
+        console.log('📡 Fetching fresh crop data from Firestore after save...')
         const userDoc = await getDoc(doc(db, 'Users', user.uid))
         if (userDoc.exists()) {
           const userData = userDoc.data()
           
+          console.log('📋 Full userData from Firestore:', {
+            cropFarmer: userData.cropFarmer,
+            onboarding: userData.onboarding
+          })
+          
           // Update crop types and specific crops
           if (userData.role === 'crop_farmer' && userData.cropFarmer?.cropType) {
             // Data should already be in snake_case after migration, but just in case
-            setUserCropTypes(userData.cropFarmer.cropType)
+            const newCropTypes = userData.cropFarmer.cropType
+            const oldCropTypes = userCropTypes
+            setUserCropTypes(newCropTypes)
+            
+            console.log('📋 Old crop types:', oldCropTypes)
+            console.log('📋 New crop types:', newCropTypes)
+            console.log('📋 Crop types REPLACED:', !oldCropTypes.every(ct => newCropTypes.includes(ct)))
             
             // Get crop varieties and convert to IDs (same as mobile)
             const cropVarieties = userData.cropFarmer?.cropVarieties || userData.onboarding?.cropVarieties || {}
             const allCropIds = []
             
+            console.log('📋 Crop varieties from Firestore (should be ONLY new selections):', JSON.stringify(cropVarieties, null, 2))
+            
             Object.keys(cropVarieties).forEach(cropType => {
               const varieties = cropVarieties[cropType] || []
+              console.log(`   ${cropType}: ${varieties.length} varieties`)
               varieties.forEach(variety => {
                 const englishName = variety.split('(')[0].trim()
                 const cropId = englishName.toLowerCase()
@@ -1987,12 +2003,57 @@ export default function Listings({ initialSelectedListing = null, onClearSelecte
               })
             })
             
+            console.log('📋 Total crop IDs after conversion:', allCropIds.length)
+            console.log('📋 Crop IDs:', allCropIds)
+            
             setUserSpecificCrops(allCropIds)
-            console.log('✅ User crops refreshed:', allCropIds)
+            console.log('✅ User crops refreshed with NEW data only')
+            
+            // Clear compatibility cache to force fresh API call
+            const oldCacheKey = `compatibility_${userSpecificCrops.sort().join('_')}`
+            const newCacheKey = `compatibility_${allCropIds.sort().join('_')}`
+            sessionStorage.removeItem(oldCacheKey)
+            sessionStorage.removeItem(newCacheKey)
+            console.log('🗑️ Cleared compatibility cache')
+            
+            // Clear the compatibility map to force fresh data
+            setCompatibilityMap(new Map())
+            console.log('🗑️ Cleared compatibility map')
+            
+            // Check if currently selected crop type is still in user's crops
+            const currentSelectedCropType = selectedCropType
+            if (currentSelectedCropType && !newCropTypes.includes(currentSelectedCropType)) {
+              console.log('⚠️ Selected crop type no longer in user crops, resetting to "All Crop Types"')
+              setSelectedCropType('')
+              // Will reload with all crops below
+            }
+            
+            // Reload listings with new crop data
+            console.log('🔄 Reloading listings with REPLACED crop data...')
+            setLoading(true)
+            
+            // Small delay to ensure state updates are processed
+            await new Promise(resolve => setTimeout(resolve, 200))
+            
+            // Explicitly reload based on current dropdown selection
+            if (currentSelectedCropType && newCropTypes.includes(currentSelectedCropType)) {
+              // If a specific crop type is selected and still valid, reload for that crop type
+              console.log('🔄 Reloading for specific crop type:', currentSelectedCropType)
+              await applyCropWasteFilter(currentSelectedCropType)
+            } else {
+              // Otherwise, reload for all crops
+              console.log('🔄 Reloading for all crop types')
+              await applyAllCropsFilter()
+            }
+            
+            console.log('✅ ========== CROPS UPDATED COMPLETE ==========')
+            console.log('✅ Effectiveness percentages now show ONLY varieties from newly saved crops')
           }
         }
       } catch (error) {
-        console.error('Error refreshing user crops:', error)
+        console.error('❌ Error refreshing user crops:', error)
+      } finally {
+        setLoading(false)
       }
     }
   }
@@ -3039,13 +3100,18 @@ useEffect(() => {
           distance = R * c
         }
         
-        // Show ALL crop scores
-        const allCropScores = item.cropScores.map(crop => ({
-          id: crop.cropId,
-          name: crop.cropName,
-          reason: crop.reason || `AI analysis shows ${crop.score.toFixed(1)}% compatibility`,
-          score: crop.score
-        }))
+        // Show ALL crop scores - but filter to only show crops the user currently has
+        const allCropScores = item.cropScores
+          .filter(crop => {
+            // Only include crops that are in the user's current selection (all categories)
+            return allCropIds.includes(crop.cropId)
+          })
+          .map(crop => ({
+            id: crop.cropId,
+            name: crop.cropName,
+            reason: crop.reason || `AI analysis shows ${crop.score.toFixed(1)}% compatibility`,
+            score: crop.score
+          }))
         
         return {
           ...item.listingData,
@@ -3053,7 +3119,7 @@ useEffect(() => {
           location: listingLocation,
           distance: distance,
           cropCompatibility: {
-            topCrops: allCropScores,
+            topCrops: allCropScores, // Show only user's current crops
             analysis: `Compatible with ${allCropScores.length} of your crops`
           },
           compatibilityScore: allCropScores[0]?.score || 0
@@ -3081,42 +3147,81 @@ useEffect(() => {
 
   // Function to apply crop-waste compatibility filter (AI-based) - matches mobile implementation
   const applyCropWasteFilter = async (cropCategory) => {
+    console.log('🌾 ========== APPLYING CROP FILTER ==========')
     console.log('🌾 Applying crop-waste filter for category:', cropCategory)
     console.log('🔍 Active search query:', searchQuery)
     console.log('🔍 Search results count:', searchResults.length)
+    console.log('🔍 Current userSpecificCrops:', userSpecificCrops)
+    console.log('👤 User ID:', user?.uid)
     
     setLoading(true)
     
     try {
-      // Get user's crop varieties from Firestore
+      // Get user's crop varieties from Firestore (always fetch fresh data)
+      console.log('📡 Fetching fresh crop data from Firestore...')
+      console.log('📡 Firestore path: Users/' + user.uid)
       const userDoc = await getDoc(doc(db, 'Users', user.uid))
+      
+      if (!userDoc.exists()) {
+        console.error('❌ User document does not exist!')
+        setFilteredListings([])
+        setLoading(false)
+        return
+      }
+      
       const userData = userDoc.data()
+      console.log('✅ User document fetched successfully')
+      console.log('📋 userData.cropFarmer:', userData.cropFarmer)
+      console.log('📋 userData.onboarding:', userData.onboarding)
+      
       const cropVarieties = userData.cropFarmer?.cropVarieties || userData.onboarding?.cropVarieties || {}
       
-      console.log('📋 All crop varieties:', cropVarieties)
+      console.log('📋 All crop varieties from Firestore:', JSON.stringify(cropVarieties, null, 2))
       console.log('📋 Filtering for category:', cropCategory)
+      console.log('📋 Available categories in cropVarieties:', Object.keys(cropVarieties))
       
       // Get varieties for the selected category only
       const varietiesForCategory = cropVarieties[cropCategory] || []
       
+      console.log(`📋 Found ${varietiesForCategory.length} varieties for ${cropCategory}:`, varietiesForCategory)
+      
       if (varietiesForCategory.length === 0) {
-        console.warn('⚠️ No varieties found for category:', cropCategory)
+        console.error('❌ ========== NO VARIETIES FOUND ==========')
+        console.error('❌ No varieties found for category:', cropCategory)
+        console.error('❌ Available categories:', Object.keys(cropVarieties))
+        console.error('❌ This means either:')
+        console.error('   1. Crop varieties were not saved to Firestore correctly')
+        console.error('   2. The category name does not match (check snake_case vs camelCase)')
+        console.error('   3. The user has not selected any varieties for this crop type')
+        console.error('❌ ==========================================')
         setFilteredListings([])
         setLoading(false)
         return
       }
       
       // Convert variety strings to crop IDs (same as mobile)
-      const cropIdsForCategory = varietiesForCategory.map(variety => {
+      console.log('🔄 Converting varieties to crop IDs...')
+      const cropIdsForCategory = varietiesForCategory.map((variety, index) => {
         // Extract only the English name before parentheses (e.g., "White rice (Puting bigas)" -> "white-rice")
         const englishName = variety.split('(')[0].trim()
-        return englishName.toLowerCase()
+        const cropId = englishName.toLowerCase()
           .replace(/\s+/g, '-')
           .replace(/[^\w-]/g, '')
           .trim()
+        console.log(`   ${index + 1}. "${variety}" -> "${englishName}" -> "${cropId}"`)
+        return cropId
       })
       
-      console.log(`🌾 Crop IDs for ${cropCategory}:`, cropIdsForCategory)
+      console.log(`🌾 Converted to ${cropIdsForCategory.length} crop IDs for ${cropCategory}:`, cropIdsForCategory)
+      console.log('📡 ========== CALLING API ==========')
+      console.log('📡 API URL: https://context-based-2.onrender.com/crop-compatibility-analysis')
+      console.log('📡 Request body:', JSON.stringify({
+        cropIds: cropIdsForCategory,
+        cropCategory: cropCategory
+      }, null, 2))
+      console.log('📡 Calling API... (this may take 1-2 minutes if Render is cold starting)')
+      
+      const startTime = Date.now()
       
       // Call AI compatibility endpoint
       const response = await fetch('https://context-based-2.onrender.com/crop-compatibility-analysis', {
@@ -3130,12 +3235,30 @@ useEffect(() => {
         }),
       })
       
+      const endTime = Date.now()
+      const duration = ((endTime - startTime) / 1000).toFixed(2)
+      
+      console.log(`📡 API responded in ${duration} seconds`)
+      console.log('📡 Response status:', response.status, response.statusText)
+      
       if (!response.ok) {
+        console.error('❌ API request failed!')
+        console.error('❌ Status:', response.status)
+        console.error('❌ Status text:', response.statusText)
+        try {
+          const errorText = await response.text()
+          console.error('❌ Error response:', errorText)
+        } catch (e) {
+          console.error('❌ Could not read error response')
+        }
         throw new Error('Failed to analyze compatibility')
       }
       
       const data = await response.json()
-      console.log('✅ Received', data.totalFound, 'compatible listings from MPNet API')
+      console.log('✅ ========== API SUCCESS ==========')
+      console.log('✅ Received', data.totalFound, 'compatible listings from API')
+      console.log('✅ Sample listing:', data.compatibleListings[0])
+      console.log('✅ =====================================')
       
       // Use userData from earlier (already fetched)
       const userLocation = userData.location
@@ -3178,12 +3301,20 @@ useEffect(() => {
         }
         
         // Show ALL crop scores (not just top 3) - matches mobile implementation
-        const allCropScores = item.cropScores.map(crop => ({
-          id: crop.cropId,
-          name: crop.cropName,
-          reason: crop.reason || `AI analysis shows ${crop.score.toFixed(1)}% compatibility based on waste composition and crop requirements`,
-          score: crop.score
-        }))
+        // BUT filter to only show crops that the user currently has selected
+        const allCropScores = item.cropScores
+          .filter(crop => {
+            // Only include crops that are in the user's current selection for this category
+            return cropIdsForCategory.includes(crop.cropId)
+          })
+          .map(crop => ({
+            id: crop.cropId,
+            name: crop.cropName,
+            reason: crop.reason || `AI analysis shows ${crop.score.toFixed(1)}% compatibility based on waste composition and crop requirements`,
+            score: crop.score
+          }))
+        
+        console.log(`🔍 Filtered crop scores for listing "${item.listingData.name}": ${item.cropScores.length} total → ${allCropScores.length} matching user's current crops`)
         
         return {
           ...item.listingData,
@@ -3191,7 +3322,7 @@ useEffect(() => {
           location: listingLocation, // Use fallback location if available
           distance: distance, // Add calculated distance
           cropCompatibility: {
-            topCrops: allCropScores, // Show ALL crops, not just top 3
+            topCrops: allCropScores, // Show only user's current crops
             analysis: `AI-powered analysis`
           },
           compatibilityScore: allCropScores[0]?.score || 0
@@ -3251,6 +3382,16 @@ useEffect(() => {
         newCompatibilityMap.set(listing.id, listing.cropCompatibility)
       })
       setCompatibilityMap(newCompatibilityMap)
+      
+      console.log('📊 ========== UPDATING UI ==========')
+      console.log('📊 Setting filteredListings with', filteredCompatibleListings.length, 'listings')
+      console.log('📊 Compatibility map now has', newCompatibilityMap.size, 'entries')
+      console.log('📊 Top 3 listings to display:')
+      filteredCompatibleListings.slice(0, 3).forEach((listing, index) => {
+        console.log(`   ${index + 1}. ${listing.name} - ${listing.compatibilityScore.toFixed(1)}% compatibility`)
+        console.log(`      Top crops:`, listing.cropCompatibility.topCrops.slice(0, 3).map(c => `${c.name} (${c.score.toFixed(1)}%)`))
+      })
+      console.log('📊 ====================================')
       
       setFilteredListings(filteredCompatibleListings)
       console.log('✅ Applied AI crop-waste filter:', filteredCompatibleListings.length, 'listings')
@@ -3471,55 +3612,37 @@ useEffect(() => {
   // Clear search function
   const handleClearSearch = async () => {
     console.log('🧹 Clear search clicked')
-    console.log('🧹 Current selectedCropType:', selectedCropType)
-    console.log('🧹 Current searchQuery BEFORE clear:', searchQuery)
+    console.log('🧹 Resetting search and dropdown to "All Crop Types"')
     
-    // Store the current crop type before any state changes
-    const currentCropType = selectedCropType
-    
-    // Clear search-related states FIRST
+    // Clear search-related states AND reset crop type dropdown
     setSearchInput('')
     setSearchQuery('')
     setSearchResults([])
     setShowRecentSearches(false)
-    
-    console.log('🧹 Search states cleared, searchQuery should now be empty')
+    setSelectedCropType('') // Reset dropdown to "All Crop Types"
     
     // Small delay to ensure React has processed the state updates
     await new Promise(resolve => setTimeout(resolve, 150))
     
-    // If there's an active crop type filter, re-apply it (without search filter)
-    if (currentCropType) {
-      console.log('🧹 Re-applying crop type filter:', currentCropType)
+    // Show all listings with compatibility for all user's crops
+    if (userRole === 'crop_farmer' && userCropTypes.length > 0) {
+      console.log('🧹 Applying all crops filter')
       setLoading(true)
       try {
-        await applyCropWasteFilter(currentCropType)
+        await applyAllCropsFilter()
       } catch (error) {
-        console.error('Error re-applying crop filter:', error)
+        console.error('Error applying all crops filter:', error)
       }
       setLoading(false)
     } else {
-      // No specific crop type selected - check if user is crop farmer
-      console.log('🧹 No specific crop type - applying all crops filter')
-      if (userRole === 'crop_farmer' && userCropTypes.length > 0) {
-        // "All Crop Types" is selected - show compatibility for all user's crops
-        setLoading(true)
-        try {
-          await applyAllCropsFilter()
-        } catch (error) {
-          console.error('Error applying all crops filter:', error)
-        }
-        setLoading(false)
-      } else {
-        // Show all listings
-        console.log('🧹 Showing all listings')
-        setFilteredListings(mergeCompatibilityData(listings.filter(listing => 
-          listing.status !== 'sold' && listing.status !== 'deleted'
-        )))
-      }
+      // Show all listings
+      console.log('🧹 Showing all listings')
+      setFilteredListings(mergeCompatibilityData(listings.filter(listing => 
+        listing.status !== 'sold' && listing.status !== 'deleted'
+      )))
     }
     
-    console.log('🧹 Clear search complete')
+    console.log('🧹 Clear search complete - dropdown reset to "All Crop Types"')
   }
 
   const handleSearchKeyPress = (e) => {
@@ -6147,7 +6270,7 @@ useEffect(() => {
                   {userRole === 'crop_farmer' && selectedListing.cropCompatibility && (
                     <div className={styles.detailsSection} style={{ marginTop: '20px', backgroundColor: '#f0f8f0', padding: '15px', borderRadius: '8px', border: '1px solid #4caf50' }}>
                       <h4 style={{ color: '#2d5a27', marginBottom: '12px' }}>
-                        Top 5 Crops Best Suited for This Waste
+                        Best Suited for This Waste
                       </h4>
                       <p style={{ fontSize: '14px', color: '#666', marginBottom: '15px' }}>
                         {selectedListing.cropCompatibility.analysis}
